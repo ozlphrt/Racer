@@ -1,0 +1,8 @@
+Model Information:
+* title:	Lowpoly F1 Car
+* source:	https://sketchfab.com/3d-models/lowpoly-f1-car-bb2e0ace465a4e79b19e6eeba1bdcaf6
+* author:	dirq3d (https://sketchfab.com/dirq)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Racer · Neuroevolution Car Racing Lab</title>
+  <meta name="description" content="Watch a population of neural-network-driven cars learn to stay on track and race faster every generation with a genetic algorithm, live in your browser.">
+  <meta name="theme-color" content="#05070f">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-VvgaUiVk.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BhGQmMH3.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 17h14l-1.5-5.5A2 2 0 0 0 15.6 10H8.4a2 2 0 0 0-1.9 1.5L5 17Z"/>
+            <circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>
+            <path d="M12 3v3M8 5l1 2M16 5l-1 2"/>
+          </svg>
+        </div>
+        <div>
+          <h1>AI Racer</h1>
+          <p class="tagline">Neuroevolution lab · cars learning to race</p>
+        </div>
+      </div>
+      <div class="top-pills">
+        <div class="mode-toggle-group" role="group" aria-label="Simulation Mode">
+          <button class="btn-mode active" id="btn-mode-train" type="button" title="Neuroevolution Training (20 Cars · Clean Grid)">
+            🏋️ Train (20)
+          </button>
+          <button class="btn-mode" id="btn-mode-race" type="button" title="Grand Prix Race (20 Elite Cars · Collisions ON 100%)">
+            🏆 Race (20)
+          </button>
+        </div>
+        <span class="pill"><span class="pill-dot" id="status-dot"></span><span id="status-text">Training</span></span>
+        <span class="pill"><strong id="pill-fps">60</strong> FPS</span>
+        <span class="pill">Cars <strong id="pill-pop">20</strong></span>
+        <span class="pill">Brain <strong id="pill-arch">8·12·8·2</strong></span>
+        <button class="pill btn-pill-action" id="btn-toggle-sound" type="button" title="Toggle Car Spatial Audio (S)">
+          <span id="sound-icon">🔊</span> <span id="sound-text">Audio</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+      <canvas id="track-canvas" aria-label="Race track simulation 2D" hidden></canvas>
+      <canvas id="track-canvas-3d" aria-label="Race track simulation 3D"></canvas>
+
+      <!-- F1 Live Timing Leaderboard Tower (Left Side) -->
+      <aside class="leaderboard-tower glass" id="leaderboard-tower" aria-label="Live Race Leaderboard"></aside>
+
+      <div class="hud glass">
+        <div class="hud-item"><span class="hud-label">Generation</span><span class="hud-value" id="hud-gen">1</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">Alive</span><span class="hud-value" id="hud-alive">80</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">Time</span><span class="hud-value small" id="hud-time">0.0s</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">FPS</span><span class="hud-value small" id="hud-fps">60</span></div>
+        <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
+      </div>
+
+      <!-- Broadcast Elimination Modal Notification Stack (Top Center) -->
+      <div class="elimination-stack" id="elimination-stack" aria-live="assertive"></div>
+
+      <div class="leader-card glass" id="leader-card">
+        <div class="leader-head">
+          <div class="leader-badge-group">
+            <span class="leader-dot" id="leader-dot"></span>
+            <span id="leader-title">Leader</span>
+            <span class="pos-badge" id="leader-pos-badge">P.1</span>
+          </div>
+          <div class="leader-head-right">
+            <span class="lap-badge" id="leader-lap">LAP 1/10</span>
+          </div>
+        </div>
+
+        <!-- Speed & Lap Progress Bar -->
+        <div class="cockpit-speed-row">
+          <div class="cockpit-speed-box">
+            <span class="cockpit-speed-val" id="leader-speed">0</span>
+            <span class="cockpit-speed-unit">KM/H</span>
+          </div>
+          <div class="cockpit-lap-box">
+            <div class="cockpit-lap-bar">
+              <div class="cockpit-lap-fill" id="leader-progress-bar"></div>
+            </div>
+            <span class="cockpit-lap-pct" id="leader-progress">0%</span>
+          </div>
+        </div>
+
+        <!-- Telemetry Controls: Steering Wheel & Brake/Gas Pedals -->
+        <div class="cockpit-telemetry">
+          <!-- Steering Wheel -->
+          <div class="cockpit-steer-section">
+            <div class="wheel-wrapper">
+              <svg class="steering-wheel" id="cockpit-wheel" viewBox="0 0 100 100">
+                <!-- Outer Wheel Ring -->
+                <circle cx="50" cy="50" r="41" fill="none" stroke="#182030" stroke-width="8"/>
+                <circle cx="50" cy="50" r="41" fill="none" stroke="#2d3748" stroke-width="5"/>
+
+                <!-- 12 O'Clock Top Centering Marker -->
+                <path d="M 46,9 A 41,41 0 0,1 54,9" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="butt"/>
+
+                <!-- 3 Minimalist Clean Spokes -->
+                <line x1="14" y1="50" x2="40" y2="50" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
+                <line x1="60" y1="50" x2="86" y2="50" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
+                <line x1="50" y1="58" x2="50" y2="86" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
+
+                <!-- Minimalist Clean Center Hub -->
+                <circle cx="50" cy="50" r="13" fill="#0f172a" stroke="#38bdf8" stroke-width="1.8"/>
+                <circle cx="50" cy="50" r="5" fill="#38bdf8"/>
+              </svg>
+            </div>
+            <div class="cockpit-meta-label">
+              <span class="label-name">STEER</span>
+              <span class="label-val" id="cockpit-steer-val">0°</span>
+            </div>
+          </div>
+
+          <!-- Brake & Gas Pedals -->
+          <div class="cockpit-pedals-section">
+            <!-- Brake Pedal -->
+            <div class="pedal-column">
+              <div class="pedal-gauge brake">
+                <div class="pedal-fill brake" id="pedal-brake-fill"></div>
+                <div class="pedal-ribs">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <span class="pedal-name">BRAKE</span>
+              <span class="pedal-pct brake" id="pedal-brake-val">0%</span>
+            </div>
+
+            <!-- Gas / Throttle Pedal -->
+            <div class="pedal-column">
+              <div class="pedal-gauge gas">
+                <div class="pedal-fill gas" id="pedal-gas-fill"></div>
+                <div class="pedal-ribs">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <span class="pedal-name">GAS</span>
+              <span class="pedal-pct gas" id="pedal-gas-val">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-action-bar" id="bottom-action-bar">
+        <button class="btn-controls btn-hyper-launch glass" id="btn-fast-forward" type="button" aria-label="Hyper Train Fast Forward" title="Hyper Train Fast Forward (H)">
+          <span class="ctrl-icon-bolt">⚡</span> <span>Hyper Train</span>
+        </button>
+
+        <div class="controls-widget" id="controls-widget">
+          <button class="btn-controls glass" id="btn-controls-menu" type="button" aria-expanded="false" aria-controls="controls-popover">
+            <span class="ctrl-icon">⌨</span> Controls
+          </button>
+          <div class="shortcuts-popover glass" id="controls-popover" role="region" aria-label="Keyboard &amp; mouse controls" hidden>
+            <div class="shortcuts-header">
+              <span class="shortcuts-title">Controls &amp; Shortcuts</span>
+              <button class="shortcuts-close" id="btn-shortcuts-close" type="button" aria-label="Close">✕</button>
+            </div>
+            <div class="shortcuts-list">
+              <div class="shortcut-item"><span>Hyper training</span> <kbd>H</kbd></div>
+              <div class="shortcut-item"><span>Pause / Resume</span> <kbd>Space</kbd></div>
+              <div class="shortcut-item"><span>Toggle 3D / 2D</span> <kbd>O</kbd></div>
+              <div class="shortcut-item"><span>Orbit / Pan camera</span> <kbd>Drag</kbd></div>
+              <div class="shortcut-item"><span>Follow leader</span> <kbd>F</kbd></div>
+              <div class="shortcut-item"><span>Show sensors</span> <kbd>V</kbd></div>
+              <div class="shortcut-item"><span>Turbo 8× mode</span> <kbd>T</kbd></div>
+              <div class="shortcut-item"><span>Drive yourself</span> <kbd>M</kbd></div>
+              <div class="shortcut-item"><span>Restart generation</span> <kbd>R</kbd></div>
+              <div class="shortcut-item"><span>Toggle Audio</span> <kbd>S</kbd></div>
+              <div class="shortcut-item"><span>Insights panel</span> <kbd>P</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-controls glass" id="btn-toggle-panel" type="button" aria-label="Toggle Insights Panel" title="Toggle Insights (P)">
+          <span class="ctrl-icon">📊</span> Insights
+        </button>
+      </div>
+
+      <div class="paused-overlay" id="paused-overlay" hidden>
+        <div class="paused-badge">❚❚ Paused</div>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-top-bar">
+        <span class="panel-header-title">📊 Insights &amp; Training</span>
+        <button class="panel-close-btn" id="btn-panel-close" type="button" aria-label="Close panel">✕</button>
+      </div>
+
+      <section class="card" aria-labelledby="stats-title">
+        <h2 id="stats-title">Training Stats</h2>
+        <div class="stats-grid">
+          <div class="stat"><span class="stat-label">Generation</span><span class="stat-value" id="stat-generation">1</span></div>
+          <div class="stat"><span class="stat-label">Alive</span><span class="stat-value" id="stat-alive">80</span></div>
+          <div class="stat accent-cyan" id="stat-best-fitness-box"><span class="stat-label">Best fitness</span><span class="stat-value" id="stat-best-fitness">–</span></div>
+          <div class="stat accent-amber" id="stat-best-lap-box"><span class="stat-label">Best lap</span><span class="stat-value" id="stat-best-lap">–</span></div>
+          <div class="stat"><span class="stat-label">This gen best</span><span class="stat-value" id="stat-gen-best">0</span></div>
+          <div class="stat"><span class="stat-label">Leader Contacts</span><span class="stat-value" id="stat-leader-contacts">0 (Clean)</span></div>
+          <div class="stat"><span class="stat-label">FPS</span><span class="stat-value" id="stat-fps">60</span></div>
+          <div class="stat"><span class="stat-label">Sim speed</span><span class="stat-value" id="stat-effective">×1.0</span></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="controls-title">
+        <h2 id="controls-title">Mode &amp; Track</h2>
+        <div class="mode-selector-panel">
+          <button class="btn-panel-mode active" id="panel-mode-train" type="button">
+            <span class="mode-icon">🏋️</span>
+            <div class="mode-text">
+              <span class="mode-name">Training</span>
+              <span class="mode-desc">80 Cars · Genetic Evolution</span>
+            </div>
+          </button>
+          <button class="btn-panel-mode" id="panel-mode-race" type="button">
+            <span class="mode-icon">🏆</span>
+            <div class="mode-text">
+              <span class="mode-name">Grand Prix Race</span>
+              <span class="mode-desc">20 Elite Cars · Collisions ON</span>
+            </div>
+          </button>
+        </div>
+        <div class="select-row" style="margin-top: 12px;">
+          <label for="track-select">Track circuit</label>
+          <select id="track-select" class="select-input">
+            <option value="grand-prix">Grand Prix (Default)</option>
+            <option value="speedway-oval">Speedway Oval</option>
+            <option value="technical-complex">Technical Complex</option>
+            <option value="simple-loop">Simple Peanut Loop</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-pause" type="button">❚❚ Pause</button>
+          <button class="btn" id="btn-reset" type="button">↺ Restart Lap</button>
+        </div>
+        <div class="slider-row">
+          <label for="speed-slider">Speed <span class="slider-value" id="speed-value">×1</span></label>
+          <input type="range" id="speed-slider" min="1" max="50" step="1" value="1">
+        </div>
+        <label class="switch-row" for="toggle-turbo">
+          <span>Turbo (max speed) <kbd>T</kbd></span>
+          <input type="checkbox" id="toggle-turbo" class="switch">
+        </label>
+        <div class="slider-row">
+          <label for="mutation-slider">Mutation rate <span class="slider-value" id="mutation-value">10%</span></label>
+          <input type="range" id="mutation-slider" min="1" max="40" step="1" value="10">
+        </div>
+        <button class="btn btn-hyper" id="btn-hyper-train" type="button" style="width: 100%; margin-top: 10px;">
+          ⚡ Hyper Train (Fast Forward) <kbd>H</kbd>
+        </button>
+      </section>
+
+      <section class="card" aria-labelledby="view-title">
+        <h2 id="view-title">View &amp; Camera</h2>
+        <label class="switch-row" for="toggle-3d">
+          <span>3D Orbit View <kbd>O</kbd></span>
+          <input type="checkbox" id="toggle-3d" class="switch" checked>
+        </label>
+        <label class="switch-row" for="toggle-follow">
+          <span>Follow leader <kbd>F</kbd></span>
+          <input type="checkbox" id="toggle-follow" class="switch" checked>
+        </label>
+        <label class="switch-row" for="toggle-sensors">
+          <span>Show sensors <kbd>V</kbd></span>
+          <input type="checkbox" id="toggle-sensors" class="switch">
+        </label>
+        <label class="switch-row" for="toggle-ghosts">
+          <span>Show population <kbd>G</kbd></span>
+          <input type="checkbox" id="toggle-ghosts" class="switch" checked>
+        </label>
+        <label class="switch-row" for="toggle-audio">
+          <span>Engine &amp; spatial audio <kbd>S</kbd></span>
+          <input type="checkbox" id="toggle-audio" class="switch" checked>
+        </label>
+        <label class="switch-row" for="toggle-manual">
+          <span>Drive yourself (arrows) <kbd>M</kbd></span>
+          <input type="checkbox" id="toggle-manual" class="switch">
+        </label>
+        <button class="btn btn-ghost" id="btn-reset-cam" type="button" style="width: 100%; margin-top: 6px;">↺ Reset 3D Camera</button>
+        <p class="hint" id="manual-hint" hidden>Manual mode runs at ×1. Your best lap: <strong id="player-best-lap">–</strong></p>
+      </section>
+
+      <section class="card" aria-labelledby="brain-title">
+        <h2 id="brain-title">Leader's Brain</h2>
+        <canvas id="nn-canvas" class="nn-canvas"></canvas>
+        <div class="legend">
+          <span><i class="sw cyan"></i>positive</span>
+          <span><i class="sw magenta"></i>negative</span>
+          <span class="legend-note">brightness = weight × activation</span>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="chart-title">
+        <h2 id="chart-title">Fitness Over Generations</h2>
+        <canvas id="chart-canvas" class="chart-canvas"></canvas>
+        <div class="legend">
+          <span><i class="sw cyan"></i>best</span>
+          <span><i class="sw violet dashed"></i>average</span>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="storage-title">
+        <h2 id="storage-title">Saved Brain</h2>
+        <p class="saved-info" id="saved-info">No saved brain yet.</p>
+        <div class="btn-grid">
+          <button class="btn" id="btn-load" type="button">⤓ Load &amp; seed</button>
+          <button class="btn" id="btn-export" type="button">⇪ Export JSON</button>
+          <button class="btn" id="btn-import" type="button">⇩ Import JSON</button>
+          <button class="btn btn-ghost" id="btn-clear" type="button">✕ Clear</button>
+        </div>
+        <label class="switch-row" for="toggle-autosave">
+          <span>Auto-save new best</span>
+          <input type="checkbox" id="toggle-autosave" class="switch" checked>
+        </label>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Hyper-Speed Headless Training Modal -->
+  <div class="hyper-modal-backdrop" id="hyper-modal" hidden>
+    <div class="hyper-modal glass">
+      <div class="hyper-modal-header">
+        <div class="hyper-modal-title">
+          <span class="hyper-icon">⚡</span>
+          <div>
+            <h3>Hyper Train · Fast Forward</h3>
+            <p class="tagline">Zero GPU rendering · pure CPU physics &amp; genetic evolution at maximum speed</p>
+          </div>
+        </div>
+        <button class="btn btn-ghost" id="btn-hyper-close" type="button" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="hyper-setup" id="hyper-setup-view">
+        <p class="hyper-desc">Bypasses WebGL &amp; canvas rendering to run neuroevolution <strong>30× to 80× faster</strong> than real-time.</p>
+        
+        <!-- Target Type Mode Tabs -->
+        <div class="hyper-mode-tabs" role="tablist">
+          <button class="btn-hyper-tab active" id="tab-hyper-gens" type="button" role="tab" aria-selected="true">
+            🔢 By Generations
+          </button>
+          <button class="btn-hyper-tab" id="tab-hyper-time" type="button" role="tab" aria-selected="false">
+            ⏱️ By Time Duration
+          </button>
+        </div>
+
+        <!-- Section 1: By Generations -->
+        <div class="hyper-tab-pane" id="pane-hyper-gens">
+          <label class="hyper-label">Quick Generation Presets:</label>
+          <div class="hyper-preset-btns" id="hyper-gen-presets">
+            <button class="btn btn-chip" data-gens="25">+25 Gens</button>
+            <button class="btn btn-chip active" data-gens="50">+50 Gens</button>
+            <button class="btn btn-chip" data-gens="100">+100 Gens</button>
+            <button class="btn btn-chip" data-gens="250">+250 Gens</button>
+            <button class="btn btn-chip" data-gens="500">+500 Gens</button>
+            <button class="btn btn-chip" data-gens="1000">+1000 Gens</button>
+          </div>
+          <div class="slider-row" style="margin-top: 14px;">
+            <label for="hyper-target-input">Custom Generations to Add:</label>
+            <input type="number" id="hyper-target-input" class="select-input" min="1" max="10000" value="50" style="width: 120px; text-align: right;">
+          </div>
+        </div>
+
+        <!-- Section 2: By Time Duration -->
+        <div class="hyper-tab-pane" id="pane-hyper-time" hidden>
+          <label class="hyper-label">Quick Time Presets:</label>
+          <div class="hyper-preset-btns" id="hyper-time-presets">
+            <button class="btn btn-chip active" data-mins="1">1 Min</button>
+            <button class="btn btn-chip" data-mins="5">5 Mins</button>
+            <button class="btn btn-chip" data-mins="15">15 Mins</button>
+            <button class="btn btn-chip" data-mins="30">30 Mins</button>
+            <button class="btn btn-chip" data-mins="60">1 Hour</button>
+            <button class="btn btn-chip" data-mins="120">2 Hours</button>
+            <button class="btn btn-chip" data-mins="360">6 Hours</button>
+          </div>
+          <div class="hyper-time-inputs-row" style="margin-top: 14px;">
+            <div class="time-input-field">
+              <label for="hyper-time-hours">Hours</label>
+              <input type="number" id="hyper-time-hours" class="select-input" min="0" max="72" value="0" style="width: 85px; text-align: right;">
+            </div>
+            <div class="time-input-field">
+              <label for="hyper-time-mins">Minutes</label>
+              <input type="number" id="hyper-time-mins" class="select-input" min="0" max="59" value="1" style="width: 85px; text-align: right;">
+            </div>
+            <div class="time-input-field">
+              <label for="hyper-time-secs">Seconds</label>
+              <input type="number" id="hyper-time-secs" class="select-input" min="0" max="59" value="0" style="width: 85px; text-align: right;">
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-large btn-hyper-start-main" id="btn-hyper-start" type="button" style="width: 100%; margin-top: 18px; font-size: 15px; padding: 13px;">
+          🚀 Start Hyper Training
+        </button>
+      </div>
+
+      <div class="hyper-running" id="hyper-running-view" hidden>
+        <div class="hyper-progress-wrap">
+          <div class="hyper-progress-labels">
+            <span>Progress: <strong id="hyper-prog-pct">0%</strong></span>
+            <span id="hyper-target-info">Gen <strong id="hyper-cur-gen">1</strong> / <span id="hyper-target-gen">50</span></span>
+          </div>
+          <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill"></div></div>
+        </div>
+
+        <div class="hyper-stats-grid">
+          <div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value" id="hyper-stat-time">0.0s</span></div>
+          <div class="stat"><span class="stat-label">Remaining</span><span class="stat-value" id="hyper-stat-rem">–</span></div>
+          <div class="stat"><span class="stat-label">Gen Rate</span><span class="stat-value" id="hyper-stat-rate">0 gen/s</span></div>
+          <div class="stat"><span class="stat-label">Gens Added</span><span class="stat-value" id="hyper-stat-added">+0</span></div>
+          <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hyper-stat-fitness">–</span></div>
+          <div class="stat accent-amber"><span class="stat-label">Best Lap</span><span class="stat-value" id="hyper-stat-lap">–</span></div>
+        </div>
+
+        <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; margin-top: 14px; border-radius: 8px;"></canvas>
+
+        <div class="btn-row" style="margin-top: 18px;">
+          <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 1; padding: 12px; font-size: 14px;">
+            🏁 Stop &amp; Resume 3D View
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="input-import" accept="application/json,.json" hidden>
+</body>
+</html>
