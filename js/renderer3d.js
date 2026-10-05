@@ -3951,50 +3951,105 @@ export class Renderer3D {
     this.burstPointsMesh.geometry.setDrawRange(0, writeIdx);
   }
 
+  createSmokeTexture() {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 128, 128);
+
+    // Multi-lobed organic soft cloud puffs (breaks up spherical symmetry)
+    const lobes = [
+      { x: 64, y: 64, r: 56, a: 0.35 },
+      { x: 50, y: 56, r: 42, a: 0.28 },
+      { x: 78, y: 54, r: 40, a: 0.28 },
+      { x: 54, y: 76, r: 38, a: 0.25 },
+      { x: 74, y: 74, r: 44, a: 0.25 },
+      { x: 64, y: 44, r: 34, a: 0.22 },
+      { x: 42, y: 66, r: 32, a: 0.20 },
+      { x: 86, y: 64, r: 32, a: 0.20 },
+    ];
+
+    for (const lobe of lobes) {
+      const grad = ctx.createRadialGradient(lobe.x, lobe.y, 0, lobe.x, lobe.y, lobe.r);
+      grad.addColorStop(0.0, `rgba(255, 255, 255, ${lobe.a})`);
+      grad.addColorStop(0.40, `rgba(255, 255, 255, ${lobe.a * 0.70})`);
+      grad.addColorStop(0.75, `rgba(255, 255, 255, ${lobe.a * 0.20})`);
+      grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(lobe.x, lobe.y, lobe.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    return tex;
+  }
+
   setupTireSmoke() {
-    this.maxSmokeParticles = 600;
+    this.maxSmokeParticles = 1200;
     this.smokeParticles = [];
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
     this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
+    this.smokeRotArr = new Float32Array(this.maxSmokeParticles);
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
+    geo.setAttribute('rotation', new THREE.BufferAttribute(this.smokeRotArr, 1));
     geo.setDrawRange(0, 0);
+
+    const smokeTex = this.createSmokeTexture();
 
     const vertShader = `
       attribute float size;
       attribute float alpha;
+      attribute float rotation;
       varying float vAlpha;
+      varying float vRot;
       void main() {
         vAlpha = alpha;
+        vRot = rotation;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (260.0 / -mvPosition.z);
+        gl_PointSize = size * (340.0 / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
 
     const fragShader = `
+      uniform sampler2D uSmokeTexture;
       varying float vAlpha;
+      varying float vRot;
       void main() {
-        vec2 coord = gl_PointCoord - vec2(0.5);
-        float r2 = dot(coord, coord);
-        if (r2 > 0.25) discard;
+        vec2 p = gl_PointCoord - vec2(0.5);
+        float cosR = cos(vRot);
+        float sinR = sin(vRot);
+        vec2 rotUv = vec2(
+          p.x * cosR - p.y * sinR + 0.5,
+          p.x * sinR + p.y * cosR + 0.5
+        );
         
-        // Smooth continuous Gaussian bell-curve falloff (soft wispy vapor, no cotton ball rings)
-        float x = max(0.0, 1.0 - 4.0 * r2);
-        float soft = x * x;
+        vec4 texColor = texture2D(uSmokeTexture, rotUv);
+        float alpha = texColor.a * vAlpha;
+        if (alpha < 0.005) discard;
 
+        // Translucent motorsport white-grey tire friction vapor
         vec3 smokeColor = vec3(0.92, 0.94, 0.96);
-        float alpha = soft * vAlpha * 0.45;
-
         gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
 
     const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uSmokeTexture: { value: smokeTex },
+      },
       vertexShader: vertShader,
       fragmentShader: fragShader,
       transparent: true,
@@ -4019,17 +4074,19 @@ export class Renderer3D {
     }
     // Eject smoke puff directly at the tyre contact patch with backward drift and vertical billow
     this.smokeParticles.push({
-      x: x + (Math.random() - 0.5) * 0.4,
-      y: y + (Math.random() - 0.5) * 0.4,
-      z: z + Math.random() * 0.15,
-      vx: (carVx * 0.12) + (Math.random() - 0.5) * 1.8,
-      vy: (carVy * 0.12) + (Math.random() - 0.5) * 1.8,
-      vz: 1.8 + Math.random() * 2.4, // Billows upwards into the air
-      size: 2.4 + Math.random() * 1.4,
-      growthRate: 5.2 + Math.random() * 2.6,
-      alpha: Math.min(0.85, intensity * 0.85),
+      x: x + (Math.random() - 0.5) * 0.5,
+      y: y + (Math.random() - 0.5) * 0.5,
+      z: z + Math.random() * 0.20,
+      vx: (carVx * 0.12) + (Math.random() - 0.5) * 2.2,
+      vy: (carVy * 0.12) + (Math.random() - 0.5) * 2.2,
+      vz: 2.2 + Math.random() * 2.6, // Billows upwards into the air
+      size: 4.6 + Math.random() * 2.2,
+      growthRate: 8.5 + Math.random() * 4.0,
+      rotation: Math.random() * Math.PI * 2,
+      vRot: (Math.random() - 0.5) * 2.2,
+      alpha: Math.min(0.28, intensity * 0.28),
       life: 1.0,
-      decay: 1.25 + Math.random() * 0.35,
+      decay: 1.45 + Math.random() * 0.35,
     });
   }
 
@@ -4050,7 +4107,7 @@ export class Renderer3D {
         continue;
       }
 
-      // Physics: drift, rise into the air, expand, and drag deceleration
+      // Physics: drift, rise into the air, expand, rotate and drag deceleration
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
@@ -4058,6 +4115,7 @@ export class Renderer3D {
       p.vy *= 0.94;
       p.vz *= 0.96;
       p.size += p.growthRate * dt;
+      p.rotation += p.vRot * dt;
 
       const idx = writeIdx * 3;
       this.smokePosArr[idx] = p.x;
@@ -4065,7 +4123,8 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.4);
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.3);
+      this.smokeRotArr[writeIdx] = p.rotation;
 
       writeIdx++;
     }
@@ -4073,10 +4132,12 @@ export class Renderer3D {
     const posAttr = this.smokeMesh.geometry.attributes.position;
     const sizeAttr = this.smokeMesh.geometry.attributes.size;
     const alphaAttr = this.smokeMesh.geometry.attributes.alpha;
+    const rotAttr = this.smokeMesh.geometry.attributes.rotation;
 
     if (posAttr) posAttr.needsUpdate = true;
     if (sizeAttr) sizeAttr.needsUpdate = true;
     if (alphaAttr) alphaAttr.needsUpdate = true;
+    if (rotAttr) rotAttr.needsUpdate = true;
 
     this.smokeMesh.geometry.setDrawRange(0, writeIdx);
   }
@@ -4262,13 +4323,21 @@ export class Renderer3D {
               intensity
             );
 
-            // Emit 3D volumetric rising vapor puffs directly at the rear tyre contact patches
+            // Emit continuous dense vapor plume interpolated along the tyre trajectory
             const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-            if (camDistSq < 320 || car === sim.player) {
+            if (camDistSq < 450 || car === sim.player) {
               const carVx = car.vx || 0;
               const carVy = -(car.vy || 0);
-              this.addTireSmokePuff(lx, ly, 0.45, carVx, carVy, intensity);
-              this.addTireSmokePuff(rx, ry, 0.45, carVx, carVy, intensity);
+              const numPuffs = Math.max(1, Math.min(4, Math.ceil(dL / 1.1)));
+              for (let s = 1; s <= numPuffs; s++) {
+                const frac = s / numPuffs;
+                const pxL = prev.lx + (lx - prev.lx) * frac;
+                const pyL = prev.ly + (ly - prev.ly) * frac;
+                const pxR = prev.rx + (rx - prev.rx) * frac;
+                const pyR = prev.ry + (ry - prev.ry) * frac;
+                this.addTireSmokePuff(pxL, pyL, 0.40, carVx, carVy, intensity);
+                this.addTireSmokePuff(pxR, pyR, 0.40, carVx, carVy, intensity);
+              }
             }
             added = true;
           }
