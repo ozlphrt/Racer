@@ -1822,10 +1822,10 @@ export class Renderer3D {
 
     // Current lap being driven (1-indexed: 1, 2, ..., maxLaps)
     const currentLap = Math.min(lapsDone + 1, maxLaps);
-    // Number of laps remaining AFTER the current lap
-    const lapsToGo = Math.max(0, maxLaps - currentLap);
+    // Number of laps remaining to complete in the race (e.g. 5 on Lap 1, 1 on Final Lap, 0 at Finish)
+    const lapsRemaining = Math.max(0, maxLaps - lapsDone);
 
-    let mainText = `${lapsToGo} ${lapsToGo === 1 ? 'LAP' : 'LAPS'} TO GO`;
+    let mainText = `${lapsRemaining} LAPS TO GO`;
     let subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
     let color = '#38bdf8'; // Electric Cyan
     let isFinal = false;
@@ -1845,21 +1845,29 @@ export class Renderer3D {
       subText = 'CHEQUERED FLAG · RACE WINNER';
       color = '#a3e635'; // Neon Lime Green
       isFinal = true;
-    } else if (currentLap === maxLaps) {
-      // Leader is currently driving the last lap of the race (Lap 5 of 5)
+    } else if (lapsRemaining === 1) {
+      // 1 lap to go IS the Final Lap (driving lap 5 of 5)
       mainText = 'FINAL LAP';
-      subText = `LAP ${maxLaps} OF ${maxLaps} · LEADER ON FINAL LAP`;
+      subText = `LAP ${maxLaps} OF ${maxLaps} · 1 LAP TO GO`;
       color = '#fbbf24'; // Radiant Gold
       isFinal = true;
-    } else if (lapsToGo === 1) {
-      // Leader is on penultimate lap (e.g. Lap 4 of 5) -> 1 lap left after this one
-      mainText = '1 LAP TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} · NEXT IS FINAL LAP`;
-      color = '#f59e0b'; // Amber
-    } else if (lapsToGo === 2) {
+    } else if (lapsRemaining === 2) {
+      // 2 laps to go (driving lap 4 of 5)
       mainText = '2 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} · RACE LEADER`;
+      subText = `LAP ${currentLap} OF ${maxLaps} · NEXT IS FINAL LAP`;
       color = '#f472b6'; // Hot Pink / Magenta
+    } else if (lapsRemaining === 3) {
+      mainText = '3 LAPS TO GO';
+      subText = `LAP ${currentLap} OF ${maxLaps} · RACE LEADER`;
+      color = '#38bdf8'; // Electric Cyan
+    } else if (lapsRemaining === 4) {
+      mainText = '4 LAPS TO GO';
+      subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
+      color = '#38bdf8'; // Electric Cyan
+    } else {
+      mainText = 'RACE ON';
+      subText = `LAP 1 OF ${maxLaps} · GREEN FLAG`;
+      color = '#38bdf8'; // Electric Cyan
     }
 
     const stateKey = `${mainText}|${subText}|${color}|${isFinal}`;
