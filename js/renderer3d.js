@@ -414,8 +414,8 @@ export class Renderer3D {
     this.dirLight.shadow.mapSize.height = 2048;
     this.dirLight.shadow.camera.near = 50;
     this.dirLight.shadow.camera.far = 4500;
-    this.dirLight.shadow.bias = -0.0004;
-    this.dirLight.shadow.normalBias = 0.04;
+    this.dirLight.shadow.bias = -0.0001;
+    this.dirLight.shadow.normalBias = 0.003;
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
@@ -1334,10 +1334,83 @@ export class Renderer3D {
     return tex;
   }
 
+  createCarContactShadowTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 256, 128);
+
+    // 1. Soft overall underbody drop shadow
+    const grad = ctx.createRadialGradient(128, 64, 10, 128, 64, 110);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+    grad.addColorStop(0.45, 'rgba(0, 0, 0, 0.55)');
+    grad.addColorStop(0.80, 'rgba(0, 0, 0, 0.18)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(128, 64, 120, 58, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Heavy dark contact occlusion directly beneath the 4 tire contact patches
+    // Coordinates match car model: Front wheels (~X=182, Y=26 & 102), Rear wheels (~X=72, Y=26 & 102)
+    const tirePatches = [
+      { x: 182, y: 28, rx: 24, ry: 15 },
+      { x: 182, y: 100, rx: 24, ry: 15 },
+      { x: 72, y: 26, rx: 26, ry: 17 },
+      { x: 72, y: 102, rx: 26, ry: 17 },
+    ];
+
+    for (const tp of tirePatches) {
+      const tGrad = ctx.createRadialGradient(tp.x, tp.y, 2, tp.x, tp.y, tp.rx);
+      tGrad.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
+      tGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.70)');
+      tGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = tGrad;
+      ctx.beginPath();
+      ctx.ellipse(tp.x, tp.y, tp.rx, tp.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. Central floor & diffuser dense core shadow
+    const coreGrad = ctx.createRadialGradient(120, 64, 8, 120, 64, 60);
+    coreGrad.addColorStop(0, 'rgba(0, 0, 0, 0.90)');
+    coreGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.45)');
+    coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = coreGrad;
+    ctx.beginPath();
+    ctx.ellipse(120, 64, 80, 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    return tex;
+  }
+
   createCarMesh(color, isPlayer = false, carIdx = 0, carNumber = 1) {
     const group = new THREE.Group();
     const L = CONFIG.car.length; // 26
     const W = CONFIG.car.width;  // 13
+
+    // 0. UNDERBODY AMBIENT OCCLUSION CONTACT SHADOW (Locks tires solidly to tarmac)
+    if (!this.contactShadowTexture) {
+      this.contactShadowTexture = this.createCarContactShadowTexture();
+      this.contactShadowMat = new THREE.MeshBasicMaterial({
+        map: this.contactShadowTexture,
+        transparent: true,
+        opacity: 0.88,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+    }
+    const shadowGeo = new THREE.PlaneGeometry(L * 1.35, W * 1.45);
+    const contactShadow = new THREE.Mesh(shadowGeo, this.contactShadowMat);
+    contactShadow.position.set(0, 0, 0.02);
+    contactShadow.renderOrder = 2;
+    group.add(contactShadow);
 
     // Primary, Secondary, Accent, & Quad color palette (1 to 4 colors per team)
     const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
@@ -1653,10 +1726,10 @@ export class Renderer3D {
     const ringGeo = new THREE.TorusGeometry(1.5, 0.12, 6, 16);
 
     const wheels = [
-      { x: L * 0.36, y: -W * 0.46, z: 2.4, isRear: false, outY: -1.12 },
-      { x: L * 0.36, y: W * 0.46, z: 2.4, isRear: false, outY: 1.12 },
-      { x: -L * 0.35, y: -W * 0.46, z: 2.4, isRear: true, outY: -1.32 },
-      { x: -L * 0.35, y: W * 0.46, z: 2.4, isRear: true, outY: 1.32 },
+      { x: L * 0.36, y: -W * 0.46, z: 2.28, isRear: false, outY: -1.12 },
+      { x: L * 0.36, y: W * 0.46, z: 2.28, isRear: false, outY: 1.12 },
+      { x: -L * 0.35, y: -W * 0.46, z: 2.28, isRear: true, outY: -1.32 },
+      { x: -L * 0.35, y: W * 0.46, z: 2.28, isRear: true, outY: 1.32 },
     ];
 
     for (const w of wheels) {
