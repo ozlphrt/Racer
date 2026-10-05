@@ -406,21 +406,21 @@ export class Renderer3D {
   }
 
   setupLighting() {
-    const hemiLight = new THREE.HemisphereLight(0x7ea8cf, 0x1e361c, 0.85);
+    const hemiLight = new THREE.HemisphereLight(0x8cb8df, 0x1a2e18, 0.75);
     this.scene.add(hemiLight);
 
-    this.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.25);
+    this.dirLight = new THREE.DirectionalLight(0xfff5e8, 1.35);
     this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.width = 2048;
-    this.dirLight.shadow.mapSize.height = 2048;
+    this.dirLight.shadow.mapSize.width = 4096;
+    this.dirLight.shadow.mapSize.height = 4096;
     this.dirLight.shadow.camera.near = 50;
-    this.dirLight.shadow.camera.far = 4500;
-    this.dirLight.shadow.bias = -0.0001;
-    this.dirLight.shadow.normalBias = 0.003;
+    this.dirLight.shadow.camera.far = 5000;
+    this.dirLight.shadow.bias = -0.00008;
+    this.dirLight.shadow.normalBias = 0.002;
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
-    const ambLight = new THREE.AmbientLight(0x1a261a, 0.35);
+    const ambLight = new THREE.AmbientLight(0x162216, 0.30);
     this.scene.add(ambLight);
 
     this.updateLightPosition();
@@ -435,7 +435,8 @@ export class Renderer3D {
     const spanY = (b.maxY - b.minY) * 0.6;
     const span = Math.max(spanX, spanY) + 300;
 
-    this.dirLight.position.set(cx + span * 0.5, cy - span * 0.7, 1200);
+    // High midday sun angle ensuring shadows anchor directly under each car's chassis & tires
+    this.dirLight.position.set(cx + span * 0.25, cy - span * 0.35, 2400);
     this.dirLight.target.position.set(cx, cy, 0);
 
     const d = span * 1.15;
@@ -1338,35 +1339,36 @@ export class Renderer3D {
 
   createCarContactShadowTexture() {
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 128;
+    canvas.width = 512;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 256, 128);
+    ctx.clearRect(0, 0, 512, 256);
 
-    // 1. Soft overall underbody drop shadow
-    const grad = ctx.createRadialGradient(128, 64, 10, 128, 64, 110);
-    grad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-    grad.addColorStop(0.45, 'rgba(0, 0, 0, 0.55)');
-    grad.addColorStop(0.80, 'rgba(0, 0, 0, 0.18)');
+    // 1. Soft overall underbody ambient shadow
+    const grad = ctx.createRadialGradient(256, 128, 15, 256, 128, 220);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.88)');
+    grad.addColorStop(0.50, 'rgba(0, 0, 0, 0.58)');
+    grad.addColorStop(0.82, 'rgba(0, 0, 0, 0.20)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(128, 64, 120, 58, 0, 0, Math.PI * 2);
+    ctx.ellipse(256, 128, 235, 115, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Heavy dark contact occlusion directly beneath the 4 tire contact patches
-    // Coordinates match car model: Front wheels (~X=182, Y=26 & 102), Rear wheels (~X=72, Y=26 & 102)
+    // 2. Heavy dark contact occlusion footprint directly beneath the 4 tire contact patches
+    // Plane: 35.1 x 18.85. Front wheels: X = 392.5, Y = 46.8 & 209.2. Rear wheels: X = 123.2, Y = 46.8 & 209.2
     const tirePatches = [
-      { x: 182, y: 28, rx: 24, ry: 15 },
-      { x: 182, y: 100, rx: 24, ry: 15 },
-      { x: 72, y: 26, rx: 26, ry: 17 },
-      { x: 72, y: 102, rx: 26, ry: 17 },
+      { x: 393, y: 47, rx: 32, ry: 20 },
+      { x: 393, y: 209, rx: 32, ry: 20 },
+      { x: 123, y: 47, rx: 36, ry: 24 },
+      { x: 123, y: 209, rx: 36, ry: 24 },
     ];
 
     for (const tp of tirePatches) {
-      const tGrad = ctx.createRadialGradient(tp.x, tp.y, 2, tp.x, tp.y, tp.rx);
-      tGrad.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
-      tGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.70)');
+      const tGrad = ctx.createRadialGradient(tp.x, tp.y, 4, tp.x, tp.y, tp.rx);
+      tGrad.addColorStop(0, 'rgba(0, 0, 0, 1.0)');
+      tGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.85)');
+      tGrad.addColorStop(0.85, 'rgba(0, 0, 0, 0.35)');
       tGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = tGrad;
       ctx.beginPath();
@@ -1374,14 +1376,14 @@ export class Renderer3D {
       ctx.fill();
     }
 
-    // 3. Central floor & diffuser dense core shadow
-    const coreGrad = ctx.createRadialGradient(120, 64, 8, 120, 64, 60);
-    coreGrad.addColorStop(0, 'rgba(0, 0, 0, 0.90)');
-    coreGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.45)');
+    // 3. Central floor & diffuser dense core ambient occlusion
+    const coreGrad = ctx.createRadialGradient(240, 128, 12, 240, 128, 120);
+    coreGrad.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
+    coreGrad.addColorStop(0.65, 'rgba(0, 0, 0, 0.60)');
     coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = coreGrad;
     ctx.beginPath();
-    ctx.ellipse(120, 64, 80, 30, 0, 0, Math.PI * 2);
+    ctx.ellipse(240, 128, 160, 60, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -1401,16 +1403,16 @@ export class Renderer3D {
       this.contactShadowMat = new THREE.MeshBasicMaterial({
         map: this.contactShadowTexture,
         transparent: true,
-        opacity: 0.88,
+        opacity: 0.96,
         depthWrite: false,
         polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
+        polygonOffsetFactor: -1.5,
+        polygonOffsetUnits: -1.5,
       });
     }
     const shadowGeo = new THREE.PlaneGeometry(L * 1.35, W * 1.45);
     const contactShadow = new THREE.Mesh(shadowGeo, this.contactShadowMat);
-    contactShadow.position.set(0, 0, 0.02);
+    contactShadow.position.set(0, 0, 0.015);
     contactShadow.renderOrder = 2;
     group.add(contactShadow);
 
@@ -1728,10 +1730,10 @@ export class Renderer3D {
     const ringGeo = new THREE.TorusGeometry(1.5, 0.12, 6, 16);
 
     const wheels = [
-      { x: L * 0.36, y: -W * 0.46, z: 2.28, isRear: false, outY: -1.12 },
-      { x: L * 0.36, y: W * 0.46, z: 2.28, isRear: false, outY: 1.12 },
-      { x: -L * 0.35, y: -W * 0.46, z: 2.28, isRear: true, outY: -1.32 },
-      { x: -L * 0.35, y: W * 0.46, z: 2.28, isRear: true, outY: 1.32 },
+      { x: L * 0.36, y: -W * 0.46, z: 2.38, isRear: false, outY: -1.12 },
+      { x: L * 0.36, y: W * 0.46, z: 2.38, isRear: false, outY: 1.12 },
+      { x: -L * 0.35, y: -W * 0.46, z: 2.38, isRear: true, outY: -1.32 },
+      { x: -L * 0.35, y: W * 0.46, z: 2.38, isRear: true, outY: 1.32 },
     ];
 
     for (const w of wheels) {
@@ -1769,8 +1771,13 @@ export class Renderer3D {
 
     group.traverse((child) => {
       if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        if (child === contactShadow || child === hoodNum) {
+          child.castShadow = false;
+          child.receiveShadow = false;
+        } else {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
       }
     });
 
