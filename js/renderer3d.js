@@ -454,12 +454,12 @@ export class Renderer3D {
     const t = this.track;
     if (!t) return 99999;
     const b = t.bounds;
-    const margin = 320;
+    const margin = 2800;
     if (tx >= b.minX - margin && tx <= b.maxX + margin &&
         ty >= b.minY - margin && ty <= b.maxY + margin) {
       let minDSq = Infinity;
       const N = t.N;
-      // Step by 2 samples for high-precision distance checking
+      // High-precision distance checking against track spline
       for (let k = 0; k < N; k += 2) {
         const dx = t.cx[k] - tx;
         const dy = t.cy[k] - ty;
@@ -645,15 +645,15 @@ export class Renderer3D {
 
     const distToTrack = this.getMinDistToTrack(trackX, trackY);
 
-    // Completely flat where track is passing by + exactly 1 car length after the track
+    // Completely flat where track is passing by + exactly 1 car length outside each side
     const trackHalf = (t.width || 84) * 0.5; // ~42m
-    const carLength = 26.0;                  // 1 car length
-    const flatRadius = trackHalf + carLength; // ~68m total flat radius from centerline
+    const carLength = 26.0;                  // 1 car length (26m)
+    const flatRadius = trackHalf + carLength + 25.0; // ~93m flat radius from centerline
 
-    if (distToTrack <= flatRadius) return 0; // Completely flat ground across track and 1 car length perimeter
+    if (distToTrack <= flatRadius) return 0; // Strictly flat at ground zero across track & run-off
 
-    // Smooth continuous ease-in curve starting strictly after 1 car length outside the track
-    const blendDist = 320.0;
+    // Smooth continuous ease-in curve starting strictly after flat perimeter
+    const blendDist = 380.0;
     const blendRatio = Math.min(1.0, (distToTrack - flatRadius) / blendDist);
     // C^2 continuous smootherstep (6t^5 - 15t^4 + 10t^3) with 0 first and second derivatives at boundary
     const smoothBlend = blendRatio * blendRatio * blendRatio * (blendRatio * (blendRatio * 6 - 15) + 10);
@@ -662,9 +662,9 @@ export class Renderer3D {
     const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
     const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
     const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
-    let localHills = Math.max(0, h1 + h2 + h3 + 18.0) * smoothBlend;
+    let elevation = Math.max(0, h1 + h2 + h3 + 18.0);
 
-    // Majestic perimeter mountain ranges on the outer horizon
+    // Horizon mountain ridges
     const distFromCenter = Math.hypot(x - cx, y - cy);
     const maxTrackSpan = Math.max(b.w, b.h) * 0.85;
     if (distFromCenter > maxTrackSpan) {
@@ -672,7 +672,7 @@ export class Renderer3D {
       const mBlend = mRatio * mRatio * (3 - 2 * mRatio);
       const mRidge = (Math.sin(x * 0.00050 + 1.8) * Math.cos(y * 0.00050 - 0.9) * 0.5 + 0.5) * 650.0
                    + Math.sin(x * 0.0012 - 0.6) * 180.0;
-      localHills += Math.max(0, mRidge) * mBlend;
+      elevation += Math.max(0, mRidge) * mBlend;
     }
 
     // Carve lake basins smoothly into valley floor
@@ -684,7 +684,7 @@ export class Renderer3D {
       if (lakeDist < 1.35) {
         const dRatio = Math.max(0, 1.0 - lakeDist / 1.35);
         const basinDepth = 14.0 * dRatio * dRatio;
-        localHills = Math.max(lake.waterZ - basinDepth, localHills - basinDepth * 1.5);
+        elevation = Math.max(0, elevation - basinDepth * 1.5);
       }
     }
 
@@ -696,11 +696,12 @@ export class Renderer3D {
       if (rDist < rRadius) {
         const rRatio = Math.max(0, 1.0 - rDist / rRadius);
         const trench = 6.5 * rRatio * rRatio;
-        localHills = Math.max(rp.waterZ - trench, localHills - trench * 1.4);
+        elevation = Math.max(0, elevation - trench * 1.4);
       }
     }
 
-    return localHills;
+    // ALL terrain features are scaled by smoothBlend so the entire track corridor is strictly 0.0
+    return elevation * smoothBlend;
   }
 
   setupTerrain() {
@@ -712,7 +713,7 @@ export class Renderer3D {
     }
 
     const w = 24000;
-    const segs = 200;
+    const segs = 280;
     const geo = new THREE.PlaneGeometry(w, w, segs, segs);
     const pos = geo.attributes.position.array;
     const count = geo.attributes.position.count;
@@ -909,10 +910,10 @@ export class Renderer3D {
 
     for (let i = 0; i < N; i++) {
       // Outer point
-      vertices.push(t.ox[i], -t.oy[i], 0.02);
+      vertices.push(t.ox[i], -t.oy[i], 0.10);
       uvs.push(0, (i / N) * 20);
       // Inner point
-      vertices.push(t.ix[i], -t.iy[i], 0.02);
+      vertices.push(t.ix[i], -t.iy[i], 0.10);
       uvs.push(1, (i / N) * 20);
 
       const nxt = (i + 1) % N;
