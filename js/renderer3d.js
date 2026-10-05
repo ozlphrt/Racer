@@ -480,6 +480,8 @@ export class Renderer3D {
     }
 
     const size = 512;
+    const TWO_PI = Math.PI * 2;
+
     const dCanvas = document.createElement('canvas');
     dCanvas.width = size;
     dCanvas.height = size;
@@ -501,20 +503,41 @@ export class Renderer3D {
     const rImg = rCtx.createImageData(size, size);
     const rData = rImg.data;
 
+    // Harmonic wave components: strictly integer multiples of 2PI across (u, v) in [0, 1)
+    // Distributed isotropically across multiple angles to eliminate directional grid / plaid seams
+    const harmonics = [
+      { kx: 3, ky: 4, weight: 0.22, phase: 0.4 },
+      { kx: 5, ky: -3, weight: 0.18, phase: 1.1 },
+      { kx: -4, ky: 6, weight: 0.15, phase: 2.3 },
+      { kx: 7, ky: 5, weight: 0.12, phase: 0.8 },
+      { kx: 10, ky: -8, weight: 0.09, phase: 1.7 },
+      { kx: 14, ky: 11, weight: 0.08, phase: 0.2 },
+      { kx: -18, ky: 13, weight: 0.06, phase: 2.9 },
+      { kx: 22, ky: -17, weight: 0.05, phase: 1.4 },
+      { kx: 32, ky: 25, weight: 0.04, phase: 0.6 },
+      { kx: -42, ky: 35, weight: 0.03, phase: 3.1 },
+      { kx: 60, ky: -48, weight: 0.02, phase: 1.9 },
+      { kx: 80, ky: 68, weight: 0.015, phase: 0.5 },
+    ];
+
     const heights = new Float32Array(size * size);
     for (let y = 0; y < size; y++) {
+      const v = y / size;
       for (let x = 0; x < size; x++) {
-        const n1 = Math.sin(x * 0.04 + y * 0.02) * Math.cos(x * 0.02 - y * 0.04);
-        const n2 = Math.sin(x * 0.10 - y * 0.08) * 0.5;
-        const n3 = Math.cos(x * 0.28 + y * 0.22) * 0.25;
-        const n4 = Math.sin(x * 0.70 + y * 0.60) * 0.12;
-        const n5 = Math.cos(x * 1.5 + y * 1.3) * 0.06;
-        heights[y * size + x] = (n1 + n2 + n3 + n4 + n5) * 0.5 + 0.5;
+        const u = x / size;
+        let sum = 0;
+        for (let i = 0; i < harmonics.length; i++) {
+          const h = harmonics[i];
+          sum += Math.sin(TWO_PI * (h.kx * u + h.ky * v) + h.phase) * h.weight;
+        }
+        heights[y * size + x] = sum * 0.5 + 0.5;
       }
     }
 
     for (let y = 0; y < size; y++) {
+      const v = y / size;
       for (let x = 0; x < size; x++) {
+        const u = x / size;
         const idx = (y * size + x) * 4;
         const h = heights[y * size + x];
 
@@ -528,8 +551,9 @@ export class Renderer3D {
         const hU = heights[y0 * size + x];
         const hD = heights[y1 * size + x];
 
-        const dx = (hR - hL) * 3.8;
-        const dy = (hD - hU) * 3.8;
+        // Smooth continuous tangent normal
+        const dx = (hR - hL) * 2.8;
+        const dy = (hD - hU) * 2.8;
         const dz = 1.0;
         const len = Math.hypot(dx, dy, dz) || 1;
 
@@ -538,17 +562,20 @@ export class Renderer3D {
         nData[idx + 2] = ((dz / len) * 0.5 + 0.5) * 255;
         nData[idx + 3] = 255;
 
-        const grain = Math.sin(x * 2.5 + y * 1.9) * 0.08 + Math.cos(x * 3.8 - y * 3.4) * 0.05;
+        // Seamless micro-grain with integer harmonics
+        const g1 = Math.sin(TWO_PI * (120 * u + 95 * v)) * 0.05;
+        const g2 = Math.cos(TWO_PI * (160 * u - 130 * v) + 1.2) * 0.035;
+        const grain = g1 + g2;
         const val = Math.max(0, Math.min(1, h + grain));
 
-        // High dynamic range ground albedo: organic grass blades, moss clumps & rich soil
-        dData[idx] = Math.floor(65 + val * 95);
-        dData[idx + 1] = Math.floor(105 + val * 110);
-        dData[idx + 2] = Math.floor(50 + val * 45);
+        // Natural earthy ground albedo that blends with vertex colors
+        dData[idx] = Math.floor(75 + val * 80);
+        dData[idx + 1] = Math.floor(105 + val * 90);
+        dData[idx + 2] = Math.floor(58 + val * 40);
         dData[idx + 3] = 255;
 
-        // Roughness: 0.72 for lush grass to 0.92 for soil/stone
-        const rough = Math.floor(180 + (1 - val) * 60);
+        // Roughness: 0.74 to 0.92
+        const rough = Math.floor(190 + (1 - val) * 45);
         rData[idx] = rough;
         rData[idx + 1] = rough;
         rData[idx + 2] = rough;
@@ -560,17 +587,25 @@ export class Renderer3D {
     nCtx.putImageData(nImg, 0, 0);
     rCtx.putImageData(rImg, 0, 0);
 
+    const maxAniso = (this.renderer && this.renderer.capabilities) ? this.renderer.capabilities.getMaxAnisotropy() : 8;
+
     const diffuseMap = new THREE.CanvasTexture(dCanvas);
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
-    diffuseMap.repeat.set(220, 220);
+    diffuseMap.repeat.set(160, 160);
+    diffuseMap.generateMipmaps = true;
+    diffuseMap.anisotropy = maxAniso;
 
     const normalMap = new THREE.CanvasTexture(nCanvas);
     normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
-    normalMap.repeat.set(220, 220);
+    normalMap.repeat.set(160, 160);
+    normalMap.generateMipmaps = true;
+    normalMap.anisotropy = maxAniso;
 
     const roughnessMap = new THREE.CanvasTexture(rCanvas);
     roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-    roughnessMap.repeat.set(220, 220);
+    roughnessMap.repeat.set(160, 160);
+    roughnessMap.generateMipmaps = true;
+    roughnessMap.anisotropy = maxAniso;
 
     this._terrainDetailMaps = { diffuseMap, normalMap, roughnessMap };
     return this._terrainDetailMaps;
@@ -579,6 +614,7 @@ export class Renderer3D {
   createWaterNormalMap() {
     if (this._waterNormalMap) return this._waterNormalMap;
     const size = 256;
+    const TWO_PI = Math.PI * 2;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -587,16 +623,23 @@ export class Renderer3D {
     const data = img.data;
 
     for (let y = 0; y < size; y++) {
+      const v = y / size;
       for (let x = 0; x < size; x++) {
-        const x0 = (x - 1 + size) % size;
-        const x1 = (x + 1) % size;
-        const y0 = (y - 1 + size) % size;
-        const y1 = (y + 1) % size;
+        const u = x / size;
+        const x0 = ((x - 1 + size) % size) / size;
+        const x1 = ((x + 1) % size) / size;
+        const y0 = ((y - 1 + size) % size) / size;
+        const y1 = ((y + 1) % size) / size;
 
-        const dx = (Math.sin(x1 * 0.14) - Math.sin(x0 * 0.14)) * 1.5;
-        const dy = (Math.cos(y1 * 0.16) - Math.cos(y0 * 0.16)) * 1.5;
+        const wL = Math.sin(TWO_PI * (4 * x0 + 2 * v)) + Math.cos(TWO_PI * (6 * x0 - 4 * v) + 0.8) * 0.5;
+        const wR = Math.sin(TWO_PI * (4 * x1 + 2 * v)) + Math.cos(TWO_PI * (6 * x1 - 4 * v) + 0.8) * 0.5;
+        const wU = Math.sin(TWO_PI * (4 * u + 2 * y0)) + Math.cos(TWO_PI * (6 * u - 4 * y0) + 0.8) * 0.5;
+        const wD = Math.sin(TWO_PI * (4 * u + 2 * y1)) + Math.cos(TWO_PI * (6 * u - 4 * y1) + 0.8) * 0.5;
+
+        const dx = (wR - wL) * 1.8;
+        const dy = (wD - wU) * 1.8;
         const dz = 1.0;
-        const len = Math.hypot(dx, dy, dz);
+        const len = Math.hypot(dx, dy, dz) || 1;
 
         const idx = (y * size + x) * 4;
         data[idx] = ((-dx / len) * 0.5 + 0.5) * 255;
@@ -608,7 +651,9 @@ export class Renderer3D {
     ctx.putImageData(img, 0, 0);
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(12, 12);
+    texture.repeat.set(16, 16);
+    texture.generateMipmaps = true;
+    texture.anisotropy = (this.renderer && this.renderer.capabilities) ? this.renderer.capabilities.getMaxAnisotropy() : 8;
     this._waterNormalMap = texture;
     return texture;
   }
@@ -862,7 +907,7 @@ export class Renderer3D {
       roughness: 0.84,
       metalness: 0.04,
       normalMap: normalMap,
-      normalScale: new THREE.Vector2(1.4, 1.4),
+      normalScale: new THREE.Vector2(0.9, 0.9),
       roughnessMap: roughnessMap,
       flatShading: false,
     });
