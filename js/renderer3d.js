@@ -483,15 +483,21 @@ export class Renderer3D {
     const trackY = -y;
 
     const distToTrack = this.getMinDistToTrack(trackX, trackY);
-    const flatMargin = 220.0; // Completely flat racing arena around track & infield
 
-    if (distToTrack <= flatMargin) return 0; // Flat racing plane on track and immediate runoffs
+    // Completely flat where track is passing by + exactly 1 car length after the track
+    const trackHalf = (t.width || 84) * 0.5; // ~42m
+    const carLength = 26.0;                  // 1 car length
+    const flatRadius = trackHalf + carLength; // ~68m total flat radius from centerline
 
-    // Smooth Hermite blend starting after 220m out from track to rolling countryside
-    const blend = Math.max(0, Math.min(1, (distToTrack - flatMargin) / 380.0));
-    const smoothBlend = blend * blend * (3 - 2 * blend);
+    if (distToTrack <= flatRadius) return 0; // Completely flat ground across track and 1 car length perimeter
 
-    // Multi-octave organic rolling hills and valleys
+    // Smooth continuous ease-in curve starting strictly after 1 car length outside the track
+    const blendDist = 320.0;
+    const blendRatio = Math.min(1.0, (distToTrack - flatRadius) / blendDist);
+    // C^2 continuous smootherstep (6t^5 - 15t^4 + 10t^3) with 0 first and second derivatives at boundary
+    const smoothBlend = blendRatio * blendRatio * blendRatio * (blendRatio * (blendRatio * 6 - 15) + 10);
+
+    // Multi-octave organic rolling hills and countryside
     const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
     const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
     const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
@@ -2547,9 +2553,10 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedPines[i];
         const trunkH = (r * 0.75 + 4) * heightMult;
         const trunkR = Math.max(1.0, r * 0.12);
+        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
-        dummy.position.set(x, -y, trunkH / 2);
+        dummy.position.set(x, -y, groundZ + trunkH / 2);
         dummy.scale.set(trunkR, trunkR, trunkH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2558,7 +2565,7 @@ export class Renderer3D {
         // Tier 1 Cone (Base)
         const cone1H = r * 1.25 * heightMult;
         const cone1Z = trunkH * 0.5 + cone1H / 2;
-        dummy.position.set(x, -y, cone1Z);
+        dummy.position.set(x, -y, groundZ + cone1Z);
         dummy.scale.set(r * 1.05, r * 1.05, cone1H);
         dummy.updateMatrix();
         cone1Inst.setMatrixAt(i, dummy.matrix);
@@ -2567,7 +2574,7 @@ export class Renderer3D {
         const cone2H = r * 1.05 * heightMult;
         const cone2Z = cone1Z + cone1H * 0.38;
         const cone2R = r * 0.75;
-        dummy.position.set(x, -y, cone2Z);
+        dummy.position.set(x, -y, groundZ + cone2Z);
         dummy.scale.set(cone2R, cone2R, cone2H);
         dummy.updateMatrix();
         cone2Inst.setMatrixAt(i, dummy.matrix);
@@ -2576,7 +2583,7 @@ export class Renderer3D {
         const cone3H = r * 0.85 * heightMult;
         const cone3Z = cone2Z + cone2H * 0.38;
         const cone3R = r * 0.48;
-        dummy.position.set(x, -y, cone3Z);
+        dummy.position.set(x, -y, groundZ + cone3Z);
         dummy.scale.set(cone3R, cone3R, cone3H);
         dummy.updateMatrix();
         cone3Inst.setMatrixAt(i, dummy.matrix);
@@ -2621,9 +2628,10 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedOaks[i];
         const trunkH = (r * 0.65 + 3.5) * heightMult;
         const trunkR = Math.max(1.3, r * 0.16);
+        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
-        dummy.position.set(x, -y, trunkH / 2);
+        dummy.position.set(x, -y, groundZ + trunkH / 2);
         dummy.scale.set(trunkR, trunkR, trunkH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2632,7 +2640,7 @@ export class Renderer3D {
         // Center Dominant Canopy Dome
         const crownR = r * 0.95;
         const crownZ = trunkH + crownR * 0.6;
-        dummy.position.set(x, -y, crownZ);
+        dummy.position.set(x, -y, groundZ + crownZ);
         dummy.scale.set(crownR, crownR * 0.95, crownR * 0.85);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2642,7 +2650,7 @@ export class Renderer3D {
         const cLeftR = r * 0.68;
         const offX = Math.cos(yaw) * (r * 0.45);
         const offY = Math.sin(yaw) * (r * 0.45);
-        dummy.position.set(x + offX, -y - offY, crownZ - crownR * 0.15);
+        dummy.position.set(x + offX, -y - offY, groundZ + crownZ - crownR * 0.15);
         dummy.scale.set(cLeftR, cLeftR, cLeftR * 0.8);
         dummy.rotation.set(leanX, leanY, yaw + 1.2);
         dummy.updateMatrix();
@@ -2652,7 +2660,7 @@ export class Renderer3D {
         const cRightR = r * 0.62;
         const offX2 = Math.cos(yaw + 2.2) * (r * 0.42);
         const offY2 = Math.sin(yaw + 2.2) * (r * 0.42);
-        dummy.position.set(x + offX2, -y - offY2, crownZ - crownR * 0.10);
+        dummy.position.set(x + offX2, -y - offY2, groundZ + crownZ - crownR * 0.10);
         dummy.scale.set(cRightR, cRightR, cRightR * 0.82);
         dummy.rotation.set(leanX, leanY, yaw - 1.4);
         dummy.updateMatrix();
@@ -2700,9 +2708,10 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedCypresses[i];
         const trunkH = (r * 0.4 + 2.5) * heightMult;
         const trunkR = Math.max(0.9, r * 0.08);
+        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
-        dummy.position.set(x, -y, trunkH / 2);
+        dummy.position.set(x, -y, groundZ + trunkH / 2);
         dummy.scale.set(trunkR, trunkR, trunkH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2712,7 +2721,7 @@ export class Renderer3D {
         const cypR = r * 0.55;
         const bodyH = r * 2.2 * heightMult;
         const bodyZ = trunkH + bodyH / 2;
-        dummy.position.set(x, -y, bodyZ);
+        dummy.position.set(x, -y, groundZ + bodyZ);
         dummy.scale.set(cypR, cypR, bodyH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2721,7 +2730,7 @@ export class Renderer3D {
         // Pointed Crown Tip
         const topH = r * 1.0 * heightMult;
         const topZ = trunkH + bodyH + topH / 2;
-        dummy.position.set(x, -y, topZ);
+        dummy.position.set(x, -y, groundZ + topZ);
         dummy.scale.set(cypR * 0.85, cypR * 0.85, topH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2761,9 +2770,10 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedBirches[i];
         const trunkH = (r * 0.85 + 4) * heightMult;
         const trunkR = Math.max(0.9, r * 0.11);
+        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
-        dummy.position.set(x, -y, trunkH / 2);
+        dummy.position.set(x, -y, groundZ + trunkH / 2);
         dummy.scale.set(trunkR, trunkR, trunkH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2772,7 +2782,7 @@ export class Renderer3D {
         // Lower Fluffy Amber Crown
         const c1R = r * 0.85;
         const c1Z = trunkH * 0.75 + c1R * 0.6;
-        dummy.position.set(x, -y, c1Z);
+        dummy.position.set(x, -y, groundZ + c1Z);
         dummy.scale.set(c1R, c1R, c1R * 0.9);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
@@ -2781,7 +2791,7 @@ export class Renderer3D {
         // Upper Golden Crown
         const c2R = r * 0.62;
         const c2Z = c1Z + c1R * 0.55;
-        dummy.position.set(x, -y, c2Z);
+        dummy.position.set(x, -y, groundZ + c2Z);
         dummy.scale.set(c2R, c2R, c2R * 0.95);
         dummy.rotation.set(leanX, leanY, yaw + 0.8);
         dummy.updateMatrix();
