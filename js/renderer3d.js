@@ -3738,8 +3738,12 @@ export class Renderer3D {
         const pool = ['chase', 'action', 'action_rear', 'onboard', 'heli', 'follow', 'broadcast'];
         const choices = pool.filter((p) => p !== this._autoPreset);
         this._autoPreset = choices[Math.floor(Math.random() * choices.length)] || 'chase';
-        // Random broadcast shot duration between 6.5s and 9.5s
-        this._autoNextSwitch = now + (6500 + Math.random() * 3000);
+        // T-Cam (onboard) is a fast action cut: keep it short & punchy (2.2s - 3.2s) to prevent viewer fatigue
+        // Other cinematic broadcast angles stay for 6.5s - 9.5s
+        const duration = this._autoPreset === 'onboard'
+          ? (2200 + Math.random() * 1000)
+          : (6500 + Math.random() * 3000);
+        this._autoNextSwitch = now + duration;
       }
       cameraPreset = this._autoPreset;
     }
