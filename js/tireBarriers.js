@@ -178,8 +178,8 @@ export class TireBarrierSystem {
         const st = sampledStacks[sIdx];
 
         for (let row = 0; row < 2; row++) {
-          // Exactly 4, 5, or 6 tyres high per individual stack
-          const stackTiers = 4 + Math.floor(rand() * 3);
+          // Exactly 3, 4, 5, or 6 tyres high with irregular heights along the barrier wall
+          const stackTiers = 3 + Math.floor(rand() * 4);
           const rowOffset = row * rowDepth;
           const staggerTang = (row === 1) ? stackSpacing * 0.5 : 0;
           const stackX = st.x + st.outNx * (baseMargin + rowOffset) + st.tx * staggerTang;
@@ -190,15 +190,29 @@ export class TireBarrierSystem {
           const stackBaseColor = colors[colorGroup];
           const stackId = id++;
 
+          // Natural organic lean direction and magnitude for this stack column
+          const stackLeanAngle = rand() * Math.PI * 2;
+          const stackLeanMag = (rand() * 0.22 + 0.08);
+          const stackLeanX = Math.cos(stackLeanAngle) * stackLeanMag;
+          const stackLeanY = Math.sin(stackLeanAngle) * stackLeanMag;
+
           for (let tier = 0; tier < stackTiers; tier++) {
-            // Natural snug stacking with slight organic variations
-            const jitterX = (rand() - 0.5) * 0.08;
-            const jitterY = (rand() - 0.5) * 0.08;
-            const pitch = (rand() - 0.5) * 0.05;
-            const roll = (rand() - 0.5) * 0.05;
-            const yaw = st.yaw + (rand() - 0.5) * 0.25;
-            const z = 0.66 + tier * 1.32;
-            const tireColor = tier === stackTiers - 1 && rand() < 0.20 ? colors[2] : stackBaseColor;
+            // Progressive cumulative offset higher up the stack
+            const tierFrac = tier / Math.max(1, stackTiers - 1);
+            const jitterX = stackLeanX * tierFrac + (rand() - 0.5) * 0.32;
+            const jitterY = stackLeanY * tierFrac + (rand() - 0.5) * 0.32;
+
+            // Organic tilt: upper tyres lean and tilt noticeably (up to 12-15 degrees)
+            const isTop = tier === stackTiers - 1;
+            const tiltMax = isTop ? 0.22 : (0.05 + tierFrac * 0.10);
+            const pitch = (rand() - 0.5) * tiltMax * 2.0;
+            const roll = (rand() - 0.5) * tiltMax * 2.0;
+            // Fully randomized rotational angle
+            const yaw = rand() * Math.PI * 2;
+
+            // Varied compression and natural sag in height
+            const z = 0.66 + tier * 1.28 + (rand() - 0.5) * 0.08;
+            const tireColor = (isTop && rand() < 0.25) ? colors[2] : stackBaseColor;
             const posX = stackX + jitterX;
             const posY = stackY + jitterY;
 
