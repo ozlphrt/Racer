@@ -306,7 +306,7 @@ export class Renderer3D {
     this.renderer.setSize(this.w, this.h, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     // 2. OrbitControls with smooth auto spin
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -4112,17 +4112,33 @@ export class Renderer3D {
       writeIdx++;
     }
 
-    this.smokeMesh.geometry.attributes.position.updateRange.offset = 0;
-    this.smokeMesh.geometry.attributes.position.updateRange.count = writeIdx * 4 * 3;
-    this.smokeMesh.geometry.attributes.position.needsUpdate = true;
+    const posAttr = this.smokeMesh.geometry.attributes.position;
+    const alphaAttr = this.smokeMesh.geometry.attributes.alpha;
+    const uvAttr = this.smokeMesh.geometry.attributes.uv;
 
-    this.smokeMesh.geometry.attributes.alpha.updateRange.offset = 0;
-    this.smokeMesh.geometry.attributes.alpha.updateRange.count = writeIdx * 4;
-    this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
+    if (posAttr) {
+      if (posAttr.updateRange) {
+        posAttr.updateRange.offset = 0;
+        posAttr.updateRange.count = writeIdx * 4 * 3;
+      }
+      posAttr.needsUpdate = true;
+    }
 
-    this.smokeMesh.geometry.attributes.uv.updateRange.offset = 0;
-    this.smokeMesh.geometry.attributes.uv.updateRange.count = writeIdx * 4 * 2;
-    this.smokeMesh.geometry.attributes.uv.needsUpdate = true;
+    if (alphaAttr) {
+      if (alphaAttr.updateRange) {
+        alphaAttr.updateRange.offset = 0;
+        alphaAttr.updateRange.count = writeIdx * 4;
+      }
+      alphaAttr.needsUpdate = true;
+    }
+
+    if (uvAttr) {
+      if (uvAttr.updateRange) {
+        uvAttr.updateRange.offset = 0;
+        uvAttr.updateRange.count = writeIdx * 4 * 2;
+      }
+      uvAttr.needsUpdate = true;
+    }
     this.smokeMesh.geometry.setDrawRange(0, writeIdx * 6);
   }
 
