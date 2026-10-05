@@ -8,50 +8,77 @@ function toHexColor(hexNum, defaultHex = '#38bdf8') {
 }
 
 export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false) {
-  let priColor, secColor, accColor;
+  let priColor, secColor, accColor, quadColor;
 
   if (isPlayer) {
     priColor = '#00e626'; // High-vis Lime
     secColor = '#facc15'; // Modena Yellow
     accColor = '#ffffff'; // White
+    quadColor = '#00e626';
   } else {
     const team = TEAM_PALETTE[teamIdx % TEAM_PALETTE.length] || TEAM_PALETTE[0];
     priColor = toHexColor(team.hex, '#e11d48');
     secColor = toHexColor(team.secHex, '#facc15');
     accColor = toHexColor(team.accHex, '#ffffff');
+    quadColor = toHexColor(team.quadHex || team.secHex, '#38bdf8');
   }
 
-  return `
-    <svg class="car-sideview-svg" viewBox="0 0 64 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <!-- Rear Wing Endplate & Flap -->
-      <path d="M 4,2.5 L 11,2.5 L 10,11 L 5,11 Z" fill="${accColor}" />
-      <rect x="2.5" y="1.5" width="2" height="10" rx="1" fill="${accColor}" />
+  const uid = `${isPlayer ? 'p' : 't' + teamIdx}_${(Math.random() * 100000 | 0)}`;
 
-      <!-- Shark Fin Spine -->
-      <path d="M 12,4.5 L 24,8.5 L 12,11.5 Z" fill="${accColor}" />
+  return `
+    <svg class="car-sideview-svg" viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="bodyGrad_${uid}" x1="0%" y1="0%" x2="100%" y2="40%">
+          <stop offset="0%" stop-color="${priColor}" />
+          <stop offset="100%" stop-color="${priColor}" stop-opacity="0.9" />
+        </linearGradient>
+        <linearGradient id="tireGrad_${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#334155" />
+          <stop offset="60%" stop-color="#1e293b" />
+          <stop offset="100%" stop-color="#0f172a" />
+        </linearGradient>
+      </defs>
+
+      <!-- Rear Wing Endplate & Flap Elements -->
+      <path d="M 4,4 L 17,4 L 16,16 L 6,16 Z" fill="${accColor}" />
+      <rect x="2" y="2.5" width="3" height="15" rx="1" fill="${accColor}" stroke="#0f172a" stroke-width="0.5" />
+      <path d="M 5,6 L 16,6" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.85" />
+      <rect x="13" y="10" width="2" height="7" fill="#0f172a" />
+
+      <!-- Shark Fin & Dorsal Spine -->
+      <path d="M 17,6 L 38,11 L 17,16 Z" fill="${accColor}" />
 
       <!-- Main Monocoque Chassis -->
-      <path d="M 7,11 L 20,7 L 36,8 L 48,10.5 L 58,13.5 L 61,15.5 L 7,15.5 Z" fill="${priColor}" />
+      <path d="M 14,14 L 32,8 L 48,9 L 70,14 L 92,18 L 95,21 L 14,21 Z" fill="url(#bodyGrad_${uid})" />
 
-      <!-- Nose Cone & Front Wing -->
-      <path d="M 44,10 L 58,13 L 62.5,15.5 L 44,13 Z" fill="${secColor}" />
-      <rect x="55.5" y="14.5" width="8" height="2" rx="0.6" fill="${secColor}" />
+      <!-- Sidepod Aerodynamic Undercut & Intake -->
+      <path d="M 36,12 Q 54,12 66,16 L 36,16 Z" fill="${secColor}" opacity="0.95" />
+      <path d="M 33,10 L 37,10 L 38,15 L 34,15 Z" fill="#090d16" />
 
-      <!-- Cockpit Visor & Driver Helmet -->
-      <circle cx="28" cy="7.2" r="3" fill="#0f172a" />
-      <path d="M 27.5,6.2 Q 31,6.2 30.2,8.2 Q 26.5,8.2 27.5,6.2 Z" fill="#38bdf8" />
-      <path d="M 23,7.5 L 32,7.5 L 34,11 L 22,11 Z" fill="#070d18" />
+      <!-- Nosecone & Front Wing Assembly -->
+      <path d="M 64,13.5 L 88,17.5 L 96,21 L 64,17.5 Z" fill="${secColor}" />
+      <path d="M 86,19.5 L 98,19.5 L 97,22 L 85,22 Z" fill="${accColor}" />
+      <rect x="94" y="17" width="2.5" height="6.5" rx="0.8" fill="${accColor}" stroke="#0f172a" stroke-width="0.5" />
 
-      <!-- Halo Safety Hoop -->
-      <path d="M 25,5 Q 30,4 34,7" stroke="${accColor}" stroke-width="1.2" stroke-linecap="round" fill="none" />
+      <!-- Cockpit & Driver Helmet with Visor -->
+      <circle cx="43" cy="9.5" r="3.4" fill="#0f172a" />
+      <path d="M 42,8.2 Q 46.5,8.2 45.8,10.8 Q 41.5,10.8 42,8.2 Z" fill="#38bdf8" />
+      <path d="M 36,10 L 49,10 L 51,14.5 L 35,14.5 Z" fill="#070d18" />
 
-      <!-- Rear Slick Wheel -->
-      <circle cx="13.5" cy="14.8" r="4.8" fill="#090d16" stroke="#475569" stroke-width="0.8" />
-      <circle cx="13.5" cy="14.8" r="2.2" fill="#d4af37" />
+      <!-- Titanium Halo Safety Structure -->
+      <path d="M 39,6.5 Q 46,5.2 52,9.5" stroke="#f1f5f9" stroke-width="1.6" stroke-linecap="round" fill="none" />
 
-      <!-- Front Slick Wheel -->
-      <circle cx="50.5" cy="14.8" r="4.8" fill="#090d16" stroke="#475569" stroke-width="0.8" />
-      <circle cx="50.5" cy="14.8" r="2.2" fill="#d4af37" />
+      <!-- REAR WHEEL (Center 19, 21 - High-Contrast Pirelli Competition Rim) -->
+      <circle cx="19" cy="21" r="6.8" fill="url(#tireGrad_${uid})" stroke="#64748b" stroke-width="0.8" />
+      <circle cx="19" cy="21" r="5.4" fill="none" stroke="#facc15" stroke-width="0.9" stroke-dasharray="6 2" />
+      <circle cx="19" cy="21" r="4.0" fill="#1e293b" stroke="#94a3b8" stroke-width="0.6" />
+      <circle cx="19" cy="21" r="1.6" fill="#f59e0b" />
+
+      <!-- FRONT WHEEL (Center 78, 21 - High-Contrast Pirelli Competition Rim) -->
+      <circle cx="78" cy="21" r="6.8" fill="url(#tireGrad_${uid})" stroke="#64748b" stroke-width="0.8" />
+      <circle cx="78" cy="21" r="5.4" fill="none" stroke="#facc15" stroke-width="0.9" stroke-dasharray="6 2" />
+      <circle cx="78" cy="21" r="4.0" fill="#1e293b" stroke="#94a3b8" stroke-width="0.6" />
+      <circle cx="78" cy="21" r="1.6" fill="#f59e0b" />
     </svg>
   `.trim();
 }

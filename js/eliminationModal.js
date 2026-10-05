@@ -34,10 +34,16 @@ export class EliminationModalManager {
     modal.setAttribute('role', 'alert');
 
     modal.innerHTML = `
-      <span class="elim-tag">ELIMINATED</span>
-      <span class="elim-car-preview" title="${isPlayer ? 'You' : `Car #${carIdx + 1}`}">${carSvg}</span>
-      <span class="elim-sep">•</span>
-      <span class="elim-reason">${reasonText}</span>
+      <div class="elim-badge-col">
+        <span class="elim-tag">ELIMINATED</span>
+      </div>
+      <div class="elim-car-col" title="${isPlayer ? 'You' : `Car #${carIdx + 1}`}">
+        <div class="elim-car-preview">${carSvg}</div>
+      </div>
+      <div class="elim-reason-col">
+        <span class="elim-sep">•</span>
+        <span class="elim-reason">${reasonText}</span>
+      </div>
     `;
 
     modal.addEventListener('click', () => {
@@ -74,7 +80,7 @@ export class EliminationModalManager {
 
     setTimeout(() => {
       modal.remove();
-    }, 240);
+    }, 480);
   }
 
   clear() {
