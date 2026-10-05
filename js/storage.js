@@ -48,24 +48,24 @@ export function loadBrain(layers) {
   }
 }
 
-export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isExplicitReset = false) {
+export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isExplicitResetOrOverride = false) {
   try {
     if (!simState || typeof simState.generation !== 'number') return false;
 
     // Direct atomic anchor write for generation number (instant, zero overhead)
-    if (isExplicitReset) {
-      localStorage.setItem(KEY_ANCHOR, '1');
+    if (isExplicitResetOrOverride) {
+      localStorage.setItem(KEY_ANCHOR, String(simState.generation));
     } else {
       const curAnchor = parseInt(localStorage.getItem(KEY_ANCHOR) || '0', 10);
-      if (!isExplicitReset && curAnchor > simState.generation) {
-        // Never overwrite higher generation with lower generation
+      if (curAnchor > simState.generation) {
+        // Never overwrite higher generation with lower generation unless explicitly instructed
         return false;
       }
       localStorage.setItem(KEY_ANCHOR, String(simState.generation));
     }
 
     // Protection guard on full state JSON
-    if (!isExplicitReset) {
+    if (!isExplicitResetOrOverride) {
       try {
         const raw = localStorage.getItem(KEY_STATE) || localStorage.getItem(KEY_BACKUP);
         if (raw) {

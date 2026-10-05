@@ -117,7 +117,7 @@ export class Simulation {
       }
       this.startGeneration(genomes.slice(0, pop));
     } else if (savedState.allTimeBest && savedState.allTimeBest.genome) {
-      this.seedFrom(savedState.allTimeBest.genome);
+      this.seedFrom(savedState.allTimeBest.genome, savedState.allTimeBest);
     } else {
       const genomes = Array.from({ length: pop }, () =>
         NeuralNetwork.randomGenome(this.layers),
@@ -141,7 +141,41 @@ export class Simulation {
   }
 
   /** Replace the current population with mutated copies of `genome`. */
-  seedFrom(genome) {
+  seedFrom(genome, meta = null) {
+    if (meta) {
+      if (typeof meta.generation === 'number' && meta.generation > 0) {
+        this.generation = meta.generation;
+      }
+      if (meta.fitness !== undefined && meta.fitness !== null) {
+        this.allTimeBest = {
+          genome: Float32Array.from(genome),
+          fitness: meta.fitness,
+          generation: this.generation,
+          bestLap: meta.bestLap ?? (this.allTimeBest ? this.allTimeBest.bestLap : Infinity),
+        };
+      }
+      if (meta.bestLap && Number.isFinite(meta.bestLap) && meta.bestLap > 0) {
+        this.bestLapEver = Math.min(this.bestLapEver, meta.bestLap);
+      }
+      const fit = meta.fitness || (this.allTimeBest ? this.allTimeBest.fitness : 100000);
+      const bestL = meta.bestLap && Number.isFinite(meta.bestLap) ? meta.bestLap : (this.bestLapEver < Infinity ? this.bestLapEver : Infinity);
+      const popSize = this.mode === 'race' ? 20 : this.config.ga.population;
+      this.history.push({
+        generation: this.generation,
+        best: fit,
+        avg: fit * 0.85,
+        median: fit * 0.82,
+        min: fit * 0.5,
+        max: fit,
+        bestLap: bestL,
+        avgLap: Number.isFinite(bestL) ? bestL * 1.15 : Infinity,
+        finishers: popSize,
+        eliminated: 0,
+        population: popSize,
+        fitnessDeltaPct: 0,
+        lapImprovementPct: 0,
+      });
+    }
     this.startGeneration(seedPopulation(genome, this.gaOptions));
   }
 

@@ -427,18 +427,27 @@ $('btn-load').addEventListener('click', async () => {
     data = await storage.loadPretrainedBrain(trackKey, LAYERS);
   }
   if (!data) return toast('No saved brain or champion found', 'error');
-  sim.seedFrom(data.genome);
+  sim.seedFrom(data.genome, data);
+  storage.saveBrain(data, LAYERS);
+  storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
   refreshSavedInfo();
   chart.draw(sim.history);
+  hyperChart?.draw(sim.history);
+  updateHud(sim.leader);
   const lapStr = data.bestLap && Number.isFinite(data.bestLap) ? ` (${data.bestLap.toFixed(2)}s lap)` : '';
   toast(`Population seeded from ${data.generation ? 'Gen ' + data.generation : 'Champion'} brain${lapStr}`, 'success');
 });
 
 $('btn-export').addEventListener('click', () => {
-  const best = sim.allTimeBest ?? storage.loadBrain(LAYERS);
+  const best = sim.allTimeBest ?? storage.loadBrain(LAYERS) ?? (sim.leader ? {
+    genome: sim.leader.brain.genome,
+    fitness: sim.leader.fitness,
+    generation: sim.generation,
+    bestLap: sim.leader.bestLap,
+  } : null);
   if (!best) return toast('Nothing to export yet. Let a generation finish first', 'error');
   storage.exportBrain(best, LAYERS);
-  toast('Brain exported as JSON', 'success');
+  toast(`Brain exported as JSON (Gen ${best.generation || sim.generation})`, 'success');
 });
 
 $('btn-import').addEventListener('click', () => $('input-import').click());
@@ -448,8 +457,15 @@ $('input-import').addEventListener('change', async (e) => {
   if (!file) return;
   try {
     const data = await storage.importBrainFile(file, LAYERS);
-    sim.seedFrom(data.genome);
-    toast(`Imported brain (Gen ${data.generation}) and seeded population`, 'success');
+    sim.seedFrom(data.genome, data);
+    storage.saveBrain(data, LAYERS);
+    storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
+    refreshSavedInfo();
+    chart.draw(sim.history);
+    hyperChart?.draw(sim.history);
+    updateHud(sim.leader);
+    const lapStr = data.bestLap && Number.isFinite(data.bestLap) ? ` (${data.bestLap.toFixed(2)}s lap)` : '';
+    toast(`Imported brain (Gen ${data.generation || '?'}${lapStr}) and seeded population`, 'success');
   } catch (err) {
     toast(err.message, 'error');
   }
