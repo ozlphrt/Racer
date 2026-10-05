@@ -1638,15 +1638,18 @@ export function renderGenPresetsRibbon() {
     const label = formatGenLabel(chip.gen);
 
     if (isCurrent && !isPresetMatch) {
+      const liveNum = chip.gen >= 1000 ? `${(chip.gen / 1000) % 1 === 0 ? chip.gen / 1000 : (chip.gen / 1000).toFixed(1)}k` : `${chip.gen}`;
       html += `<button class="btn-gen-chip is-current ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Your live trained generation ${chip.gen}">
         <span class="chip-dot"></span>
-        <span class="chip-text">${label}</span>
+        <span class="chip-text">${liveNum}</span>
         <span class="chip-badge">LIVE</span>
       </button>`;
     } else if (isCurrent && isPresetMatch) {
+      const liveNum = chip.gen >= 1000 ? `${(chip.gen / 1000) % 1 === 0 ? chip.gen / 1000 : (chip.gen / 1000).toFixed(1)}k` : `${chip.gen}`;
       html += `<button class="btn-gen-chip is-current ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Gen ${chip.gen} milestone (Current Live)">
         <span class="chip-dot"></span>
-        <span class="chip-text">${label}</span>
+        <span class="chip-text">${liveNum}</span>
+        <span class="chip-badge">LIVE</span>
       </button>`;
     } else {
       html += `<button class="btn-gen-chip ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Load pre-trained Gen ${chip.gen} champion">
