@@ -621,6 +621,10 @@ window.addEventListener('keydown', (e) => {
     case 's':
       setAudio(!state.audio);
       break;
+    case 'l':
+      leaderboard.toggleCollapse();
+      toast(leaderboard.isCollapsed ? 'Leaderboard collapsed' : 'Leaderboard expanded');
+      break;
     case 'p':
       const willOpen = !panelEl?.classList.contains('is-open');
       setPanelOpen(willOpen);

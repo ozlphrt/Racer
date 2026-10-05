@@ -551,6 +551,12 @@ h1 {
   z-index: 20;
   user-select: none;
   overflow: hidden;
+  transition: width 0.28s var(--ease), padding 0.28s var(--ease), background 0.2s ease, border-color 0.2s ease;
+}
+
+.leaderboard-tower.is-collapsed {
+  width: 228px;
+  padding: 6px 10px;
 }
 
 .tower-header {
@@ -560,6 +566,52 @@ h1 {
   padding-bottom: 6px;
   margin-bottom: 6px;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: padding 0.2s ease, margin 0.2s ease, border-color 0.2s ease;
+}
+
+.leaderboard-tower.is-collapsed .tower-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.tower-header:hover .tower-title {
+  color: var(--cyan);
+}
+
+.tower-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tower-collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tower-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.tower-chevron {
+  transition: transform 0.25s var(--ease);
+  transform: rotate(0deg);
+}
+
+.leaderboard-tower.is-collapsed .tower-chevron {
+  transform: rotate(-90deg);
 }
 
 .tower-title-group {
@@ -588,6 +640,7 @@ h1 {
   letter-spacing: 0.08em;
   color: #f1f5f9;
   text-transform: uppercase;
+  transition: color 0.18s ease;
 }
 
 .tower-mode-badge {
@@ -607,6 +660,15 @@ h1 {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
   padding-right: 0;
+  max-height: 220px;
+  opacity: 1;
+  transition: max-height 0.28s var(--ease), opacity 0.22s ease;
+}
+
+.leaderboard-tower.is-collapsed .tower-list-container {
+  max-height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .tower-list-container::-webkit-scrollbar {

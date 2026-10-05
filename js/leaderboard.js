@@ -96,13 +96,25 @@ export class LeaderboardTower {
 
   initDom() {
     if (!this.container) return;
+    this.isCollapsed = localStorage.getItem('ai-racer:leaderboard-collapsed') !== 'false';
+    if (this.isCollapsed) {
+      this.container.classList.add('is-collapsed');
+    }
+
     this.container.innerHTML = `
-      <div class="tower-header">
+      <div class="tower-header" id="tower-header-btn" title="Click to toggle Leaderboard (L)">
         <div class="tower-title-group">
           <span class="tower-live-dot"></span>
           <span class="tower-title">LEADERBOARD</span>
         </div>
-        <div class="tower-mode-badge">TOP 3 + 3</div>
+        <div class="tower-header-actions">
+          <div class="tower-mode-badge">TOP 3 + 3</div>
+          <button class="tower-collapse-btn" id="tower-collapse-btn" type="button" aria-label="Toggle leaderboard">
+            <svg class="tower-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="tower-list-container">
         <div class="tower-list" id="tower-list-rows" style="height: ${this.maxVisible * this.rowHeight}px;">
@@ -110,6 +122,19 @@ export class LeaderboardTower {
       </div>
     `;
     this.listEl = this.container.querySelector('#tower-list-rows');
+
+    const headerBtn = this.container.querySelector('#tower-header-btn');
+    if (headerBtn) {
+      headerBtn.addEventListener('click', () => {
+        this.toggleCollapse();
+      });
+    }
+  }
+
+  toggleCollapse(forcedState = null) {
+    this.isCollapsed = forcedState !== null ? forcedState : !this.isCollapsed;
+    this.container.classList.toggle('is-collapsed', this.isCollapsed);
+    localStorage.setItem('ai-racer:leaderboard-collapsed', String(this.isCollapsed));
   }
 
   getCarMeta(car, sim) {
