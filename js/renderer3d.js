@@ -2511,7 +2511,7 @@ export class Renderer3D {
         vAlpha = alpha;
         vRotation = rotation;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (360.0 / -mvPosition.z);
+        gl_PointSize = clamp(size * (720.0 / -mvPosition.z), 3.0, 180.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -2544,20 +2544,20 @@ export class Renderer3D {
         float dist = length(pt);
         if (dist > 0.5) discard;
 
-        // Soft exponential Gaussian feather - eliminates puffy ball edges
-        float feather = exp(-dist * dist * 14.0);
+        // Smooth Gaussian feathering: soft wispy edge with zero cotton ball hardness
+        float feather = exp(-dist * dist * 8.0);
 
-        // Wispy turbulence modulation
+        // Gentle multi-frequency turbulence
         float cosR = cos(vRotation);
         float sinR = sin(vRotation);
         vec2 rotUv = vec2(pt.x * cosR - pt.y * sinR, pt.x * sinR + pt.y * cosR);
-        float turb = fbm(rotUv * 5.0 + vec2(1.2, 2.7));
+        float turb = fbm(rotUv * 4.5 + vec2(1.2, 2.7));
 
-        float mask = feather * (0.60 + 0.40 * turb);
+        float mask = feather * (0.65 + 0.35 * turb);
 
-        // Subtle realistic translucent burnt-rubber vapor tint
-        vec3 smokeColor = vec3(0.85, 0.87, 0.90);
-        float alpha = mask * vAlpha * 0.22;
+        // Authentic white-grey tire friction vapor
+        vec3 smokeColor = vec3(0.90, 0.92, 0.95);
+        float alpha = clamp(mask * vAlpha * 0.60, 0.0, 1.0);
 
         gl_FragColor = vec4(smokeColor, alpha);
       }
@@ -2583,7 +2583,7 @@ export class Renderer3D {
   }
 
   addTireSmoke(lx, ly, rx, ry, car, intensity) {
-    const count = intensity > 0.45 ? 2 : 1;
+    const count = intensity > 0.40 ? 2 : 1;
     const cos = Math.cos(car.angle);
     const sin = Math.sin(car.angle);
 
@@ -2595,30 +2595,30 @@ export class Renderer3D {
 
       for (const t of tires) {
         if (this.smokeParticles.length >= this.maxSmokeParticles) {
-          this.smokeParticles.shift(); // recycle oldest
+          this.smokeParticles.shift();
         }
 
-        // Low-lying tread streak velocity trailing along the tarmac
-        const slipSpd = (car.speed || 50) * 0.05;
-        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 1.5;
-        const driftY = sin * slipSpd + (Math.random() - 0.5) * 1.5;
-        const driftZ = 0.3 + Math.random() * 0.6; // Stays close to ground
+        // Low-lying tread streak velocity trailing behind contact patches
+        const slipSpd = (car.speed || 50) * 0.06;
+        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 2.0;
+        const driftY = sin * slipSpd + (Math.random() - 0.5) * 2.0;
+        const driftZ = 0.5 + Math.random() * 1.0;
 
         this.smokeParticles.push({
-          x: t.x + (Math.random() - 0.5) * 0.4,
-          y: t.y + (Math.random() - 0.5) * 0.4,
-          z: 0.10 + Math.random() * 0.15,
+          x: t.x + (Math.random() - 0.5) * 0.6,
+          y: t.y + (Math.random() - 0.5) * 0.6,
+          z: 0.15 + Math.random() * 0.20,
           vx: driftX,
           vy: driftY,
           vz: driftZ,
-          size: 1.4 + Math.random() * 0.8,
-          maxSize: 3.6 + Math.random() * 1.4,
-          growthRate: 3.8 + Math.random() * 2.0,
+          size: 3.2 + Math.random() * 1.6,
+          maxSize: 7.5 + Math.random() * 3.5,
+          growthRate: 6.0 + Math.random() * 3.5,
           rotation: Math.random() * Math.PI * 2,
-          spin: (Math.random() - 0.5) * 1.2,
-          alpha: Math.min(0.70, intensity * (0.50 + Math.random() * 0.25)),
+          spin: (Math.random() - 0.5) * 1.4,
+          alpha: Math.min(0.85, intensity * (0.65 + Math.random() * 0.25)),
           life: 1.0,
-          decay: 1.8 + Math.random() * 0.6,
+          decay: 1.3 + Math.random() * 0.5,
         });
       }
     }

@@ -955,10 +955,10 @@ export class Renderer {
       s.radius += 2.8 * dt;
 
       const r = Math.min(s.maxRadius, s.radius);
-      const alpha = s.alpha * Math.pow(s.life, 1.4) * 0.22;
+      const alpha = s.alpha * Math.pow(s.life, 1.2) * 0.45;
       const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-      grad.addColorStop(0, `rgba(230, 235, 242, ${alpha})`);
-      grad.addColorStop(0.6, `rgba(215, 222, 232, ${alpha * 0.4})`);
+      grad.addColorStop(0, `rgba(238, 242, 248, ${alpha})`);
+      grad.addColorStop(0.5, `rgba(220, 228, 238, ${alpha * 0.5})`);
       grad.addColorStop(1, `rgba(200, 210, 220, 0)`);
 
       ctx.fillStyle = grad;
