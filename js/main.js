@@ -443,17 +443,45 @@ $('input-import').addEventListener('change', async (e) => {
   }
 });
 
-$('btn-clear').addEventListener('click', () => {
-  if (confirm('Are you sure you want to erase all saved training progress and reset to Gen 1?')) {
+function resetAllLearning(fromRunningModal = false) {
+  const wasHyperRunning = hyperRunning;
+  if (wasHyperRunning) {
+    hyperRunning = false;
+  }
+
+  if (confirm('Are you sure you want to reset all learning progress?\n\nThis will erase all learned neural network weights, best lap records, and restart fresh from Generation 1.')) {
     storage.clearTrainingState();
     sim.reset();
-    storage.saveTrainingState(sim, LAYERS, $('track-select').value, true);
+    storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
     chart.draw(sim.history);
+    hyperChart?.draw(sim.history);
     refreshSavedInfo();
     updateHud(sim.leader);
-    toast('Training reset: starting fresh from Gen 1 with random brains', 'info');
+
+    if (fromRunningModal && hyperModal && !hyperModal.hidden) {
+      hyperStartGen = 1;
+      hyperStartTime = performance.now();
+      if (hyperMode === 'gens') {
+        const count = Math.max(1, Math.min(10000, Number(hyperTargetInput?.value) || 50));
+        hyperGenGoal = 1 + count;
+        const targetInfo = $('hyper-target-info');
+        if (targetInfo) {
+          targetInfo.innerHTML = `Gen <strong id="hyper-cur-gen">1</strong> / <span>${hyperGenGoal}</span> (+${count} gens)`;
+        }
+      }
+      hyperRunning = true;
+      runHyperBatch();
+    }
+    toast('↺ Learning reset: starting fresh from Gen 1 with random neural weights', 'info');
+  } else if (wasHyperRunning) {
+    hyperRunning = true;
+    runHyperBatch();
   }
-});
+}
+
+$('btn-clear')?.addEventListener('click', () => resetAllLearning(false));
+$('btn-hyper-reset-setup')?.addEventListener('click', () => resetAllLearning(false));
+$('btn-hyper-reset-running')?.addEventListener('click', () => resetAllLearning(true));
 
 // ---------- Insights & Settings Panel Logic ----------
 const panelEl = $('panel');

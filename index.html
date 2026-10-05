@@ -400,9 +400,14 @@
           </div>
         </div>
 
-        <button class="btn btn-primary btn-large btn-hyper-start-main" id="btn-hyper-start" type="button" style="width: 100%; margin-top: 18px; font-size: 15px; padding: 13px;">
-          🚀 Start Hyper Training
-        </button>
+        <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
+          <button class="btn btn-primary btn-large btn-hyper-start-main" id="btn-hyper-start" type="button" style="flex: 2; font-size: 15px; padding: 13px;">
+            🚀 Start Hyper Training
+          </button>
+          <button class="btn btn-ghost" id="btn-hyper-reset-setup" type="button" style="flex: 1; font-size: 13px; padding: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
+            ↺ Reset Learning
+          </button>
+        </div>
       </div>
 
       <div class="hyper-running" id="hyper-running-view" hidden>
@@ -439,9 +444,12 @@
           <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; border-radius: 8px; width: 100%;"></canvas>
         </div>
 
-        <div class="btn-row" style="margin-top: 18px;">
-          <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 1; padding: 12px; font-size: 14px;">
+        <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
+          <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 2; padding: 12px; font-size: 14px;">
             🏁 Stop &amp; Resume 3D View
+          </button>
+          <button class="btn btn-ghost" id="btn-hyper-reset-running" type="button" style="flex: 1; padding: 12px; font-size: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
+            ↺ Reset Learning
           </button>
         </div>
       </div>
