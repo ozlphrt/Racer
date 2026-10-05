@@ -447,19 +447,95 @@ export class Renderer3D {
     this.dirLight.shadow.camera.updateProjectionMatrix();
   }
 
+  getTerrainHeight(x, y) {
+    if (!this.track) return 0;
+    const t = this.track;
+    const b = t.bounds;
+    const cx = b.cx;
+    const cy = -b.cy;
+
+    // Convert 3D world (x, y) into 2D track coordinate system (x, -y)
+    const trackX = x;
+    const trackY = -y;
+
+    const nearestIdx = t.nearestIndex(trackX, trackY, 0, t.N / 2, t.N / 2);
+    const distSq = t.lateralDistSq(trackX, trackY, nearestIdx);
+    const safeDist = t.half + 32;
+    const safeDistSq = safeDist * safeDist;
+
+    if (distSq <= safeDistSq) return 0; // Flat racing plane on track and immediate runoffs
+
+    const distToTrack = Math.sqrt(distSq);
+    // Smooth transition from flat track corridor to rolling countryside
+    const blend = Math.max(0, Math.min(1, (distToTrack - safeDist) / 160));
+    const smoothBlend = blend * blend * (3 - 2 * blend);
+
+    // Multi-octave organic rolling hills and valleys
+    const h1 = Math.sin(x * 0.0012 + 0.4) * Math.cos(y * 0.0012 - 0.3) * 62.0;
+    const h2 = Math.sin(x * 0.0024 - y * 0.0020 + 1.2) * 28.0;
+    const h3 = Math.cos(x * 0.0048 + y * 0.0042) * 12.0;
+    const localHills = Math.max(0, h1 + h2 + h3 + 16.0) * smoothBlend;
+
+    // Majestic perimeter mountain ranges on the outer horizon
+    const distFromCenter = Math.hypot(x - cx, y - cy);
+    const maxTrackSpan = Math.max(b.w, b.h) * 0.72;
+    if (distFromCenter > maxTrackSpan) {
+      const mRatio = Math.min(1.0, (distFromCenter - maxTrackSpan) / 2600);
+      const mBlend = mRatio * mRatio * (3 - 2 * mRatio);
+      const mRidge = (Math.sin(x * 0.00055 + 1.8) * Math.cos(y * 0.00055 - 0.9) * 0.5 + 0.5) * 620.0
+                   + Math.sin(x * 0.0013 - 0.6) * 160.0;
+      return localHills + Math.max(0, mRidge) * mBlend;
+    }
+
+    return localHills;
+  }
+
   setupTerrain() {
-    // Seamless, non-tiled balanced green matte terrain
-    const geo = new THREE.PlaneGeometry(24000, 24000);
+    if (this.terrainMesh) {
+      this.scene.remove(this.terrainMesh);
+      if (this.terrainMesh.geometry) this.terrainMesh.geometry.dispose();
+      this.terrainMesh = null;
+    }
+
+    const w = 24000;
+    const segs = 160;
+    const geo = new THREE.PlaneGeometry(w, w, segs, segs);
+    const pos = geo.attributes.position.array;
+    const count = geo.attributes.position.count;
+    const colors = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      const vx = pos[i * 3];
+      const vy = pos[i * 3 + 1];
+      const h = this.getTerrainHeight(vx, vy);
+      pos[i * 3 + 2] = h;
+
+      // Realistic bi-color gradient from lush grass valley to highland/slate peaks
+      const heightNorm = Math.min(1.0, Math.max(0, h / 320.0));
+      // Base grass: RGB(0.14, 0.28, 0.13) -> Mid hill: RGB(0.24, 0.40, 0.20) -> Mountain ridge: RGB(0.32, 0.38, 0.30)
+      const r = 0.14 + heightNorm * 0.18;
+      const g = 0.28 + heightNorm * 0.10;
+      const b = 0.13 + heightNorm * 0.16;
+
+      colors[i * 3] = r;
+      colors[i * 3 + 1] = g;
+      colors[i * 3 + 2] = b;
+    }
+
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x244222,
-      roughness: 0.92,
-      metalness: 0.02,
+      vertexColors: true,
+      roughness: 0.88,
+      metalness: 0.03,
+      flatShading: false,
     });
 
-    const terrain = new THREE.Mesh(geo, mat);
-    terrain.receiveShadow = true;
-    terrain.position.z = 0;
-    this.scene.add(terrain);
+    this.terrainMesh = new THREE.Mesh(geo, mat);
+    this.terrainMesh.receiveShadow = true;
+    this.terrainMesh.castShadow = false;
+    this.scene.add(this.terrainMesh);
   }
 
   setTrack(track) {
@@ -474,6 +550,7 @@ export class Renderer3D {
     if (this.trailHistory) this.trailHistory.length = 0;
     this.trailOwner = null;
     this.updateLightPosition();
+    this.setupTerrain();
     this.setupTrack();
     this.setupTrees();
     this.resetCamera();
@@ -955,7 +1032,6 @@ export class Renderer3D {
     // 3. Sleek 3D Overhead Gantry Arch with 5 F1 Starting Light Pods & Double-Sided LED Scoreboard
     const gantryGroup = new THREE.Group();
     const gantryHeight = 17.5; // Clear center eye-level height for the scoreboard display
-    const plateWidth = Math.min(38.0, spanDist * 0.72);
     const plateHeight = 6.2;
     const plateDepth = 1.8;
 
@@ -966,6 +1042,8 @@ export class Renderer3D {
 
     const innerPillarPos = new THREE.Vector3(ix - nx * pillarClearance, iy - ny * pillarClearance, totalColHeight / 2);
     const outerPillarPos = new THREE.Vector3(ox + nx * pillarClearance, oy + ny * pillarClearance, totalColHeight / 2);
+    const spanDist = innerPillarPos.distanceTo(outerPillarPos);
+    const plateWidth = Math.min(38.0, spanDist * 0.72);
 
     const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.85, roughness: 0.25 });
     const beamMat = new THREE.MeshStandardMaterial({ color: 0x0b1120, metalness: 0.9, roughness: 0.2 });
