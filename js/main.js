@@ -38,12 +38,8 @@ if (savedState) {
   }
   sim.resumeState(savedState);
 } else {
-  storage.loadPretrainedBrain(initialPreset, LAYERS).then((pretrained) => {
-    if (pretrained && sim.generation === 1 && sim.history.length === 0) {
-      sim.seedFrom(pretrained.genome);
-      refreshSavedInfo();
-    }
-  });
+  // Clean fresh learning experience: random neural weights, Generation 1, clean history
+  sim.reset();
 }
 
 const renderer = new Renderer($('track-canvas'), currentTrack);
