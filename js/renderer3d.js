@@ -3278,22 +3278,40 @@ export class Renderer3D {
         this.camera.updateProjectionMatrix();
       }
     } else if (cameraPreset === 'heli' && focusCar) {
-      // CINEMATIC LOW-ALTITUDE AERIAL PURSUIT HELICOPTER TRACKER
+      // CINEMATIC AERIAL PURSUIT HELICOPTER (High sweeping pursuit keeping P1 and P2 framed smoothly)
       this.controls.autoRotate = false;
 
-      if (typeof this._heliAngle !== 'number' || this._lastHeliFocus !== focusCar) {
-        this._heliAngle = focusCar.angle;
-        this._heliTargetX = focusCar.x;
-        this._heliTargetY = -focusCar.y;
-        this._lastHeliFocus = focusCar;
+      const p1 = (opts.manual && sim.player && (sim.player.alive || sim.player.finished)) ? sim.player : (rankedCars[0] || focusCar);
+      let p2 = rankedCars.find((c) => c !== p1 && (c.alive || c.finished)) || (sim.cars && sim.cars.find((c) => c !== p1 && c.alive)) || null;
+
+      const p1X = p1.x;
+      const p1Y = -p1.y;
+      const p1Angle = p1.angle;
+
+      const p2X = (p2 && (p2.alive || p2.finished)) ? p2.x : (p1X - Math.cos(p1Angle) * 30.0);
+      const p2Y = (p2 && (p2.alive || p2.finished)) ? -p2.y : (p1Y + Math.sin(p1Angle) * 30.0);
+
+      const dx = p1X - p2X;
+      const dy = p1Y - p2Y;
+      const carGap = Math.hypot(dx, dy);
+
+      // Weighted midpoint between P1 and P2
+      const midX = p1X * 0.58 + p2X * 0.42;
+      const midY = p1Y * 0.58 + p2Y * 0.42;
+
+      if (typeof this._heliAngle !== 'number' || this._lastHeliFocus !== p1) {
+        this._heliAngle = p1Angle;
+        this._heliTargetX = midX;
+        this._heliTargetY = midY;
+        this._lastHeliFocus = p1;
       } else {
-        let diffAngle = focusCar.angle - this._heliAngle;
+        let diffAngle = p1Angle - this._heliAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._heliAngle += diffAngle * 0.035;
+        this._heliAngle += diffAngle * 0.055; // Smooth gyro-stabilized pan
 
-        this._heliTargetX += (focusCar.x - this._heliTargetX) * 0.08;
-        this._heliTargetY += (-focusCar.y - this._heliTargetY) * 0.08;
+        this._heliTargetX += (midX - this._heliTargetX) * 0.10;
+        this._heliTargetY += (midY - this._heliTargetY) * 0.10;
       }
 
       const cosA = Math.cos(this._heliAngle);
@@ -3301,17 +3319,24 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = -cosA;
 
-      // Sweeping 3/4 isometric aerial tracking ~54m away at altitude 46m
-      const destCamX = this._heliTargetX - cosA * 52.0 + nx * 32.0;
-      const destCamY = this._heliTargetY + sinA * 52.0 + ny * 32.0;
-      const destCamZ = 46.0;
+      // Elevated aerial perspective: distance & altitude scale dynamically with P1-P2 gap
+      const trailDist = 62.0 + Math.min(48.0, carGap * 0.35);
+      const lateralDist = 36.0 + Math.min(22.0, carGap * 0.18);
+      const destCamX = this._heliTargetX - cosA * trailDist + nx * lateralDist;
+      const destCamY = this._heliTargetY + sinA * trailDist + ny * lateralDist;
+      const destCamZ = 64.0 + Math.min(50.0, carGap * 0.40);
 
-      const destTargetX = this._heliTargetX + cosA * 12.0;
-      const destTargetY = this._heliTargetY - sinA * 12.0;
+      const destTargetX = this._heliTargetX;
+      const destTargetY = this._heliTargetY;
       const destTargetZ = 2.0;
 
-      const camGlide = 0.055;
-      const targetGlide = 0.075;
+      // Dynamic adaptive FOV zoom ensuring both P1 and P2 stay in the viewport
+      const targetFov = Math.max(40, Math.min(62, 40 + (carGap / 70) * 16));
+      this.camera.fov += (targetFov - this.camera.fov) * 0.06;
+      this.camera.updateProjectionMatrix();
+
+      const camGlide = 0.075;
+      const targetGlide = 0.095;
 
       this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
       this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
@@ -3320,11 +3345,6 @@ export class Renderer3D {
       this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
-
-      if (Math.abs(this.camera.fov - 42) > 0.1) {
-        this.camera.fov += (42 - this.camera.fov) * 0.08;
-        this.camera.updateProjectionMatrix();
-      }
     } else if (cameraPreset === 'broadcast') {
       // TV GANTRY CAMERA (Start / Finish Gantry view)
       this.controls.autoRotate = false;
