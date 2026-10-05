@@ -836,8 +836,8 @@ export class Renderer {
 
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
-    const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars.slice(0, 8)] : sim.cars.slice(0, 8);
-    const maxSkidSegments = 1600;
+    const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
+    const maxSkidSegments = 30000;
 
     for (let i = 0; i < allCars.length; i++) {
       const car = allCars[i];

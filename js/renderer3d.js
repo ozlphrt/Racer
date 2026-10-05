@@ -2674,7 +2674,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 2400;
+    this.maxSkidQuads = 40000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -2777,7 +2777,7 @@ export class Renderer3D {
 
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
-    const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars.slice(0, 8)] : sim.cars.slice(0, 8);
+    const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
 
     for (let i = 0; i < candidateCars.length; i++) {
