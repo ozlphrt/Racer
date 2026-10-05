@@ -4328,8 +4328,8 @@ export class Renderer3D {
     this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
-    this._autoPreset = null;
-    this._autoNextSwitch = 0;
+    this._autoPreset = 'heli';
+    this._autoNextSwitch = performance.now() + 8500;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -4384,10 +4384,13 @@ export class Renderer3D {
   }
 
   render(sim, opts, leader) {
-    if (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)) {
+    const isNewStart = (sim && (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)));
+    if (isNewStart && sim) {
       this.lastGen = sim.generation;
+      this._autoPreset = 'heli';
+      this._autoNextSwitch = performance.now() + 8500;
     }
-    this.lastSimTime = sim.time;
+    if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
     this.updateLapPlate(sim, leader);
 
@@ -4441,7 +4444,10 @@ export class Renderer3D {
       let p1ApproachingGantry = false;
       let gantryHoldDuration = 3500;
 
-      if (p1 && t && t.N && t.spacing && (p1.alive || p1.finished)) {
+      // Don't trigger gantry during race start launch phase (when sim.time < 5.0s) so helicopter cam keeps priority
+      const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 5.0);
+
+      if (p1 && t && t.N && t.spacing && (p1.alive || p1.finished) && !isStartPhase) {
         const p1Idx = ((p1.idx % t.N) + t.N) % t.N;
         // Distance remaining along track forward direction to index 0 (Start/Finish Line)
         const samplesToLine = (t.N - p1Idx) % t.N;
@@ -4467,48 +4473,54 @@ export class Renderer3D {
         this._lastGantryCutTime = now;
         this._autoNextSwitch = now + gantryHoldDuration;
       } else if (!this._autoPreset || !this._autoNextSwitch || (now >= this._autoNextSwitch && this._autoPreset !== 'broadcast')) {
-        // General rotating pool (TV Gantry 'broadcast' is excluded so it ONLY triggers on 2-3s approach)
-        const weightedPool = [
-          { preset: 'orbit', weight: 30 },       // Camera 8 (Free Orbit) - Prioritized
-          { preset: 'heli', weight: 30 },        // Camera 6 (Helicopter) - Prioritized
-          { preset: 'action_rear', weight: 30 }, // Camera 3 (Action Rear) - Prioritized
-          { preset: 'chase', weight: 12 },       // Camera 1 (Chase Cam) - Standard
-          { preset: 'action', weight: 12 },      // Camera 2 (Action Front) - Standard
-          { preset: 'follow', weight: 12 },      // Camera 5 (Broadcast Follow) - Standard
-          { preset: 'onboard', weight: 4 },      // Camera 4 (Onboard T-Cam) - Deprioritized
-        ];
-
-        const eligible = weightedPool.filter((item) => item.preset !== this._autoPreset);
-        const totalWeight = eligible.reduce((sum, item) => sum + item.weight, 0);
-        let rnd = Math.random() * totalWeight;
-        let chosen = eligible[0]?.preset || 'orbit';
-        for (const item of eligible) {
-          if (rnd < item.weight) {
-            chosen = item.preset;
-            break;
-          }
-          rnd -= item.weight;
-        }
-        this._autoPreset = chosen;
-
-        // Dynamic shot duration per camera archetype
-        let duration;
-        if (this._autoPreset === 'onboard') {
-          duration = 1800 + Math.random() * 1000; // 1.8s - 2.8s (brief action cut)
-        } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
-          duration = 7500 + Math.random() * 3500; // 7.5s - 11.0s (grand sweeping panoramic)
-        } else if (this._autoPreset === 'action_rear') {
-          duration = 6500 + Math.random() * 3000; // 6.5s - 9.5s (intense battle)
+        // If at the start of race / session, ensure helicopter is selected
+        if (!this._autoPreset || isStartPhase) {
+          this._autoPreset = 'heli';
+          this._autoNextSwitch = now + 8500;
         } else {
-          duration = 5000 + Math.random() * 2500; // 5.0s - 7.5s (standard follow/action)
+          // General rotating pool (TV Gantry 'broadcast' is excluded so it ONLY triggers on 2-3s approach)
+          const weightedPool = [
+            { preset: 'heli', weight: 35 },        // Camera 6 (Helicopter) - Highly Prioritized
+            { preset: 'orbit', weight: 25 },       // Camera 8 (Free Orbit) - Prioritized
+            { preset: 'action_rear', weight: 25 }, // Camera 3 (Action Rear) - Prioritized
+            { preset: 'chase', weight: 12 },       // Camera 1 (Chase Cam) - Standard
+            { preset: 'action', weight: 12 },      // Camera 2 (Action Front) - Standard
+            { preset: 'follow', weight: 12 },      // Camera 5 (Broadcast Follow) - Standard
+            { preset: 'onboard', weight: 4 },      // Camera 4 (Onboard T-Cam) - Deprioritized
+          ];
+
+          const eligible = weightedPool.filter((item) => item.preset !== this._autoPreset);
+          const totalWeight = eligible.reduce((sum, item) => sum + item.weight, 0);
+          let rnd = Math.random() * totalWeight;
+          let chosen = eligible[0]?.preset || 'heli';
+          for (const item of eligible) {
+            if (rnd < item.weight) {
+              chosen = item.preset;
+              break;
+            }
+            rnd -= item.weight;
+          }
+          this._autoPreset = chosen;
+
+          // Dynamic shot duration per camera archetype
+          let duration;
+          if (this._autoPreset === 'onboard') {
+            duration = 1800 + Math.random() * 1000; // 1.8s - 2.8s (brief action cut)
+          } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
+            duration = 7500 + Math.random() * 3500; // 7.5s - 11.0s (grand sweeping panoramic)
+          } else if (this._autoPreset === 'action_rear') {
+            duration = 6500 + Math.random() * 3000; // 6.5s - 9.5s (intense battle)
+          } else {
+            duration = 5000 + Math.random() * 2500; // 5.0s - 7.5s (standard follow/action)
+          }
+          this._autoNextSwitch = now + duration;
         }
-        this._autoNextSwitch = now + duration;
       } else if (now >= this._autoNextSwitch && this._autoPreset === 'broadcast') {
         // Gantry shot just finished! Switch immediately to another action/pursuit camera
         const postGantryPool = [
+          { preset: 'heli', weight: 40 },
           { preset: 'action_rear', weight: 35 },
-          { preset: 'heli', weight: 35 },
-          { preset: 'orbit', weight: 20 },
+          { preset: 'orbit', weight: 15 },
           { preset: 'chase', weight: 10 },
         ];
         let rnd = Math.random() * 100;
