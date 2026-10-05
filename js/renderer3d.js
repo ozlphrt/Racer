@@ -412,8 +412,8 @@ export class Renderer3D {
 
     this.dirLight = new THREE.DirectionalLight(0xfff5e8, 1.35);
     this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.width = 4096;
-    this.dirLight.shadow.mapSize.height = 4096;
+    this.dirLight.shadow.mapSize.width = 2048;
+    this.dirLight.shadow.mapSize.height = 2048;
     this.dirLight.shadow.camera.near = 50;
     this.dirLight.shadow.camera.far = 5000;
     this.dirLight.shadow.bias = -0.00008;
@@ -3984,8 +3984,8 @@ export class Renderer3D {
         if (r2 > 0.25) discard;
         
         // Smooth continuous Gaussian bell-curve falloff (soft wispy vapor, no cotton ball rings)
-        float d = sqrt(r2) * 2.0; // [0, 1]
-        float soft = pow(1.0 - d * d, 2.4);
+        float x = max(0.0, 1.0 - 4.0 * r2);
+        float soft = x * x;
 
         vec3 smokeColor = vec3(0.92, 0.94, 0.96);
         float alpha = soft * vAlpha * 0.45;
@@ -4082,7 +4082,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 24000;
+    this.maxSkidQuads = 4000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -4282,9 +4282,6 @@ export class Renderer3D {
     if (added && this.skidMesh) {
       this.skidMesh.geometry.attributes.position.needsUpdate = true;
       this.skidMesh.geometry.attributes.alpha.needsUpdate = true;
-      if (this.skidMesh.geometry.attributes.uv) {
-        this.skidMesh.geometry.attributes.uv.needsUpdate = true;
-      }
       this.skidMesh.geometry.setDrawRange(0, this.skidCount * 6);
     }
   }

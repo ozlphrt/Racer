@@ -357,9 +357,12 @@ export class TireBarrierSystem {
     const linDamping = Math.pow(0.86, clampedDt * 60);
     const rotDamping = Math.pow(0.88, clampedDt * 60);
 
+    const activeTires = [];
+
     for (let i = 0; i < this.tires.length; i++) {
       const tire = this.tires[i];
       if (tire.sleeping) continue;
+      activeTires.push(tire);
 
       // Apply linear velocity damping
       tire.vx *= linDamping;
@@ -431,46 +434,57 @@ export class TireBarrierSystem {
       tire.needsRenderUpdate = true;
     }
 
-    // 3. Inter-Tire Collisions (Chain reaction scatter within stacks)
-    for (let i = 0; i < this.tires.length; i++) {
-      const t1 = this.tires[i];
-      if (t1.sleeping) continue;
+    // 3. Inter-Tire Collisions (High-performance spatial grid lookups)
+    const minD = 2.2;
+    const minDSq = minD * minD;
 
-      for (let j = 0; j < this.tires.length; j++) {
-        if (i === j) continue;
-        const t2 = this.tires[j];
-        const dx = t2.x - t1.x;
-        const dy = t2.y - t1.y;
-        const dz = t2.z - t1.z;
-        const distSq = dx * dx + dy * dy + dz * dz * 0.6;
-        const minD = 2.2;
+    for (let i = 0; i < activeTires.length; i++) {
+      const t1 = activeTires[i];
+      const gx = Math.floor(t1.x / this.cellSize);
+      const gy = Math.floor(t1.y / this.cellSize);
 
-        if (distSq < minD * minD && distSq > 0.001) {
-          const dist = Math.sqrt(distSq);
-          const nx = dx / dist;
-          const ny = dy / dist;
-          const push = (minD - dist) * 0.5;
+      for (let nx = gx - 1; nx <= gx + 1; nx++) {
+        for (let ny = gy - 1; ny <= gy + 1; ny++) {
+          const cell = this.grid.get(`${nx},${ny}`);
+          if (!cell) continue;
 
-          t1.x -= nx * push;
-          t1.y -= ny * push;
-          t2.x += nx * push;
-          t2.y += ny * push;
+          for (let k = 0; k < cell.length; k++) {
+            const t2 = cell[k];
+            if (t1 === t2) continue;
 
-          // Transfer momentum
-          const relVx = t1.vx - t2.vx;
-          const relVy = t1.vy - t2.vy;
-          const dot = relVx * nx + relVy * ny;
+            const dx = t2.x - t1.x;
+            const dy = t2.y - t1.y;
+            const dz = t2.z - t1.z;
+            const distSq = dx * dx + dy * dy + dz * dz * 0.6;
 
-          if (dot > 0) {
-            const imp = dot * 0.45;
-            t1.vx -= nx * imp;
-            t1.vy -= ny * imp;
-            t2.vx += nx * imp;
-            t2.vy += ny * imp;
-            t2.vz += Math.abs(imp) * 0.25;
-            t2.sleeping = false;
-            t2.needsRenderUpdate = true;
-            anyMoving = true;
+            if (distSq < minDSq && distSq > 0.001) {
+              const dist = Math.sqrt(distSq);
+              const normX = dx / dist;
+              const normY = dy / dist;
+              const push = (minD - dist) * 0.5;
+
+              t1.x -= normX * push;
+              t1.y -= normY * push;
+              t2.x += normX * push;
+              t2.y += normY * push;
+
+              // Transfer momentum
+              const relVx = t1.vx - t2.vx;
+              const relVy = t1.vy - t2.vy;
+              const dot = relVx * normX + relVy * normY;
+
+              if (dot > 0) {
+                const imp = dot * 0.45;
+                t1.vx -= normX * imp;
+                t1.vy -= normY * imp;
+                t2.vx += normX * imp;
+                t2.vy += normY * imp;
+                t2.vz += Math.abs(imp) * 0.25;
+                t2.sleeping = false;
+                t2.needsRenderUpdate = true;
+                anyMoving = true;
+              }
+            }
           }
         }
       }
