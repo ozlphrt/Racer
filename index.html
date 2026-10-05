@@ -14,39 +14,6 @@
 </head>
 <body>
   <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 17h14l-1.5-5.5A2 2 0 0 0 15.6 10H8.4a2 2 0 0 0-1.9 1.5L5 17Z"/>
-            <circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>
-            <path d="M12 3v3M8 5l1 2M16 5l-1 2"/>
-          </svg>
-        </div>
-        <div>
-          <h1>AI Racer</h1>
-          <p class="tagline">Neuroevolution lab · cars learning to race</p>
-        </div>
-      </div>
-      <div class="top-pills">
-        <div class="mode-toggle-group" role="group" aria-label="Simulation Mode">
-          <button class="btn-mode active" id="btn-mode-train" type="button" title="Neuroevolution Training (20 Cars · Clean Grid)">
-            🏋️ Train (20)
-          </button>
-          <button class="btn-mode" id="btn-mode-race" type="button" title="Grand Prix Race (20 Elite Cars · Collisions ON 100%)">
-            🏆 Race (20)
-          </button>
-        </div>
-        <span class="pill"><span class="pill-dot" id="status-dot"></span><span id="status-text">Training</span></span>
-        <span class="pill"><strong id="pill-fps">60</strong> FPS</span>
-        <span class="pill">Cars <strong id="pill-pop">20</strong></span>
-        <span class="pill">Brain <strong id="pill-arch">8·12·8·2</strong></span>
-        <button class="pill btn-pill-action" id="btn-toggle-sound" type="button" title="Toggle Car Spatial Audio (S)">
-          <span id="sound-icon">🔊</span> <span id="sound-text">Audio</span>
-        </button>
-      </div>
-    </header>
-
     <main class="stage" id="stage">
       <canvas id="track-canvas" aria-label="Race track simulation 2D" hidden></canvas>
       <canvas id="track-canvas-3d" aria-label="Race track simulation 3D"></canvas>

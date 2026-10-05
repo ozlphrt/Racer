@@ -174,14 +174,17 @@ function setCenterBar(el, v) {
 function updateStatus() {
   const dot = $('status-dot');
   const isRace = sim.mode === 'race';
-  dot.className = 'pill-dot' + (state.paused ? ' paused' : state.turbo ? ' turbo' : isRace ? ' collision-on' : '');
-  $('status-text').textContent = state.paused
-    ? 'Paused'
-    : state.turbo
-      ? 'Turbo training'
-      : isRace
-        ? 'Grand Prix (20)'
-        : 'Training (80)';
+  if (dot) dot.className = 'pill-dot' + (state.paused ? ' paused' : state.turbo ? ' turbo' : isRace ? ' collision-on' : '');
+  const statusText = $('status-text');
+  if (statusText) {
+    statusText.textContent = state.paused
+      ? 'Paused'
+      : state.turbo
+        ? 'Turbo training'
+        : isRace
+          ? 'Grand Prix (20)'
+          : 'Training (80)';
+  }
 }
 
 function setSimulationMode(mode) {
