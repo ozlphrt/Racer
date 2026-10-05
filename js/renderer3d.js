@@ -2752,6 +2752,8 @@ export class Renderer3D {
   }
 
   resetCamera(followMode = true) {
+    this._chaseAngle = null;
+    this._lastFocusCar = null;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -2935,21 +2937,45 @@ export class Renderer3D {
         this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
         this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
       } else if (focusCar) {
-        const cosA = Math.cos(focusCar.angle);
-        const sinA = Math.sin(focusCar.angle);
+        // Dynamic decoupled chase camera with low-pass angular inertia and positional spring
+        if (typeof this._chaseAngle !== 'number' || this._lastFocusCar !== focusCar) {
+          this._chaseAngle = focusCar.angle;
+          this._chaseTargetX = focusCar.x;
+          this._chaseTargetY = -focusCar.y;
+          this._lastFocusCar = focusCar;
+        } else {
+          // 1. Smoothly follow car translation (absorbs micro-bumps and wall impacts)
+          const posFollowK = 0.10;
+          this._chaseTargetX += (focusCar.x - this._chaseTargetX) * posFollowK;
+          this._chaseTargetY += (-focusCar.y - this._chaseTargetY) * posFollowK;
 
-        // Position camera behind and above car heading
-        const destCamX = focusCar.x - cosA * 38;
-        const destCamY = -focusCar.y + sinA * 38;
-        const destCamZ = 14.0;
+          // 2. Low-pass filter heading angle (absorbs rapid steering oscillations & twitching)
+          let diffAngle = focusCar.angle - this._chaseAngle;
+          while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+          while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
 
-        // Look ahead of the car nose
-        const destTargetX = focusCar.x + cosA * 16;
-        const destTargetY = -focusCar.y - sinA * 16;
+          const angularDamping = 0.048; // Gentle, cinematic rotational inertia
+          this._chaseAngle += diffAngle * angularDamping;
+        }
+
+        const cosA = Math.cos(this._chaseAngle);
+        const sinA = Math.sin(this._chaseAngle);
+
+        // Position camera behind and above car along smoothed trajectory
+        const distBehind = 42.0;
+        const heightAbove = 15.2;
+        const destCamX = this._chaseTargetX - cosA * distBehind;
+        const destCamY = this._chaseTargetY + sinA * distBehind;
+        const destCamZ = heightAbove;
+
+        // Look ahead along smoothed heading
+        const lookAhead = 16.0;
+        const destTargetX = this._chaseTargetX + cosA * lookAhead;
+        const destTargetY = this._chaseTargetY - sinA * lookAhead;
         const destTargetZ = 2.8;
 
-        const camGlide = 0.12;
-        const targetGlide = 0.16;
+        const camGlide = 0.08;
+        const targetGlide = 0.10;
 
         this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
         this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
