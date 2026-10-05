@@ -3037,9 +3037,9 @@ export class Renderer3D {
     if (followMode) {
       this.controls.target.set(startX, startY, 3.5);
       // Canonical broadcast follow perspective placed behind the start grid looking down straight
-      const camX = startX - tx * 155 + nx * 55;
-      const camY = startY - ty * 155 + ny * 55;
-      const camZ = 68;
+      const camX = startX - tx * 190 + nx * 75;
+      const camY = startY - ty * 190 + ny * 75;
+      const camZ = 95;
       this.camera.position.set(camX, camY, camZ);
       this.controls.update();
       return;
@@ -3273,7 +3273,7 @@ export class Renderer3D {
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
     } else if (cameraPreset === 'follow' && focusCar) {
-      // CLASSIC BROADCAST FOLLOW CAM (Smooth high TV tracking altitude 68.0)
+      // CLASSIC BROADCAST FOLLOW CAM (Smooth high TV tracking altitude 95.0)
       this.controls.autoRotate = false;
 
       const targetX = focusCar.x;
@@ -3292,11 +3292,11 @@ export class Renderer3D {
       this.camera.position.x += dx;
       this.camera.position.y += dy;
 
-      const canonicalCamZ = 68.0;
-      this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.05;
+      const canonicalCamZ = 95.0;
+      this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.06;
 
-      if (Math.abs(this.camera.fov - 42) > 0.1) {
-        this.camera.fov += (42 - this.camera.fov) * 0.08;
+      if (Math.abs(this.camera.fov - 45) > 0.1) {
+        this.camera.fov += (45 - this.camera.fov) * 0.08;
         this.camera.updateProjectionMatrix();
       }
     } else if (cameraPreset === 'onboard' && focusCar) {
