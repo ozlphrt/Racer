@@ -327,129 +327,241 @@
     </aside>
   </div>
 
-  <!-- Hyper-Speed Headless Training Modal -->
+  <!-- Hyper-Speed Headless Training & Neural Hub Modal -->
   <div class="hyper-modal-backdrop" id="hyper-modal" hidden>
     <div class="hyper-modal glass">
       <div class="hyper-modal-header">
         <div class="hyper-modal-title">
-          <span class="hyper-icon">⚡</span>
+          <span class="hyper-icon">
+            <svg class="ctrl-icon-brain" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
+              <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
+              <path d="M12 8.5h-2.5"></path>
+              <path d="M12 12h-3.5"></path>
+              <path d="M12 15.5h-2.5"></path>
+              <path d="M12 8.5h2.5"></path>
+              <path d="M12 12h3.5"></path>
+              <path d="M12 15.5h2.5"></path>
+            </svg>
+          </span>
           <div>
-            <h3>Hyper Train · Fast Forward</h3>
-            <p class="tagline">Zero GPU rendering · pure CPU physics &amp; genetic evolution at maximum speed</p>
+            <h3>AI Neural &amp; Training Hub</h3>
+            <p class="tagline">Neuroevolution · Genetic Algorithms &amp; Neural Analytics</p>
           </div>
         </div>
         <button class="btn btn-ghost" id="btn-hyper-close" type="button" aria-label="Close modal">✕</button>
       </div>
 
-      <div class="hyper-setup" id="hyper-setup-view">
-        <p class="hyper-desc">Bypasses WebGL &amp; canvas rendering to run neuroevolution <strong>30× to 80× faster</strong> than real-time.</p>
-        
-        <!-- Target Type Mode Tabs -->
-        <div class="hyper-mode-tabs" role="tablist">
-          <button class="btn-hyper-tab active" id="tab-hyper-gens" type="button" role="tab" aria-selected="true">
-            🔢 By Generations
-          </button>
-          <button class="btn-hyper-tab" id="tab-hyper-time" type="button" role="tab" aria-selected="false">
-            ⏱️ By Time Duration
-          </button>
-        </div>
-
-        <!-- Section 1: By Generations -->
-        <div class="hyper-tab-pane" id="pane-hyper-gens">
-          <label class="hyper-label">Quick Generation Presets:</label>
-          <div class="hyper-preset-btns" id="hyper-gen-presets">
-            <button class="btn btn-chip" data-gens="25">+25 Gens</button>
-            <button class="btn btn-chip active" data-gens="50">+50 Gens</button>
-            <button class="btn btn-chip" data-gens="100">+100 Gens</button>
-            <button class="btn btn-chip" data-gens="250">+250 Gens</button>
-            <button class="btn btn-chip" data-gens="500">+500 Gens</button>
-            <button class="btn btn-chip" data-gens="1000">+1000 Gens</button>
-          </div>
-          <div class="slider-row" style="margin-top: 14px;">
-            <label for="hyper-target-input">Custom Generations to Add:</label>
-            <input type="number" id="hyper-target-input" class="select-input" min="1" max="10000" value="50" style="width: 120px; text-align: right;">
-          </div>
-        </div>
-
-        <!-- Section 2: By Time Duration -->
-        <div class="hyper-tab-pane" id="pane-hyper-time" hidden>
-          <label class="hyper-label">Quick Time Presets:</label>
-          <div class="hyper-preset-btns" id="hyper-time-presets">
-            <button class="btn btn-chip active" data-mins="1">1 Min</button>
-            <button class="btn btn-chip" data-mins="5">5 Mins</button>
-            <button class="btn btn-chip" data-mins="15">15 Mins</button>
-            <button class="btn btn-chip" data-mins="30">30 Mins</button>
-            <button class="btn btn-chip" data-mins="60">1 Hour</button>
-            <button class="btn btn-chip" data-mins="120">2 Hours</button>
-            <button class="btn btn-chip" data-mins="360">6 Hours</button>
-          </div>
-          <div class="hyper-time-inputs-row" style="margin-top: 14px;">
-            <div class="time-input-field">
-              <label for="hyper-time-hours">Hours</label>
-              <input type="number" id="hyper-time-hours" class="select-input" min="0" max="72" value="0" style="width: 85px; text-align: right;">
-            </div>
-            <div class="time-input-field">
-              <label for="hyper-time-mins">Minutes</label>
-              <input type="number" id="hyper-time-mins" class="select-input" min="0" max="59" value="1" style="width: 85px; text-align: right;">
-            </div>
-            <div class="time-input-field">
-              <label for="hyper-time-secs">Seconds</label>
-              <input type="number" id="hyper-time-secs" class="select-input" min="0" max="59" value="0" style="width: 85px; text-align: right;">
-            </div>
-          </div>
-        </div>
-
-        <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
-          <button class="btn btn-primary btn-large btn-hyper-start-main" id="btn-hyper-start" type="button" style="flex: 2; font-size: 15px; padding: 13px;">
-            🚀 Start Hyper Training
-          </button>
-          <button class="btn btn-ghost" id="btn-hyper-reset-setup" type="button" style="flex: 1; font-size: 13px; padding: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
-            ↺ Reset Learning
-          </button>
-        </div>
+      <!-- Hub Section Navigation Tabs -->
+      <div class="hub-nav-tabs" role="tablist">
+        <button class="btn-hub-tab active" id="hub-tab-btn-train" type="button" role="tab" aria-selected="true">
+          ⚡ Train Yourself
+        </button>
+        <button class="btn-hub-tab" id="hub-tab-btn-storage" type="button" role="tab" aria-selected="false">
+          💾 Save &amp; Load Generations
+        </button>
+        <button class="btn-hub-tab" id="hub-tab-btn-analytics" type="button" role="tab" aria-selected="false">
+          📊 Brain &amp; Analytics
+        </button>
       </div>
 
-      <div class="hyper-running" id="hyper-running-view" hidden>
-        <div class="hyper-progress-wrap">
-          <div class="hyper-progress-labels">
-            <span>Progress: <strong id="hyper-prog-pct">0%</strong></span>
-            <span id="hyper-target-info">Gen <strong id="hyper-cur-gen">1</strong> / <span id="hyper-target-gen">50</span></span>
-          </div>
-          <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill"></div></div>
-        </div>
-
-        <div class="hyper-stats-grid">
-          <div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value" id="hyper-stat-time">0.0s</span></div>
-          <div class="stat"><span class="stat-label">Remaining</span><span class="stat-value" id="hyper-stat-rem">–</span></div>
-          <div class="stat"><span class="stat-label">Gen Rate</span><span class="stat-value" id="hyper-stat-rate">0 gen/s</span></div>
-          <div class="stat"><span class="stat-label">Gens Added</span><span class="stat-value" id="hyper-stat-added">+0</span></div>
-          <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hyper-stat-fitness">–</span></div>
-          <div class="stat accent-amber"><span class="stat-label">Best Lap</span><span class="stat-value" id="hyper-stat-lap">–</span></div>
-          <div class="stat accent-violet"><span class="stat-label">Pop Avg Fitness</span><span class="stat-value" id="hyper-stat-pop-avg">–</span></div>
-          <div class="stat accent-violet"><span class="stat-label">Pop Median Fitness</span><span class="stat-value" id="hyper-stat-pop-median">–</span></div>
-          <div class="stat accent-green"><span class="stat-label">Survival (Fin / Crash)</span><span class="stat-value" id="hyper-stat-pop-survival">–</span></div>
-          <div class="stat accent-cyan"><span class="stat-label">Pace vs Avg Lap</span><span class="stat-value" id="hyper-stat-pop-pace">–</span></div>
-        </div>
-
-        <div class="hyper-chart-container" style="position: relative; margin-top: 14px;">
-          <div class="hyper-chart-legend" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px; color: var(--text-dim);">
-            <div style="display: flex; gap: 10px; align-items: center;">
-              <span><i class="sw cyan" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22d3ee; margin-right:3px; vertical-align:middle;"></i>Best (Cyan)</span>
-              <span><i class="sw violet" style="display:inline-block; width:10px; height:2px; background:#a78bfa; margin-right:3px; vertical-align:middle;"></i>Pop Avg (Purple)</span>
-              <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>Min-Max Band</span>
+      <div class="hub-tab-body">
+        <!-- ================= SECTION 1: TRAIN YOURSELF ================= -->
+        <div class="hub-pane active" id="hub-pane-train">
+          <div class="hyper-setup" id="hyper-setup-view">
+            <p class="hyper-desc">Bypasses WebGL &amp; canvas rendering to run neuroevolution <strong>30× to 80× faster</strong> than real-time.</p>
+            
+            <!-- Target Type Mode Tabs -->
+            <div class="hyper-mode-tabs" role="tablist">
+              <button class="btn-hyper-tab active" id="tab-hyper-gens" type="button" role="tab" aria-selected="true">
+                🔢 By Generations
+              </button>
+              <button class="btn-hyper-tab" id="tab-hyper-time" type="button" role="tab" aria-selected="false">
+                ⏱️ By Time Duration
+              </button>
             </div>
-            <span style="font-family: var(--mono); color: rgba(255,255,255,0.6); font-size: 10.5px;">Hover points for telemetry</span>
+
+            <!-- Section 1A: By Generations -->
+            <div class="hyper-tab-pane" id="pane-hyper-gens">
+              <label class="hyper-label">Quick Generation Presets:</label>
+              <div class="hyper-preset-btns" id="hyper-gen-presets">
+                <button class="btn btn-chip" data-gens="25">+25 Gens</button>
+                <button class="btn btn-chip active" data-gens="50">+50 Gens</button>
+                <button class="btn btn-chip" data-gens="100">+100 Gens</button>
+                <button class="btn btn-chip" data-gens="250">+250 Gens</button>
+                <button class="btn btn-chip" data-gens="500">+500 Gens</button>
+                <button class="btn btn-chip" data-gens="1000">+1000 Gens</button>
+              </div>
+              <div class="slider-row" style="margin-top: 14px;">
+                <label for="hyper-target-input">Custom Generations to Add:</label>
+                <input type="number" id="hyper-target-input" class="select-input" min="1" max="10000" value="50" style="width: 120px; text-align: right;">
+              </div>
+            </div>
+
+            <!-- Section 1B: By Time Duration -->
+            <div class="hyper-tab-pane" id="pane-hyper-time" hidden>
+              <label class="hyper-label">Quick Time Presets:</label>
+              <div class="hyper-preset-btns" id="hyper-time-presets">
+                <button class="btn btn-chip active" data-mins="1">1 Min</button>
+                <button class="btn btn-chip" data-mins="5">5 Mins</button>
+                <button class="btn btn-chip" data-mins="15">15 Mins</button>
+                <button class="btn btn-chip" data-mins="30">30 Mins</button>
+                <button class="btn btn-chip" data-mins="60">1 Hour</button>
+                <button class="btn btn-chip" data-mins="120">2 Hours</button>
+                <button class="btn btn-chip" data-mins="360">6 Hours</button>
+              </div>
+              <div class="hyper-time-inputs-row" style="margin-top: 14px;">
+                <div class="time-input-field">
+                  <label for="hyper-time-hours">Hours</label>
+                  <input type="number" id="hyper-time-hours" class="select-input" min="0" max="72" value="0" style="width: 85px; text-align: right;">
+                </div>
+                <div class="time-input-field">
+                  <label for="hyper-time-mins">Minutes</label>
+                  <input type="number" id="hyper-time-mins" class="select-input" min="0" max="59" value="1" style="width: 85px; text-align: right;">
+                </div>
+                <div class="time-input-field">
+                  <label for="hyper-time-secs">Seconds</label>
+                  <input type="number" id="hyper-time-secs" class="select-input" min="0" max="59" value="0" style="width: 85px; text-align: right;">
+                </div>
+              </div>
+            </div>
+
+            <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
+              <button class="btn btn-primary btn-large btn-hyper-start-main" id="btn-hyper-start" type="button" style="flex: 2; font-size: 15px; padding: 13px;">
+                🚀 Start Hyper Training
+              </button>
+              <button class="btn btn-ghost" id="btn-hyper-reset-setup" type="button" style="flex: 1; font-size: 13px; padding: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
+                ↺ Reset Learning
+              </button>
+            </div>
           </div>
-          <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; border-radius: 8px; width: 100%;"></canvas>
+
+          <div class="hyper-running" id="hyper-running-view" hidden>
+            <div class="hyper-progress-wrap">
+              <div class="hyper-progress-labels">
+                <span>Progress: <strong id="hyper-prog-pct">0%</strong></span>
+                <span id="hyper-target-info">Gen <strong id="hyper-cur-gen">1</strong> / <span id="hyper-target-gen">50</span></span>
+              </div>
+              <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill"></div></div>
+            </div>
+
+            <div class="hyper-stats-grid">
+              <div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value" id="hyper-stat-time">0.0s</span></div>
+              <div class="stat"><span class="stat-label">Remaining</span><span class="stat-value" id="hyper-stat-rem">–</span></div>
+              <div class="stat"><span class="stat-label">Gen Rate</span><span class="stat-value" id="hyper-stat-rate">0 gen/s</span></div>
+              <div class="stat"><span class="stat-label">Gens Added</span><span class="stat-value" id="hyper-stat-added">+0</span></div>
+              <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hyper-stat-fitness">–</span></div>
+              <div class="stat accent-amber"><span class="stat-label">Best Lap</span><span class="stat-value" id="hyper-stat-lap">–</span></div>
+              <div class="stat accent-violet"><span class="stat-label">Pop Avg Fitness</span><span class="stat-value" id="hyper-stat-pop-avg">–</span></div>
+              <div class="stat accent-violet"><span class="stat-label">Pop Median Fitness</span><span class="stat-value" id="hyper-stat-pop-median">–</span></div>
+              <div class="stat accent-green"><span class="stat-label">Survival (Fin / Crash)</span><span class="stat-value" id="hyper-stat-pop-survival">–</span></div>
+              <div class="stat accent-cyan"><span class="stat-label">Pace vs Avg Lap</span><span class="stat-value" id="hyper-stat-pop-pace">–</span></div>
+            </div>
+
+            <div class="hyper-chart-container" style="position: relative; margin-top: 14px;">
+              <div class="hyper-chart-legend" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px; color: var(--text-dim);">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <span><i class="sw cyan" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22d3ee; margin-right:3px; vertical-align:middle;"></i>Best (Cyan)</span>
+                  <span><i class="sw violet" style="display:inline-block; width:10px; height:2px; background:#a78bfa; margin-right:3px; vertical-align:middle;"></i>Pop Avg (Purple)</span>
+                  <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>Min-Max Band</span>
+                </div>
+                <span style="font-family: var(--mono); color: rgba(255,255,255,0.6); font-size: 10.5px;">Hover points for telemetry</span>
+              </div>
+              <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; border-radius: 8px; width: 100%;"></canvas>
+            </div>
+
+            <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
+              <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 2; padding: 12px; font-size: 14px;">
+                🏁 Stop &amp; Resume 3D View
+              </button>
+              <button class="btn btn-ghost" id="btn-hyper-reset-running" type="button" style="flex: 1; padding: 12px; font-size: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
+                ↺ Reset Learning
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
-          <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 2; padding: 12px; font-size: 14px;">
-            🏁 Stop &amp; Resume 3D View
-          </button>
-          <button class="btn btn-ghost" id="btn-hyper-reset-running" type="button" style="flex: 1; padding: 12px; font-size: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
-            ↺ Reset Learning
-          </button>
+        <!-- ================= SECTION 2: GENERATIONS & STORAGE ================= -->
+        <div class="hub-pane" id="hub-pane-storage" hidden>
+          <div class="hub-storage-card">
+            <div class="hub-storage-header">
+              <span class="hub-badge-trophy">🏆 Champion Snapshot</span>
+              <span class="hub-storage-meta" id="hub-storage-timestamp">Saved –</span>
+            </div>
+            <div class="hub-storage-body" id="hub-saved-info">
+              No saved brain yet.
+            </div>
+          </div>
+
+          <div class="hub-storage-actions">
+            <label class="hyper-label">Generation Management:</label>
+            <div class="btn-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 12px;">
+              <button class="btn btn-primary" id="hub-btn-save" type="button">
+                💾 Save Current Gen
+              </button>
+              <button class="btn" id="hub-btn-load" type="button">
+                ⤓ Load &amp; Seed
+              </button>
+              <button class="btn" id="hub-btn-export" type="button">
+                ⇪ Export JSON
+              </button>
+              <button class="btn" id="hub-btn-import" type="button">
+                ⇩ Import JSON
+              </button>
+            </div>
+            <button class="btn btn-ghost" id="hub-btn-clear" type="button" style="width: 100%; margin-bottom: 14px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;">
+              ✕ Clear Saved Champion &amp; Reset
+            </button>
+          </div>
+
+          <div class="hub-storage-settings">
+            <label class="switch-row" for="hub-toggle-autosave">
+              <span>Auto-save whenever a new best record is achieved</span>
+              <input type="checkbox" id="hub-toggle-autosave" class="switch" checked>
+            </label>
+          </div>
+        </div>
+
+        <!-- ================= SECTION 3: BRAIN & ANALYTICS ================= -->
+        <div class="hub-pane" id="hub-pane-analytics" hidden>
+          <!-- Neural Network Visualizer -->
+          <div class="hub-analytics-section">
+            <div class="hub-analytics-header">
+              <h4>🧠 Leader's Neural Network</h4>
+              <span class="hub-nn-tag">8 Inputs · 16 ReLu · 16 ReLu · 2 Outputs</span>
+            </div>
+            <canvas id="nn-canvas-hub" class="nn-canvas" style="height: 180px; width: 100%; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid var(--border);"></canvas>
+            <div class="legend" style="margin-top: 6px; font-size: 11px;">
+              <span><i class="sw cyan"></i>positive weight</span>
+              <span><i class="sw magenta"></i>negative weight</span>
+              <span class="legend-note">glow = activation</span>
+            </div>
+          </div>
+
+          <!-- Fitness History Chart -->
+          <div class="hub-analytics-section" style="margin-top: 16px;">
+            <div class="hub-analytics-header">
+              <h4>📈 Fitness Over Generations</h4>
+              <span class="hub-chart-info">All-Time Evolution Curve</span>
+            </div>
+            <div class="hyper-chart-legend" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px; color: var(--text-dim);">
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <span><i class="sw cyan" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22d3ee; margin-right:3px; vertical-align:middle;"></i>Best (Cyan)</span>
+                <span><i class="sw violet" style="display:inline-block; width:10px; height:2px; background:#a78bfa; margin-right:3px; vertical-align:middle;"></i>Pop Avg (Purple)</span>
+                <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>Min-Max Band</span>
+              </div>
+              <span style="font-family: var(--mono); color: rgba(255,255,255,0.6); font-size: 10px;">Hover points for stats</span>
+            </div>
+            <canvas id="chart-canvas-hub" class="chart-canvas" style="height: 160px; width: 100%; border-radius: 8px;"></canvas>
+          </div>
+
+          <!-- Evolution & Storage Insights Summary -->
+          <div class="hub-insights-grid" style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;">
+            <div class="stat"><span class="stat-label">Gen Count</span><span class="stat-value" id="hub-stat-gen">1</span></div>
+            <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hub-stat-fit">–</span></div>
+            <div class="stat accent-amber"><span class="stat-label">Record Lap</span><span class="stat-value" id="hub-stat-lap">–</span></div>
+            <div class="stat accent-green"><span class="stat-label">Clean Rate</span><span class="stat-value" id="hub-stat-clean">100%</span></div>
+          </div>
         </div>
       </div>
     </div>

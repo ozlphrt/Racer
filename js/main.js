@@ -106,6 +106,14 @@ const nnViz = new NetworkViz(
 );
 const chart = new FitnessChart($('chart-canvas'));
 
+const hubNnViz = $('nn-canvas-hub') ? new NetworkViz(
+  $('nn-canvas-hub'),
+  LAYERS,
+  ['L90', 'L60', 'L30', 'FWD', 'R30', 'R60', 'R90', 'SPD'],
+  ['STEER', 'THROTTLE'],
+) : null;
+const hubChart = $('chart-canvas-hub') ? new FitnessChart($('chart-canvas-hub')) : null;
+
 const state = {
   paused: false,
   speed: 1,
@@ -155,11 +163,34 @@ function timeAgo(iso) {
 function refreshSavedInfo() {
   const data = storage.loadBrain(LAYERS);
   const curGen = sim.generation;
-  $('saved-info').innerHTML = data
+  const panelInfo = $('saved-info');
+  const hubInfo = $('hub-saved-info');
+  const hubTimestamp = $('hub-storage-timestamp');
+
+  const textHtml = data
     ? `🏆 Peak Champion from <strong>Gen ${data.generation}</strong><br>` +
       `Fitness <strong>${compact(data.fitness)}</strong> · Best lap <strong>${fmtTime(data.bestLap)}</strong><br>` +
       `<span style="color:var(--text-muted); font-size:11px;">Active Session: Gen ${curGen} · Auto-saved ${timeAgo(data.savedAt)}</span>`
     : `Active: Gen <strong>${curGen}</strong><br><span style="color:var(--text-muted); font-size:11px;">No champion saved yet. Auto-saves when a new fitness record is set.</span>`;
+
+  if (panelInfo) panelInfo.innerHTML = textHtml;
+  if (hubInfo) hubInfo.innerHTML = textHtml;
+  if (hubTimestamp) hubTimestamp.textContent = data?.savedAt ? `Auto-saved ${timeAgo(data.savedAt)}` : 'Active Session';
+
+  updateHubAnalytics();
+}
+
+function updateHubAnalytics() {
+  const setTxt = (id, val) => {
+    const el = $(id);
+    if (el) el.textContent = val;
+  };
+  setTxt('hub-stat-gen', sim.generation);
+  setTxt('hub-stat-fit', compact(sim.allTimeBest?.fitness));
+  setTxt('hub-stat-lap', fmtTime(sim.bestLapEver));
+  const car = state.manual && sim.player ? sim.player : sim.leader;
+  const contacts = car?.contacts || 0;
+  setTxt('hub-stat-clean', contacts === 0 ? '100% (Clean)' : `${Math.max(0, 100 - contacts * 10)}%`);
 }
 
 function setSliderFill(input) {
@@ -225,6 +256,7 @@ sim.onGeneration = () => {
   leaderboard.reset();
   eliminationModals.clear();
   chart.draw(sim.history);
+  hubChart?.draw(sim.history);
   if (renderer) {
     renderer.cam = null;
   }
@@ -698,11 +730,97 @@ const ro = new ResizeObserver(() => {
   if (renderer3d) renderer3d.resize();
   nnViz.resize();
   chart.resize();
+  if (hubNnViz) hubNnViz.resize();
+  if (hubChart) hubChart.resize();
   if (hyperChart) hyperChart.resize();
 });
 ro.observe($('stage'));
 ro.observe($('nn-canvas'));
 ro.observe($('chart-canvas'));
+if ($('nn-canvas-hub')) ro.observe($('nn-canvas-hub'));
+if ($('chart-canvas-hub')) ro.observe($('chart-canvas-hub'));
+
+// ---------- AI Neural & Training Hub Controller ----------
+let currentHubTab = 'train'; // 'train' | 'storage' | 'analytics'
+const hubTabBtnTrain = $('hub-tab-btn-train');
+const hubTabBtnStorage = $('hub-tab-btn-storage');
+const hubTabBtnAnalytics = $('hub-tab-btn-analytics');
+const hubPaneTrain = $('hub-pane-train');
+const hubPaneStorage = $('hub-pane-storage');
+const hubPaneAnalytics = $('hub-pane-analytics');
+
+function setHubTab(tab) {
+  currentHubTab = tab;
+  const tabs = [
+    { key: 'train', btn: hubTabBtnTrain, pane: hubPaneTrain },
+    { key: 'storage', btn: hubTabBtnStorage, pane: hubPaneStorage },
+    { key: 'analytics', btn: hubTabBtnAnalytics, pane: hubPaneAnalytics },
+  ];
+  tabs.forEach((t) => {
+    const isActive = t.key === tab;
+    if (t.btn) {
+      t.btn.classList.toggle('active', isActive);
+      t.btn.setAttribute('aria-selected', String(isActive));
+    }
+    if (t.pane) {
+      t.pane.hidden = !isActive;
+      if (isActive) t.pane.classList.add('active');
+      else t.pane.classList.remove('active');
+    }
+  });
+
+  if (tab === 'storage') {
+    refreshSavedInfo();
+  } else if (tab === 'analytics') {
+    requestAnimationFrame(() => {
+      hubChart?.resize();
+      hubChart?.draw(sim.history);
+      hubNnViz?.resize();
+      updateHubAnalytics();
+    });
+  }
+}
+
+hubTabBtnTrain?.addEventListener('click', () => setHubTab('train'));
+hubTabBtnStorage?.addEventListener('click', () => setHubTab('storage'));
+hubTabBtnAnalytics?.addEventListener('click', () => setHubTab('analytics'));
+
+// Hub Storage & Snapshot Buttons
+$('hub-btn-save')?.addEventListener('click', () => {
+  const leaderCar = sim.leader;
+  const bestToSave = sim.allTimeBest || (leaderCar ? {
+    genome: leaderCar.brain.genome,
+    fitness: leaderCar.fitness,
+    generation: sim.generation,
+    bestLap: leaderCar.bestLap,
+  } : null);
+  if (!bestToSave) return toast('No active generation data to save yet', 'error');
+  storage.saveBrain(bestToSave, LAYERS);
+  storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
+  refreshSavedInfo();
+  toast(`💾 Generation ${bestToSave.generation || sim.generation} Champion snapshot saved!`, 'success');
+});
+
+$('hub-btn-load')?.addEventListener('click', () => $('btn-load')?.click());
+$('hub-btn-export')?.addEventListener('click', () => $('btn-export')?.click());
+$('hub-btn-import')?.addEventListener('click', () => $('btn-import')?.click());
+$('hub-btn-clear')?.addEventListener('click', () => resetAllLearning(false));
+
+const hubToggleAutosave = $('hub-toggle-autosave');
+const panelToggleAutosave = $('toggle-autosave');
+if (hubToggleAutosave) {
+  hubToggleAutosave.addEventListener('change', () => {
+    state.autosave = hubToggleAutosave.checked;
+    if (panelToggleAutosave) panelToggleAutosave.checked = hubToggleAutosave.checked;
+    toast(`Auto-save ${state.autosave ? 'enabled' : 'disabled'}`);
+  });
+}
+if (panelToggleAutosave) {
+  panelToggleAutosave.addEventListener('change', () => {
+    state.autosave = panelToggleAutosave.checked;
+    if (hubToggleAutosave) hubToggleAutosave.checked = panelToggleAutosave.checked;
+  });
+}
 
 // ---------- Hyper-Speed Headless Training Engine ----------
 let hyperRunning = false;
@@ -764,6 +882,15 @@ tabHyperTime?.addEventListener('click', () => setHyperMode('time'));
 function openHyperModal() {
   if (!hyperModal) return;
   hyperModal.hidden = false;
+  refreshSavedInfo();
+  if (currentHubTab === 'analytics') {
+    requestAnimationFrame(() => {
+      hubChart?.resize();
+      hubChart?.draw(sim.history);
+      hubNnViz?.resize();
+      updateHubAnalytics();
+    });
+  }
   if (!hyperRunning) {
     if (hyperSetupView) hyperSetupView.hidden = false;
     if (hyperRunningView) hyperRunningView.hidden = true;
@@ -969,6 +1096,7 @@ function finishHyperTraining() {
 
   persistState();
   chart.draw(sim.history);
+  hubChart?.draw(sim.history);
   refreshSavedInfo();
   updateHud(sim.leader);
 
@@ -1181,6 +1309,9 @@ function frame(now) {
 
   if (panelEl?.classList.contains('is-open')) {
     nnViz.draw(activeFocus?.brain ?? null);
+  }
+  if (hyperModal && !hyperModal.hidden && currentHubTab === 'analytics') {
+    hubNnViz?.draw(activeFocus?.brain ?? null);
   }
 
   // FPS calculation
