@@ -18,80 +18,79 @@
       <canvas id="track-canvas" aria-label="Race track simulation 2D" hidden></canvas>
       <canvas id="track-canvas-3d" aria-label="Race track simulation 3D"></canvas>
 
-      <!-- F1 Live Timing Leaderboard Tower (Left Side) -->
-      <aside class="leaderboard-tower glass" id="leaderboard-tower" aria-label="Live Race Leaderboard"></aside>
+      <!-- Bottom Right Floating Action Dock (Circular Buttons & Panels) -->
+      <div class="bottom-right-dock" id="bottom-right-dock">
+        <!-- Live Leaderboard Tower Panel -->
+        <aside class="leaderboard-tower glass" id="leaderboard-tower" aria-label="Live Race Leaderboard"></aside>
 
-      <div class="hud glass">
-        <div class="hud-item"><span class="hud-label">Generation</span><span class="hud-value" id="hud-gen">1</span></div>
-        <div class="hud-sep"></div>
-        <div class="hud-item"><span class="hud-label">Alive</span><span class="hud-value" id="hud-alive">80</span></div>
-        <div class="hud-sep"></div>
-        <div class="hud-item"><span class="hud-label">Lap</span><span class="hud-value" id="hud-lap">1/5</span></div>
-        <div class="hud-sep"></div>
-        <div class="hud-item"><span class="hud-label">Best Lap</span><span class="hud-value small" id="hud-best-lap">–</span></div>
-        <div class="hud-sep"></div>
-        <div class="hud-item"><span class="hud-label">FPS</span><span class="hud-value small" id="hud-fps">60</span></div>
-        <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
-      </div>
+        <!-- Cockpit Telemetry Card Panel -->
+        <div class="leader-card glass" id="leader-card">
+          <!-- Speed & Position Indicator Row -->
+          <div class="cockpit-speed-row">
+            <span class="pos-badge" id="leader-pos-badge">P.1</span>
+            <div class="cockpit-speed-box">
+              <span class="cockpit-speed-val" id="leader-speed">0</span>
+              <span class="cockpit-speed-unit">KM/H</span>
+            </div>
+          </div>
 
-      <!-- Ghost Mode 30s Countdown Timer Pill (Top Center) -->
-      <div class="ghost-timer-pill glass" id="ghost-timer-pill" aria-label="Ghost Mode Countdown Timer">
-        <span class="ghost-timer-title" id="ghost-timer-title">GHOST MODE</span>
-        <div class="ghost-timer-divider"></div>
-        <span class="ghost-timer-value" id="ghost-timer-value">30s</span>
-      </div>
+          <!-- Telemetry Controls: Steering Wheel & Brake/Gas Pedals -->
+          <div class="cockpit-telemetry">
+            <!-- Steering Wheel -->
+            <div class="wheel-wrapper">
+              <svg class="steering-wheel" id="cockpit-wheel" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="41" fill="none" stroke="#182030" stroke-width="8"/>
+                <circle cx="50" cy="50" r="41" fill="none" stroke="#2d3748" stroke-width="5"/>
+                <path d="M 46,9 A 41,41 0 0,1 54,9" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="butt"/>
+                <line x1="14" y1="50" x2="40" y2="50" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
+                <line x1="60" y1="50" x2="86" y2="50" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
+                <line x1="50" y1="58" x2="50" y2="86" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
+                <circle cx="50" cy="50" r="13" fill="#0f172a" stroke="#38bdf8" stroke-width="1.8"/>
+                <circle cx="50" cy="50" r="5" fill="#38bdf8"/>
+              </svg>
+            </div>
 
-      <!-- Broadcast Elimination Modal Notification Stack (Top Center) -->
-      <div class="elimination-stack" id="elimination-stack" aria-live="assertive"></div>
-
-      <div class="leader-card glass" id="leader-card">
-        <!-- Speed & Position Indicator Row -->
-        <div class="cockpit-speed-row">
-          <span class="pos-badge" id="leader-pos-badge">P.1</span>
-          <div class="cockpit-speed-box">
-            <span class="cockpit-speed-val" id="leader-speed">0</span>
-            <span class="cockpit-speed-unit">KM/H</span>
+            <!-- Brake & Gas Pedals -->
+            <div class="cockpit-pedals-section">
+              <div class="pedal-gauge brake">
+                <div class="pedal-fill brake" id="pedal-brake-fill"></div>
+                <div class="pedal-ribs">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <div class="pedal-gauge gas">
+                <div class="pedal-fill gas" id="pedal-gas-fill"></div>
+                <div class="pedal-ribs">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Telemetry Controls: Steering Wheel & Brake/Gas Pedals -->
-        <div class="cockpit-telemetry">
-          <!-- Steering Wheel -->
-          <div class="wheel-wrapper">
-            <svg class="steering-wheel" id="cockpit-wheel" viewBox="0 0 100 100">
-              <!-- Outer Wheel Ring -->
-              <circle cx="50" cy="50" r="41" fill="none" stroke="#182030" stroke-width="8"/>
-              <circle cx="50" cy="50" r="41" fill="none" stroke="#2d3748" stroke-width="5"/>
-
-              <!-- 12 O'Clock Top Centering Marker -->
-              <path d="M 46,9 A 41,41 0 0,1 54,9" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="butt"/>
-
-              <!-- 3 Minimalist Clean Spokes -->
-              <line x1="14" y1="50" x2="40" y2="50" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
-              <line x1="60" y1="50" x2="86" y2="50" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
-              <line x1="50" y1="58" x2="50" y2="86" stroke="#334155" stroke-width="5.5" stroke-linecap="round"/>
-
-              <!-- Minimalist Clean Center Hub -->
-              <circle cx="50" cy="50" r="13" fill="#0f172a" stroke="#38bdf8" stroke-width="1.8"/>
-              <circle cx="50" cy="50" r="5" fill="#38bdf8"/>
+        <!-- Circular Action Buttons -->
+        <div class="dock-buttons">
+          <button class="circle-btn glass is-active" id="btn-toggle-leaderboard" type="button" aria-label="Toggle Leaderboard" title="Leaderboard (L)">
+            <svg class="circle-btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+              <path d="M4 22h16"></path>
+              <path d="M10 14.66V17c0 .55-.45 1-1 1H7.5"></path>
+              <path d="M14 14.66V17c0 .55.45 1 1 1h1.5"></path>
+              <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
             </svg>
-          </div>
+            <span class="circle-btn-dot"></span>
+          </button>
 
-          <!-- Brake & Gas Pedals -->
-          <div class="cockpit-pedals-section">
-            <div class="pedal-gauge brake">
-              <div class="pedal-fill brake" id="pedal-brake-fill"></div>
-              <div class="pedal-ribs">
-                <span></span><span></span><span></span><span></span>
-              </div>
-            </div>
-            <div class="pedal-gauge gas">
-              <div class="pedal-fill gas" id="pedal-gas-fill"></div>
-              <div class="pedal-ribs">
-                <span></span><span></span><span></span><span></span>
-              </div>
-            </div>
-          </div>
+          <button class="circle-btn glass is-active" id="btn-toggle-telemetry" type="button" aria-label="Toggle Telemetry" title="Cockpit Telemetry (C)">
+            <svg class="circle-btn-icon wheel-icon" viewBox="0 0 100 100" width="20" height="20">
+              <circle cx="50" cy="50" r="39" fill="none" stroke="currentColor" stroke-width="9"/>
+              <circle cx="50" cy="50" r="13" fill="#0f172a" stroke="currentColor" stroke-width="4"/>
+              <line x1="15" y1="50" x2="37" y2="50" stroke="currentColor" stroke-width="8"/>
+              <line x1="63" y1="50" x2="85" y2="50" stroke="currentColor" stroke-width="8"/>
+              <line x1="50" y1="63" x2="50" y2="85" stroke="currentColor" stroke-width="8"/>
+            </svg>
+          </button>
         </div>
       </div>
 

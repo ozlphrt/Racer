@@ -585,6 +585,47 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// ---------- Bottom Right Circular Actions (Leaderboard & Telemetry) ----------
+const btnToggleLeaderboard = $('btn-toggle-leaderboard');
+const btnToggleTelemetry = $('btn-toggle-telemetry');
+const leaderCardEl = $('leader-card');
+
+function setLeaderboardOpen(open) {
+  leaderboard.toggleCollapse(!open);
+  btnToggleLeaderboard?.classList.toggle('is-active', open);
+}
+
+let isTelemetryOpen = localStorage.getItem('ai-racer:telemetry-open') !== 'false';
+function setTelemetryOpen(open) {
+  isTelemetryOpen = open;
+  if (leaderCardEl) {
+    leaderCardEl.classList.toggle('is-hidden', !open);
+  }
+  btnToggleTelemetry?.classList.toggle('is-active', open);
+  localStorage.setItem('ai-racer:telemetry-open', String(open));
+}
+
+if (btnToggleLeaderboard) {
+  btnToggleLeaderboard.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willBeOpen = leaderboard.isCollapsed;
+    setLeaderboardOpen(willBeOpen);
+    toast(willBeOpen ? 'Leaderboard opened' : 'Leaderboard closed');
+  });
+}
+
+if (btnToggleTelemetry) {
+  btnToggleTelemetry.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setTelemetryOpen(!isTelemetryOpen);
+    toast(isTelemetryOpen ? 'Telemetry opened' : 'Telemetry closed');
+  });
+}
+
+// Initial active state synchronization
+setTelemetryOpen(isTelemetryOpen);
+btnToggleLeaderboard?.classList.toggle('is-active', !leaderboard.isCollapsed);
+
 // Keyboard
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
@@ -624,8 +665,13 @@ window.addEventListener('keydown', (e) => {
       setAudio(!state.audio);
       break;
     case 'l':
-      leaderboard.toggleCollapse();
-      toast(leaderboard.isCollapsed ? 'Leaderboard collapsed' : 'Leaderboard expanded');
+      const willOpenL = leaderboard.isCollapsed;
+      setLeaderboardOpen(willOpenL);
+      toast(willOpenL ? 'Leaderboard opened' : 'Leaderboard closed');
+      break;
+    case 'c':
+      setTelemetryOpen(!isTelemetryOpen);
+      toast(isTelemetryOpen ? 'Telemetry opened' : 'Telemetry closed');
       break;
     case 'p':
       const willOpen = !panelEl?.classList.contains('is-open');

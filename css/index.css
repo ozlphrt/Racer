@@ -532,31 +532,93 @@ h1 {
   text-overflow: ellipsis;
 }
 
+/* ===== Bottom Right Floating Action Dock (Circular Buttons & Panels) ===== */
+.bottom-right-dock {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.dock-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.circle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: rgba(10, 15, 31, 0.88);
+  color: var(--text-dim);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  transition: all 0.22s var(--ease);
+  position: relative;
+}
+
+.circle-btn:hover {
+  transform: translateY(-2px);
+  color: #ffffff;
+  border-color: var(--cyan);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
+}
+
+.circle-btn.is-active {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3);
+}
+
+.circle-btn-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+}
+
 /* ===== F1 Live Timing Leaderboard Tower (Bottom Right Side) ===== */
 .leaderboard-tower {
   position: absolute;
-  bottom: 16px;
-  right: 98px;
+  bottom: 50px;
+  right: 48px;
   width: 254px;
   max-height: calc(100vh - 120px);
   padding: 8px 10px;
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  background: rgba(10, 15, 31, 0.90);
+  background: rgba(10, 15, 31, 0.92);
   border: 1px solid var(--border-strong);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.08);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  z-index: 20;
   user-select: none;
   overflow: hidden;
-  transition: width 0.28s var(--ease), padding 0.28s var(--ease), background 0.2s ease, border-color 0.2s ease;
+  pointer-events: auto;
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
 }
 
 .leaderboard-tower.is-collapsed {
-  width: 228px;
-  padding: 6px 10px;
+  display: none !important;
 }
 
 .tower-header {
@@ -833,8 +895,8 @@ h1 {
 /* ===== Leader / Cockpit Telemetry Card ===== */
 .leader-card {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
+  bottom: 50px;
+  right: 0;
   width: auto;
   min-width: 76px;
   padding: 4px 5px;
@@ -842,12 +904,17 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 2.5px;
-  background: rgba(10, 15, 31, 0.9);
+  background: rgba(10, 15, 31, 0.92);
   border: 1px solid var(--border-strong);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6), 0 0 14px rgba(34, 211, 238, 0.08);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  z-index: 20;
+  pointer-events: auto;
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
+}
+
+.leader-card.is-hidden {
+  display: none !important;
 }
 
 .pos-badge {
