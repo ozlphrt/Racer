@@ -314,12 +314,12 @@ export class TireBarrierSystem {
       }
     }
 
-    // 2. Tire Physics Simulation (Movement, Gravity, Ground Bounce & Friction)
+    // 2. Tire Physics Simulation (Movement, Gravity, Dynamic Ground Clearance & Bounce)
     if (!this.hasActiveTires) return;
     let anyMoving = false;
 
-    const gravity = 48.0;
-    const groundZ = 0.41;
+    const gravity = 52.0;
+    const groundLevel = 0.05; // Ground surface elevation
     const linDamping = Math.pow(0.86, clampedDt * 60);
     const rotDamping = Math.pow(0.88, clampedDt * 60);
 
@@ -345,23 +345,51 @@ export class TireBarrierSystem {
       tire.pitch += tire.vpitch * clampedDt;
       tire.roll += tire.vroll * clampedDt;
 
+      // Dynamic 3D oriented ground extent (distance from tire center to lowest contact surface)
+      const cosP = Math.cos(tire.pitch);
+      const cosR = Math.cos(tire.roll);
+      const nz = Math.abs(cosP * cosR); // Vertical alignment of tire's cylinder axis
+      const r = tire.radius || 1.40;
+      const h = (tire.height || 0.88) * 0.5;
+      const extentZ = Math.sqrt(r * r * (1.0 - nz * nz) + h * h * (nz * nz));
+      const minZ = groundLevel + extentZ;
+
       // Ground collision & bounce
-      if (tire.z <= groundZ) {
-        tire.z = groundZ;
-        tire.vz = -tire.vz * 0.38; // Rubber bounce restitution
-        if (Math.abs(tire.vz) < 0.6) tire.vz = 0;
-        // Ground friction scrub
-        tire.vx *= 0.94;
-        tire.vy *= 0.94;
-        tire.vpitch *= 0.85;
+      if (tire.z <= minZ) {
+        tire.z = minZ;
+        tire.vz = -tire.vz * 0.32; // Rubber bounce restitution
+        if (Math.abs(tire.vz) < 0.7) tire.vz = 0;
+
+        // Ground friction scrub & rotational damping
+        tire.vx *= 0.90;
+        tire.vy *= 0.90;
+        tire.vyaw *= 0.88;
+        tire.vpitch *= 0.80;
+        tire.vroll *= 0.80;
+
+        // When moving slowly, natural gravity topples and settles tilted tires flat onto the ground
+        const planarSpeedSq = tire.vx * tire.vx + tire.vy * tire.vy;
+        if (planarSpeedSq < 28.0) {
+          tire.pitch *= 0.90;
+          tire.roll *= 0.90;
+        }
       }
 
       // Check for sleep threshold
       const speedSq = tire.vx * tire.vx + tire.vy * tire.vy + tire.vz * tire.vz;
-      if (speedSq < 0.08 && tire.z <= groundZ + 0.02) {
+      const rotSpeedSq = (tire.vyaw || 0) * (tire.vyaw || 0) + (tire.vpitch || 0) * (tire.vpitch || 0) + (tire.vroll || 0) * (tire.vroll || 0);
+      if (speedSq < 0.06 && rotSpeedSq < 0.06 && tire.z <= minZ + 0.04) {
         tire.vx = 0;
         tire.vy = 0;
         tire.vz = 0;
+        tire.vyaw = 0;
+        tire.vpitch = 0;
+        tire.vroll = 0;
+        if (Math.abs(tire.pitch) < 0.18) tire.pitch = 0;
+        if (Math.abs(tire.roll) < 0.18) tire.roll = 0;
+        const finalNz = Math.abs(Math.cos(tire.pitch) * Math.cos(tire.roll));
+        const finalExtent = Math.sqrt(r * r * (1.0 - finalNz * finalNz) + h * h * (finalNz * finalNz));
+        tire.z = groundLevel + finalExtent;
         tire.sleeping = true;
       } else {
         anyMoving = true;
