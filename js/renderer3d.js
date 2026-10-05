@@ -4145,7 +4145,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 4000;
+    this.maxSkidQuads = 32000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
