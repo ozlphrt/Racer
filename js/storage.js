@@ -238,7 +238,7 @@ export function exportBrain(best, layers) {
   const blob = new Blob([JSON.stringify(pack(best, layers), null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `ai-racer-brain-gen${best.generation}.json`;
+  a.download = `ai-racer-brain-gen${best.generation ?? 'current'}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();

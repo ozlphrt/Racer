@@ -474,15 +474,39 @@ $('btn-load').addEventListener('click', async () => {
 });
 
 $('btn-export').addEventListener('click', () => {
-  const best = sim.allTimeBest ?? storage.loadBrain(LAYERS) ?? (sim.leader ? {
-    genome: sim.leader.brain.genome,
-    fitness: sim.leader.fitness,
-    generation: sim.generation,
-    bestLap: sim.leader.bestLap,
-  } : null);
-  if (!best) return toast('Nothing to export yet. Let a generation finish first', 'error');
-  storage.exportBrain(best, LAYERS);
-  toast(`Brain exported as JSON (Gen ${best.generation || sim.generation})`, 'success');
+  // Always prioritize the current active generation's best evolved brain
+  let targetBrain = null;
+
+  const currentBestCar = (sim.cars && sim.cars.length > 0)
+    ? [...sim.cars].sort((a, b) => (b.fitness || 0) - (a.fitness || 0))[0]
+    : sim.leader;
+
+  if (currentBestCar && currentBestCar.brain) {
+    targetBrain = {
+      genome: currentBestCar.brain.genome,
+      fitness: currentBestCar.fitness || 0,
+      generation: sim.generation,
+      bestLap: currentBestCar.bestLap ?? (sim.allTimeBest?.bestLap ?? null),
+    };
+  } else if (sim.leader && sim.leader.brain) {
+    targetBrain = {
+      genome: sim.leader.brain.genome,
+      fitness: sim.leader.fitness || 0,
+      generation: sim.generation,
+      bestLap: sim.leader.bestLap ?? null,
+    };
+  } else if (sim.allTimeBest) {
+    targetBrain = {
+      ...sim.allTimeBest,
+      generation: sim.generation || sim.allTimeBest.generation,
+    };
+  } else {
+    targetBrain = storage.loadBrain(LAYERS);
+  }
+
+  if (!targetBrain) return toast('Nothing to export yet. Let a generation run first', 'error');
+  storage.exportBrain(targetBrain, LAYERS);
+  toast(`Brain exported as JSON (Gen ${targetBrain.generation || sim.generation})`, 'success');
 });
 
 $('btn-import').addEventListener('click', () => $('input-import').click());
