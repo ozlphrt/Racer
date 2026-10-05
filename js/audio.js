@@ -556,24 +556,96 @@ export class SpatialAudioEngine {
   playStartBeep(isGreen = false) {
     if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
     try {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
       const now = this.ctx.currentTime;
+      const master = this.masterGain;
 
-      osc.type = isGreen ? 'sine' : 'triangle';
-      osc.frequency.setValueAtTime(isGreen ? 880 : 440, now);
-      if (isGreen) {
-        osc.frequency.exponentialRampToValueAtTime(1320, now + 0.35);
+      if (!isGreen) {
+        // --- CRISP MOTORSPORT COUNTDOWN TONE (Gran Turismo / F1 Marshal Beep) ---
+        // Clean fundamental at 880 Hz with sharp transient attack & overtone
+        const baseFreq = 880;
+        const dur = 0.14;
+
+        // Primary Oscillator (Pure sine with pitch envelope attack for click/snap)
+        const osc1 = this.ctx.createOscillator();
+        const gain1 = this.ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(baseFreq * 1.35, now);
+        osc1.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.012);
+
+        gain1.gain.setValueAtTime(0.0001, now);
+        gain1.gain.linearRampToValueAtTime(0.24, now + 0.004);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        osc1.connect(gain1);
+        gain1.connect(master);
+        osc1.start(now);
+        osc1.stop(now + dur + 0.01);
+
+        // Harmonic Overtone (Triangle 2nd harmonic for clarity and presence)
+        const osc2 = this.ctx.createOscillator();
+        const gain2 = this.ctx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(baseFreq * 2, now); // 1760 Hz
+
+        gain2.gain.setValueAtTime(0.0001, now);
+        gain2.gain.linearRampToValueAtTime(0.08, now + 0.004);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + dur * 0.7);
+
+        osc2.connect(gain2);
+        gain2.connect(master);
+        osc2.start(now);
+        osc2.stop(now + dur + 0.01);
+      } else {
+        // --- HIGH-ENERGY RACE LAUNCH CHIME & IMPACT (Lights Out / Green Flag) ---
+        // Authoritative resonant high start chord (1760 Hz + 2640 Hz) + Sub Bass Launch Thump
+        const dur = 0.55;
+
+        // 1. High Start Tone (1760 Hz A6)
+        const oscHigh = this.ctx.createOscillator();
+        const gainHigh = this.ctx.createGain();
+        oscHigh.type = 'sine';
+        oscHigh.frequency.setValueAtTime(1760, now);
+
+        gainHigh.gain.setValueAtTime(0.0001, now);
+        gainHigh.gain.linearRampToValueAtTime(0.32, now + 0.005);
+        gainHigh.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        oscHigh.connect(gainHigh);
+        gainHigh.connect(master);
+        oscHigh.start(now);
+        oscHigh.stop(now + dur + 0.01);
+
+        // 2. Harmonic 5th Chime (2640 Hz E7)
+        const oscFifth = this.ctx.createOscillator();
+        const gainFifth = this.ctx.createGain();
+        oscFifth.type = 'sine';
+        oscFifth.frequency.setValueAtTime(2640, now);
+
+        gainFifth.gain.setValueAtTime(0.0001, now);
+        gainFifth.gain.linearRampToValueAtTime(0.14, now + 0.005);
+        gainFifth.gain.exponentialRampToValueAtTime(0.0001, now + dur * 0.85);
+
+        oscFifth.connect(gainFifth);
+        gainFifth.connect(master);
+        oscFifth.start(now);
+        oscFifth.stop(now + dur + 0.01);
+
+        // 3. Sub-Bass Launch Impact (180 Hz -> 48 Hz kick drop for visceral start punch)
+        const oscSub = this.ctx.createOscillator();
+        const gainSub = this.ctx.createGain();
+        oscSub.type = 'sine';
+        oscSub.frequency.setValueAtTime(180, now);
+        oscSub.frequency.exponentialRampToValueAtTime(48, now + 0.22);
+
+        gainSub.gain.setValueAtTime(0.0001, now);
+        gainSub.gain.linearRampToValueAtTime(0.35, now + 0.008);
+        gainSub.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+
+        oscSub.connect(gainSub);
+        gainSub.connect(master);
+        oscSub.start(now);
+        oscSub.stop(now + 0.30);
       }
-
-      gain.gain.setValueAtTime(isGreen ? 0.28 : 0.18, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + (isGreen ? 0.45 : 0.22));
-
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-
-      osc.start(now);
-      osc.stop(now + (isGreen ? 0.45 : 0.22));
     } catch {}
   }
 }
