@@ -2074,10 +2074,127 @@ input[type='range']:disabled {
   margin-top: 2px;
 }
 
+/* ===== Ghost Mode 30s Countdown Timer Pill (Top Center) ===== */
+.ghost-timer-pill {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px 6px 14px;
+  background: rgba(10, 16, 28, 0.45); /* Semi-transparent */
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 9999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(0, 229, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 32;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.ghost-timer-pill.urgent {
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 158, 11, 0.25);
+}
+
+.ghost-timer-pill.active-contact {
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(239, 68, 68, 0.25);
+}
+
+.ghost-timer-pill.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+.ghost-timer-icon {
+  font-size: 14px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.6));
+  animation: ghost-float 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes ghost-float {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-2px); }
+}
+
+.ghost-timer-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: #00e5ff;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+  white-space: nowrap;
+}
+
+.ghost-timer-pill.urgent .ghost-timer-title {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+}
+
+.ghost-timer-pill.active-contact .ghost-timer-title {
+  color: #f87171;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+.ghost-timer-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.ghost-timer-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #e2e8f0;
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ghost-timer-pill.urgent .ghost-timer-value {
+  color: #fbbf24;
+  animation: ghost-pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes ghost-pulse {
+  0% { opacity: 0.75; }
+  100% { opacity: 1; }
+}
+
+.ghost-timer-progress {
+  width: 42px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.ghost-timer-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #00e5ff, #38bdf8);
+  border-radius: 9999px;
+  transition: width 0.08s linear;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+
+.ghost-timer-pill.urgent .ghost-timer-fill {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
 /* ===== F1 Broadcast Elimination Notification ===== */
 .elimination-stack {
   position: absolute;
-  top: 18px;
+  top: 60px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
