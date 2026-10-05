@@ -1,3 +1,6 @@
+import { generateCarSideviewSvg } from './leaderboard.js';
+import { TEAM_PALETTE } from './renderer3d.js';
+
 export class EliminationModalManager {
   constructor(containerEl, { onSelectCar = null, onRestart = null } = {}) {
     this.container = containerEl;
@@ -18,8 +21,9 @@ export class EliminationModalManager {
     }
 
     const isPlayer = car === sim.player || car.manual;
-    const carIdx = (sim.cars && sim.cars.indexOf(car) >= 0) ? sim.cars.indexOf(car) : (car.idx ?? 0);
-    const carNum = isPlayer ? 'YOU' : `CAR #${carIdx + 1}`;
+    const carIdx = (sim.cars && sim.cars.indexOf(car) >= 0) ? sim.cars.indexOf(car) : (car.gridSlot ?? 0);
+    const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
+    const carSvg = generateCarSideviewSvg(teamIdx, isPlayer);
 
     let reasonText = 'OUT OF TRACK';
     if (reason === 'stalled') reasonText = 'STALLED';
@@ -31,7 +35,7 @@ export class EliminationModalManager {
 
     modal.innerHTML = `
       <span class="elim-tag">ELIMINATED</span>
-      <span class="elim-car-num">${carNum}</span>
+      <span class="elim-car-preview" title="${isPlayer ? 'You' : `Car #${carIdx + 1}`}">${carSvg}</span>
       <span class="elim-sep">•</span>
       <span class="elim-reason">${reasonText}</span>
     `;
