@@ -22,28 +22,24 @@ export class EliminationModalManager {
 
     const isPlayer = car === sim.player || car.manual;
     const carIdx = (sim.cars && sim.cars.indexOf(car) >= 0) ? sim.cars.indexOf(car) : (car.gridSlot ?? 0);
+    const carNumber = isPlayer ? 'YOU' : `CAR #${carIdx + 1}`;
     const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
     const carSvg = generateCarSideviewSvg(teamIdx, isPlayer);
 
-    let reasonText = 'OUT OF TRACK';
+    let reasonText = 'OFF TRACK';
     if (reason === 'stalled') reasonText = 'STALLED';
     else if (reason === 'wrong way') reasonText = 'WRONG WAY';
+    else if (reason === 'wall') reasonText = 'WALL IMPACT';
 
     const modal = document.createElement('div');
     modal.className = `elimination-modal glass ${isPlayer ? 'is-player-eliminated' : ''}`;
     modal.setAttribute('role', 'alert');
 
     modal.innerHTML = `
-      <div class="elim-badge-col">
-        <span class="elim-tag">ELIMINATED</span>
-      </div>
-      <div class="elim-car-col" title="${isPlayer ? 'You' : `Car #${carIdx + 1}`}">
-        <div class="elim-car-preview">${carSvg}</div>
-      </div>
-      <div class="elim-reason-col">
-        <span class="elim-sep">•</span>
-        <span class="elim-reason">${reasonText}</span>
-      </div>
+      <span class="elim-status-pill">${isPlayer ? 'DNF' : 'OUT'}</span>
+      <div class="elim-car-preview">${carSvg}</div>
+      <span class="elim-car-name">${carNumber}</span>
+      <span class="elim-reason-badge">${reasonText}</span>
     `;
 
     modal.addEventListener('click', () => {
