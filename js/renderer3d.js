@@ -448,6 +448,29 @@ export class Renderer3D {
     this.dirLight.shadow.camera.updateProjectionMatrix();
   }
 
+  getMinDistToTrack(tx, ty) {
+    const t = this.track;
+    if (!t) return 99999;
+    const b = t.bounds;
+    const margin = 320;
+    if (tx >= b.minX - margin && tx <= b.maxX + margin &&
+        ty >= b.minY - margin && ty <= b.maxY + margin) {
+      let minDSq = Infinity;
+      const N = t.N;
+      // Step by 2 samples for high-precision distance checking
+      for (let k = 0; k < N; k += 2) {
+        const dx = t.cx[k] - tx;
+        const dy = t.cy[k] - ty;
+        const dSq = dx * dx + dy * dy;
+        if (dSq < minDSq) minDSq = dSq;
+      }
+      return Math.sqrt(minDSq);
+    }
+    const dx = Math.max(0, Math.max(b.minX - tx, tx - b.maxX));
+    const dy = Math.max(0, Math.max(b.minY - ty, ty - b.maxY));
+    return Math.hypot(dx, dy);
+  }
+
   getTerrainHeight(x, y) {
     if (!this.track) return 0;
     const t = this.track;
@@ -459,32 +482,29 @@ export class Renderer3D {
     const trackX = x;
     const trackY = -y;
 
-    const nearestIdx = t.nearestIndex(trackX, trackY, 0, t.N / 2, t.N / 2);
-    const distSq = t.lateralDistSq(trackX, trackY, nearestIdx);
-    const safeDist = t.half + 32;
-    const safeDistSq = safeDist * safeDist;
+    const distToTrack = this.getMinDistToTrack(trackX, trackY);
+    const flatMargin = 220.0; // Completely flat racing arena around track & infield
 
-    if (distSq <= safeDistSq) return 0; // Flat racing plane on track and immediate runoffs
+    if (distToTrack <= flatMargin) return 0; // Flat racing plane on track and immediate runoffs
 
-    const distToTrack = Math.sqrt(distSq);
-    // Smooth transition from flat track corridor to rolling countryside
-    const blend = Math.max(0, Math.min(1, (distToTrack - safeDist) / 160));
+    // Smooth Hermite blend starting after 220m out from track to rolling countryside
+    const blend = Math.max(0, Math.min(1, (distToTrack - flatMargin) / 380.0));
     const smoothBlend = blend * blend * (3 - 2 * blend);
 
     // Multi-octave organic rolling hills and valleys
-    const h1 = Math.sin(x * 0.0012 + 0.4) * Math.cos(y * 0.0012 - 0.3) * 62.0;
-    const h2 = Math.sin(x * 0.0024 - y * 0.0020 + 1.2) * 28.0;
-    const h3 = Math.cos(x * 0.0048 + y * 0.0042) * 12.0;
-    const localHills = Math.max(0, h1 + h2 + h3 + 16.0) * smoothBlend;
+    const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
+    const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
+    const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
+    const localHills = Math.max(0, h1 + h2 + h3 + 18.0) * smoothBlend;
 
     // Majestic perimeter mountain ranges on the outer horizon
     const distFromCenter = Math.hypot(x - cx, y - cy);
-    const maxTrackSpan = Math.max(b.w, b.h) * 0.72;
+    const maxTrackSpan = Math.max(b.w, b.h) * 0.85;
     if (distFromCenter > maxTrackSpan) {
-      const mRatio = Math.min(1.0, (distFromCenter - maxTrackSpan) / 2600);
+      const mRatio = Math.min(1.0, (distFromCenter - maxTrackSpan) / 2800.0);
       const mBlend = mRatio * mRatio * (3 - 2 * mRatio);
-      const mRidge = (Math.sin(x * 0.00055 + 1.8) * Math.cos(y * 0.00055 - 0.9) * 0.5 + 0.5) * 620.0
-                   + Math.sin(x * 0.0013 - 0.6) * 160.0;
+      const mRidge = (Math.sin(x * 0.00050 + 1.8) * Math.cos(y * 0.00050 - 0.9) * 0.5 + 0.5) * 650.0
+                   + Math.sin(x * 0.0012 - 0.6) * 180.0;
       return localHills + Math.max(0, mRidge) * mBlend;
     }
 
@@ -499,7 +519,7 @@ export class Renderer3D {
     }
 
     const w = 24000;
-    const segs = 160;
+    const segs = 200;
     const geo = new THREE.PlaneGeometry(w, w, segs, segs);
     const pos = geo.attributes.position.array;
     const count = geo.attributes.position.count;
@@ -568,11 +588,11 @@ export class Renderer3D {
 
     for (let i = 0; i < N; i++) {
       // Outer point
-      vertices.push(t.ox[i], -t.oy[i], 0.01);
-      uvs.push(0, i / N * 20);
+      vertices.push(t.ox[i], -t.oy[i], 0.02);
+      uvs.push(0, (i / N) * 20);
       // Inner point
-      vertices.push(t.ix[i], -t.iy[i], 0.01);
-      uvs.push(1, i / N * 20);
+      vertices.push(t.ix[i], -t.iy[i], 0.02);
+      uvs.push(1, (i / N) * 20);
 
       const nxt = (i + 1) % N;
       const v0 = i * 2;
@@ -595,8 +615,8 @@ export class Renderer3D {
       roughness: 0.85,
       metalness: 0.1,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
 
     this.trackMesh = new THREE.Mesh(geo, mat);
