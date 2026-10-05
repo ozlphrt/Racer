@@ -824,9 +824,9 @@ export class Renderer {
     const t = this.trail;
     const n = t.length / 2;
     if (n < 2) return;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 1.6;
     for (let i = 1; i < n; i++) {
-      ctx.strokeStyle = `rgba(251, 191, 36, ${(i / n) * 0.28})`;
+      ctx.strokeStyle = `rgba(251, 191, 36, ${(i / n) * 0.12})`;
       ctx.beginPath();
       ctx.moveTo(t[(i - 1) * 2], t[(i - 1) * 2 + 1]);
       ctx.lineTo(t[i * 2], t[i * 2 + 1]);
@@ -846,15 +846,15 @@ export class Renderer {
         continue;
       }
 
-      const isHeavyBraking = car.throttle < -0.35 && car.speed > 70;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.13 && car.speed > 60;
-      const isCrashSlide = car.crashed && car.speed > 25;
+      const isHeavyBraking = car.throttle < -0.22 && car.speed > 45;
+      const isSlip = Math.abs(car.slipAngle || 0) > 0.08 && car.speed > 40;
+      const isCrashSlide = car.crashed && car.speed > 15;
 
       if (isHeavyBraking || isSlip || isCrashSlide) {
-        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.10) * 2.8);
-        const brakeInt = isHeavyBraking ? Math.min(0.85, (-car.throttle - 0.35) * 1.8) : 0;
-        const crashInt = isCrashSlide ? 0.75 : 0;
-        const intensity = Math.min(0.85, Math.max(slipInt, brakeInt, crashInt));
+        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.06) * 3.0);
+        const brakeInt = isHeavyBraking ? Math.min(0.95, (-car.throttle - 0.20) * 2.0) : 0;
+        const crashInt = isCrashSlide ? 0.85 : 0;
+        const intensity = Math.min(0.95, Math.max(slipInt, brakeInt, crashInt));
 
         const cos = Math.cos(car.angle);
         const sin = Math.sin(car.angle);
@@ -867,7 +867,7 @@ export class Renderer {
         const prev = this.carPrevTires.get(car);
         if (prev) {
           const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.4 && dL < 35) {
+          if (dL > 0.35 && dL < 35) {
             this.skidmarks.push({
               x0: prev.lx, y0: prev.ly,
               x1: lx, y1: ly,
@@ -889,22 +889,22 @@ export class Renderer {
               p0x: prev.lx, p0y: prev.ly,
               p1x: lx, p1y: ly,
               nx: normX, ny: normY,
-              w0: 1.2, w1: 1.2,
-              alpha: intensity * 0.35,
+              w0: 1.6, w1: 1.6,
+              alpha: intensity * 0.55,
               life: 1.0,
-              decay: 1.6 + Math.random() * 0.4,
+              decay: 0.85 + Math.random() * 0.25,
             });
             this.tireSmokes.push({
               p0x: prev.rx, p0y: prev.ry,
               p1x: rx, p1y: ry,
               nx: normX, ny: normY,
-              w0: 1.2, w1: 1.2,
-              alpha: intensity * 0.35,
+              w0: 1.6, w1: 1.6,
+              alpha: intensity * 0.55,
               life: 1.0,
-              decay: 1.6 + Math.random() * 0.4,
+              decay: 0.85 + Math.random() * 0.25,
             });
-            if (this.tireSmokes.length > 300) {
-              this.tireSmokes.splice(0, this.tireSmokes.length - 300);
+            if (this.tireSmokes.length > 600) {
+              this.tireSmokes.splice(0, this.tireSmokes.length - 600);
             }
           }
         }

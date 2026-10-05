@@ -2487,7 +2487,7 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeQuads = 900;
+    this.maxSmokeQuads = 2400;
     this.smokeQuads = [];
     const maxVerts = this.maxSmokeQuads * 4;
     const maxIndices = this.maxSmokeQuads * 6;
@@ -2553,14 +2553,14 @@ export class Renderer3D {
       void main() {
         // Continuous soft Gaussian edge falloff across ribbon width (u in [0, 1])
         float uDist = abs(vUv.x - 0.5) * 2.0;
-        float softEdge = exp(-uDist * uDist * 4.5);
+        float softEdge = exp(-uDist * uDist * 3.5);
 
         // Continuous streaming longitudinal wisps
-        float turb = fbm(vec2(vUv.x * 3.2, vUv.y * 12.0));
+        float turb = fbm(vec2(vUv.x * 2.8, vUv.y * 9.0));
 
         // Translucent motorsport white-grey tire friction vapor
-        vec3 smokeColor = vec3(0.92, 0.94, 0.96);
-        float alpha = softEdge * vAlpha * (0.65 + 0.35 * turb) * 0.38;
+        vec3 smokeColor = vec3(0.93, 0.94, 0.96);
+        float alpha = softEdge * vAlpha * (0.60 + 0.40 * turb) * 0.65;
 
         gl_FragColor = vec4(smokeColor, alpha);
       }
@@ -2594,15 +2594,15 @@ export class Renderer3D {
       p0x, p0y,
       p1x, p1y,
       nx, ny,
-      w0: 1.1,
-      w1: 1.1,
-      z0: 0.12,
-      z1: 0.12,
-      alpha: Math.min(0.85, intensity * 0.65),
+      w0: 1.6,
+      w1: 1.6,
+      z0: 0.14,
+      z1: 0.14,
+      alpha: Math.min(0.95, intensity * 0.88),
       life: 1.0,
-      decay: 1.6 + Math.random() * 0.4,
-      growthRate: 3.2,
-      riseRate: 0.55,
+      decay: 0.80 + Math.random() * 0.25,
+      growthRate: 4.6,
+      riseRate: 0.70,
     });
   }
 
@@ -2630,7 +2630,7 @@ export class Renderer3D {
       q.z1 += q.riseRate * dt;
 
       const vOffset = writeIdx * 4;
-      const a = q.alpha * Math.pow(q.life, 1.25);
+      const a = q.alpha * Math.pow(q.life, 1.20);
 
       // v0: previous left
       this.smokePosArr[vOffset * 3] = q.p0x - q.nx * q.w0;
@@ -2777,7 +2777,7 @@ export class Renderer3D {
 
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
-    const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars.slice(0, 10)] : sim.cars.slice(0, 10);
+    const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
 
     for (let i = 0; i < candidateCars.length; i++) {
@@ -2788,15 +2788,15 @@ export class Renderer3D {
       }
 
       // Detect skid conditions: heavy braking, understeer, oversteer, or crashing slide
-      const isHeavyBraking = car.throttle < -0.35 && car.speed > 70;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.13 && car.speed > 60;
-      const isCrashSlide = car.crashed && car.speed > 25;
+      const isHeavyBraking = car.throttle < -0.22 && car.speed > 45;
+      const isSlip = Math.abs(car.slipAngle || 0) > 0.08 && car.speed > 40;
+      const isCrashSlide = car.crashed && car.speed > 15;
 
       if (isHeavyBraking || isSlip || isCrashSlide) {
-        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.10) * 2.8);
-        const brakeInt = isHeavyBraking ? Math.min(0.85, (-car.throttle - 0.35) * 1.8) : 0;
-        const crashInt = isCrashSlide ? 0.75 : 0;
-        const intensity = Math.min(0.85, Math.max(slipInt, brakeInt, crashInt));
+        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.06) * 3.0);
+        const brakeInt = isHeavyBraking ? Math.min(0.95, (-car.throttle - 0.20) * 2.0) : 0;
+        const crashInt = isCrashSlide ? 0.85 : 0;
+        const intensity = Math.min(0.95, Math.max(slipInt, brakeInt, crashInt));
 
         const cos = Math.cos(car.angle);
         const sin = Math.sin(car.angle);
@@ -2809,7 +2809,7 @@ export class Renderer3D {
         const prev = this.carPrevTires.get(car);
         if (prev) {
           const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.4 && dL < 35) {
+          if (dL > 0.35 && dL < 35) {
             const hw = 0.8; // half width of tire skid mark
             const nx = -sin * hw;
             const ny = -cos * hw;
@@ -2855,7 +2855,7 @@ export class Renderer3D {
   setupTrail() {
     this.trailHistory = [];
     this.trailOwner = null;
-    this.maxTrailPoints = 65;
+    this.maxTrailPoints = 35;
 
     const maxVerts = this.maxTrailPoints * 2;
     const posArr = new Float32Array(maxVerts * 3);
@@ -2907,12 +2907,12 @@ export class Renderer3D {
         // Soft central aerodynamic air wake
         float centerWake = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 1.4);
         
-        // Team color with luminous core filaments
-        vec3 col = mix(vColor, vec3(1.0, 1.0, 1.0), twinFilaments * 0.40 + centerWake * 0.15);
+        // Team color with soft core filaments
+        vec3 col = mix(vColor, vec3(1.0, 1.0, 1.0), twinFilaments * 0.25 + centerWake * 0.10);
         
-        // Distinct yet transparent slipstream wake
-        float intensity = centerWake * 0.35 + twinFilaments * 0.65;
-        float alpha = clamp(vAlpha * intensity, 0.0, 1.0);
+        // Subtle, refined aerodynamic wake
+        float intensity = centerWake * 0.20 + twinFilaments * 0.40;
+        float alpha = clamp(vAlpha * intensity * 0.32, 0.0, 1.0);
         
         gl_FragColor = vec4(col, alpha);
       }
@@ -2977,13 +2977,13 @@ export class Renderer3D {
     const colorArr = this.trailMesh.geometry.attributes.color.array;
     const uvArr = this.trailMesh.geometry.attributes.uv.array;
 
-    const halfW = 2.8; // Sleek aerodynamic ribbon width
+    const halfW = 2.4; // Subtle aerodynamic ribbon width
 
     for (let i = 0; i < count; i++) {
       const pt = this.trailHistory[i];
-      // Smooth power-curve fade from 0.52 near car down to 0 at trail end
+      // Subtle power-curve fade from 0.20 near car down to 0 at trail end
       const progress = i / (count - 1);
-      const a = Math.pow(progress, 1.35) * 0.52;
+      const a = Math.pow(progress, 1.8) * 0.20;
 
       // Left vertex (u = 0)
       const v0 = i * 2;
