@@ -287,8 +287,6 @@ const C = {
   ghost: 0x00e5ff,  // Electric cyan
 };
 
-const TRAIL_LEN = 120;
-
 export class Renderer3D {
   constructor(canvas, track) {
     this.canvas = canvas;
@@ -333,7 +331,6 @@ export class Renderer3D {
     this.setupBursts();
     this.setupSkidmarks();
     this.setupTireSmoke();
-    this.setupTrail();
 
     this._rankedCars = [];
     this._carRankMap = new Map();
@@ -3813,9 +3810,6 @@ export class Renderer3D {
     this.clearBursts();
     this.clearSkidmarks();
     this.clearTireSmoke();
-    if (this.trailMesh) this.trailMesh.geometry.setDrawRange(0, 0);
-    if (this.trailHistory) this.trailHistory.length = 0;
-    this.trailOwner = null;
     this.updateLightPosition();
 
     this.setupTerrain();
@@ -3935,7 +3929,7 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeQuads = 1200;
+    this.maxSmokeQuads = 2400;
     this.smokeQuads = [];
     const maxVerts = this.maxSmokeQuads * 4;
     const maxIndices = this.maxSmokeQuads * 6;
@@ -4001,14 +3995,14 @@ export class Renderer3D {
       void main() {
         // Continuous soft Gaussian edge falloff across ribbon width (u in [0, 1])
         float uDist = abs(vUv.x - 0.5) * 2.0;
-        float softEdge = exp(-uDist * uDist * 4.2);
+        float softEdge = exp(-uDist * uDist * 4.0);
 
         // Continuous streaming longitudinal wisps
         float turb = fbm(vec2(vUv.x * 3.0, vUv.y * 10.0));
 
         // Translucent motorsport white-grey tire friction vapor
         vec3 smokeColor = vec3(0.92, 0.94, 0.96);
-        float alpha = softEdge * vAlpha * (0.60 + 0.40 * turb) * 0.40;
+        float alpha = softEdge * vAlpha * (0.65 + 0.35 * turb) * 0.65;
 
         gl_FragColor = vec4(smokeColor, alpha);
       }
@@ -4042,15 +4036,15 @@ export class Renderer3D {
       p0x, p0y,
       p1x, p1y,
       nx, ny,
-      w0: 1.0,
-      w1: 1.0,
-      z0: 0.12,
-      z1: 0.12,
-      alpha: Math.min(0.70, intensity * 0.65),
+      w0: 1.35,
+      w1: 1.35,
+      z0: 0.15,
+      z1: 0.15,
+      alpha: Math.min(0.85, intensity * 0.85),
       life: 1.0,
-      decay: 1.45 + Math.random() * 0.35,
-      growthRate: 3.0,
-      riseRate: 0.55,
+      decay: 1.15 + Math.random() * 0.25,
+      growthRate: 3.6,
+      riseRate: 0.65,
     });
   }
 
@@ -4256,17 +4250,17 @@ export class Renderer3D {
       }
 
       // Detect skid conditions: heavy/trail braking, cornering slip/drift, burnout launch, or crash slide
-      const isBraking = car.throttle < -0.16 && car.speed > 25;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.065 && car.speed > 28;
-      const isWheelspin = car.throttle > 0.85 && car.speed < 75 && !car.crashed;
-      const isCrashSlide = car.crashed && car.speed > 10;
+      const isBraking = car.throttle < -0.14 && car.speed > 22;
+      const isSlip = Math.abs(car.slipAngle || 0) > 0.055 && car.speed > 24;
+      const isWheelspin = car.throttle > 0.80 && car.speed < 85 && !car.crashed;
+      const isCrashSlide = car.crashed && car.speed > 8;
 
       if (isBraking || isSlip || isWheelspin || isCrashSlide) {
-        const brakeInt = isBraking ? Math.min(0.85, (-car.throttle - 0.14) * 1.6) : 0;
-        const slipInt = isSlip ? Math.min(0.90, (Math.abs(car.slipAngle || 0) - 0.055) * 3.5) : 0;
-        const spinInt = isWheelspin ? Math.min(0.75, (1.0 - car.speed / 75) * 0.85) : 0;
-        const crashInt = isCrashSlide ? 0.85 : 0;
-        const intensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
+        const brakeInt = isBraking ? Math.min(0.85, (-car.throttle - 0.12) * 1.6) : 0;
+        const slipInt = isSlip ? Math.min(0.90, (Math.abs(car.slipAngle || 0) - 0.045) * 3.5) : 0;
+        const spinInt = isWheelspin ? Math.min(0.80, (1.0 - car.speed / 85) * 0.90) : 0;
+        const crashInt = isCrashSlide ? 0.90 : 0;
+        const intensity = Math.min(0.95, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
         const cos = Math.cos(car.angle);
         const sin = Math.sin(car.angle);
@@ -4323,171 +4317,6 @@ export class Renderer3D {
       }
       this.skidMesh.geometry.setDrawRange(0, this.skidCount * 6);
     }
-  }
-
-  setupTrail() {
-    this.trailHistory = [];
-    this.trailOwner = null;
-    this.maxTrailPoints = 50;
-
-    const maxVerts = this.maxTrailPoints * 2;
-    const posArr = new Float32Array(maxVerts * 3);
-    const alphaArr = new Float32Array(maxVerts);
-    const colorArr = new Float32Array(maxVerts * 3);
-    const uvArr = new Float32Array(maxVerts * 2);
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-    geo.setAttribute('alpha', new THREE.BufferAttribute(alphaArr, 1));
-    geo.setAttribute('color', new THREE.BufferAttribute(colorArr, 3));
-    geo.setAttribute('uv', new THREE.BufferAttribute(uvArr, 2));
-
-    // Indices for triangle strip
-    const indices = [];
-    for (let i = 0; i < this.maxTrailPoints - 1; i++) {
-      const v0 = i * 2;
-      const v1 = i * 2 + 1;
-      const v2 = (i + 1) * 2;
-      const v3 = (i + 1) * 2 + 1;
-      indices.push(v0, v1, v2);
-      indices.push(v1, v3, v2);
-    }
-    geo.setIndex(indices);
-    geo.setDrawRange(0, 0);
-
-    const vertShader = `
-      attribute float alpha;
-      varying float vAlpha;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      void main() {
-        vAlpha = alpha;
-        vColor = color;
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `;
-    const fragShader = `
-      varying float vAlpha;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      void main() {
-        // Twin aerodynamic vortex filaments (u=0.25 and u=0.75)
-        float dLeft = abs(vUv.x - 0.25);
-        float dRight = abs(vUv.x - 0.75);
-        float twinFilaments = max(exp(-dLeft * dLeft * 50.0), exp(-dRight * dRight * 50.0));
-        
-        // Soft central aerodynamic air wake
-        float centerWake = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 1.2);
-        
-        // Team color with luminous core filaments
-        vec3 col = mix(vColor, vec3(1.0, 1.0, 1.0), twinFilaments * 0.35 + centerWake * 0.15);
-        
-        // Clean, well-defined aerodynamic slipstream wake
-        float intensity = centerWake * 0.35 + twinFilaments * 0.65;
-        float alpha = clamp(vAlpha * intensity * 0.85, 0.0, 1.0);
-        
-        gl_FragColor = vec4(col, alpha);
-      }
-    `;
-
-    const mat = new THREE.ShaderMaterial({
-      vertexShader: vertShader,
-      fragmentShader: fragShader,
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-    });
-
-    this.trailMesh = new THREE.Mesh(geo, mat);
-    this.trailMesh.frustumCulled = false;
-    this.trailMesh.renderOrder = 400;
-    this.scene.add(this.trailMesh);
-  }
-
-  updateTrail(focusCar, sim) {
-    if (!focusCar || !focusCar.alive) {
-      if (this.trailMesh) this.trailMesh.geometry.setDrawRange(0, 0);
-      this.trailHistory.length = 0;
-      this.trailOwner = null;
-      return;
-    }
-
-    if (focusCar !== this.trailOwner) {
-      this.trailHistory.length = 0;
-      this.trailOwner = focusCar;
-    }
-
-    const cos = Math.cos(focusCar.angle);
-    const sin = Math.sin(focusCar.angle);
-    // Emit trail right behind the rear diffuser / rear wheels
-    const rearX = focusCar.x - cos * 11.5;
-    const rearY = -focusCar.y + sin * 11.5;
-    const normX = -sin;
-    const normY = -cos;
-
-    this.trailHistory.push({ x: rearX, y: rearY, nx: normX, ny: normY });
-    if (this.trailHistory.length > this.maxTrailPoints) {
-      this.trailHistory.shift();
-    }
-
-    const count = this.trailHistory.length;
-    if (count < 2) {
-      this.trailMesh.geometry.setDrawRange(0, 0);
-      return;
-    }
-
-    // Match team color of the followed car
-    const carIdx = sim.cars ? sim.cars.indexOf(focusCar) : -1;
-    const teamIdx = focusCar.manual ? 1 : (carIdx >= 0 ? carIdx % TEAM_PALETTE.length : 3);
-    const hex = TEAM_PALETTE[teamIdx].hex;
-    const col = new THREE.Color(hex);
-
-    const posArr = this.trailMesh.geometry.attributes.position.array;
-    const alphaArr = this.trailMesh.geometry.attributes.alpha.array;
-    const colorArr = this.trailMesh.geometry.attributes.color.array;
-    const uvArr = this.trailMesh.geometry.attributes.uv.array;
-
-    const halfW = 2.8; // Sleek aerodynamic ribbon width
-
-    for (let i = 0; i < count; i++) {
-      const pt = this.trailHistory[i];
-      // Smooth power-curve fade from 0.42 near car down to 0 at trail end
-      const progress = i / (count - 1);
-      const a = Math.pow(progress, 1.25) * 0.42;
-
-      // Left vertex (u = 0)
-      const v0 = i * 2;
-      posArr[v0 * 3] = pt.x - pt.nx * halfW;
-      posArr[v0 * 3 + 1] = pt.y - pt.ny * halfW;
-      posArr[v0 * 3 + 2] = 0.35;
-      alphaArr[v0] = a;
-      colorArr[v0 * 3] = col.r;
-      colorArr[v0 * 3 + 1] = col.g;
-      colorArr[v0 * 3 + 2] = col.b;
-      uvArr[v0 * 2] = 0.0;
-      uvArr[v0 * 2 + 1] = progress;
-
-      // Right vertex (u = 1)
-      const v1 = i * 2 + 1;
-      posArr[v1 * 3] = pt.x + pt.nx * halfW;
-      posArr[v1 * 3 + 1] = pt.y + pt.ny * halfW;
-      posArr[v1 * 3 + 2] = 0.35;
-      alphaArr[v1] = a;
-      colorArr[v1 * 3] = col.r;
-      colorArr[v1 * 3 + 1] = col.g;
-      colorArr[v1 * 3 + 2] = col.b;
-      uvArr[v1 * 2] = 1.0;
-      uvArr[v1 * 2 + 1] = progress;
-    }
-
-    this.trailMesh.geometry.attributes.position.needsUpdate = true;
-    this.trailMesh.geometry.attributes.alpha.needsUpdate = true;
-    this.trailMesh.geometry.attributes.color.needsUpdate = true;
-    this.trailMesh.geometry.attributes.uv.needsUpdate = true;
-    this.trailMesh.geometry.setDrawRange(0, (count - 1) * 6);
   }
 
   resetCamera(followMode = true) {
@@ -5228,9 +5057,6 @@ export class Renderer3D {
 
     // Update Persistent Rubber Skid Marks
     this.updateSkidmarks(sim);
-
-    // Update Fading Luminous Ribbon Trail behind followed car
-    this.updateTrail(focusCar, sim);
 
     // Update Death Bursts
     this.processDeathEvents(sim);
