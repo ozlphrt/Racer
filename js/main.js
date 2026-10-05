@@ -946,6 +946,9 @@ function updateHud(leader) {
 
   setTxt('pill-pop', pop);
   setTxt('hud-gen', sim.generation);
+  const maxLaps = CONFIG.generation?.maxLaps || 5;
+  const currentLap = sim.leader ? Math.min(sim.leader.laps + 1, maxLaps) : 1;
+  setTxt('hud-lap', `${currentLap}/${maxLaps}`);
   setTxt('hud-alive', sim.aliveCount);
   const curGenLap = sim.currentGenBestLap;
   setTxt('hud-best-lap', Number.isFinite(curGenLap) ? fmtTime(curGenLap) : fmtTime(sim.time));
