@@ -4634,17 +4634,18 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = -cosA;
 
+      const groundElev = this.getTerrainHeight(p1X, p1Y);
       // Distance ahead scales smoothly with gap so P1 and chasing pack are framed with comfortable clearance
       const leadDist = 32.0 + Math.min(28.0, carGap * 0.22);
       const destCamX = this._actionTargetX + cosA * leadDist + nx * 2.0;
       const destCamY = this._actionTargetY - sinA * leadDist + ny * 2.0;
       // Altitude elevates comfortably for clear broadcast sightline over P1 to chasers behind
-      const destCamZ = 5.5 + Math.min(8.0, carGap * 0.10);
+      const destCamZ = 5.5 + Math.min(8.0, carGap * 0.10) + groundElev;
 
       // Look target is anchored on P1 to guarantee P1 NEVER leaves the viewport
       const destTargetX = p1X - cosA * 2.0;
       const destTargetY = p1Y + sinA * 2.0;
-      const destTargetZ = 1.6;
+      const destTargetZ = 1.6 + groundElev;
 
       // Dynamic adaptive wide-angle FOV so both P1 and chasing P2 remain in frame
       const targetFov = Math.max(46, Math.min(68, 46 + (carGap / 60) * 16));
@@ -4705,17 +4706,18 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = -cosA;
 
+      const groundElev = this.getTerrainHeight(p1X, p1Y);
       // Position camera BEHIND trailing car looking forward towards leader P1
       const trailDist = 16.0 + Math.min(26.0, carGap * 0.25);
       const destCamX = this._actionRearTargetX - cosA * trailDist + nx * 3.5;
       const destCamY = this._actionRearTargetY + sinA * trailDist + ny * 3.5;
       // Altitude elevates to maintain clear sightline over P2 onto leader P1
-      const destCamZ = 4.2 + Math.min(11.0, carGap * 0.14);
+      const destCamZ = 4.2 + Math.min(11.0, carGap * 0.14) + groundElev;
 
       // Target centered with 65% weight on P1 to guarantee P1 stays in the viewport
       const destTargetX = p1X * 0.65 + p2X * 0.35;
       const destTargetY = p1Y * 0.65 + p2Y * 0.35;
-      const destTargetZ = 2.0;
+      const destTargetZ = 2.0 + groundElev;
 
       // Dynamic adaptive FOV zoom ensuring both cars remain framed
       const targetFov = Math.max(42, Math.min(68, 42 + (carGap / 60) * 18));
@@ -4738,7 +4740,8 @@ export class Renderer3D {
 
       const targetX = focusCar.x;
       const targetY = -focusCar.y;
-      const targetZ = 3.5;
+      const focusElev = this.getTerrainHeight(targetX, targetY);
+      const targetZ = 3.5 + focusElev;
 
       const panSpeed = 0.12;
       const dx = (targetX - this.controls.target.x) * panSpeed;
@@ -4752,7 +4755,7 @@ export class Renderer3D {
       this.camera.position.x += dx;
       this.camera.position.y += dy;
 
-      const canonicalCamZ = 95.0;
+      const canonicalCamZ = 95.0 + focusElev;
       this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.06;
 
       if (Math.abs(this.camera.fov - 45) > 0.1) {
@@ -4764,15 +4767,16 @@ export class Renderer3D {
       this.controls.autoRotate = false;
       const cosA = Math.cos(focusCar.angle);
       const sinA = Math.sin(focusCar.angle);
+      const focusElev = this.getTerrainHeight(focusCar.x, -focusCar.y);
 
       // Positioned atop the airbox roll-hoop mount with elevated forward sightline
       const destCamX = focusCar.x - cosA * 2.0;
       const destCamY = -focusCar.y + sinA * 2.0;
-      const destCamZ = 5.8;
+      const destCamZ = 5.8 + focusElev;
 
       const destTargetX = focusCar.x + cosA * 52;
       const destTargetY = -focusCar.y - sinA * 52;
-      const destTargetZ = 2.6;
+      const destTargetZ = 2.6 + focusElev;
 
       const camGlide = 0.35;
       const targetGlide = 0.35;
@@ -4831,16 +4835,17 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = -cosA;
 
+      const focusElev = this.getTerrainHeight(this._heliTargetX, this._heliTargetY);
       // Elevated aerial perspective: distance & altitude scale dynamically with P1-P2 gap
       const trailDist = 62.0 + Math.min(48.0, carGap * 0.35);
       const lateralDist = 36.0 + Math.min(22.0, carGap * 0.18);
       const destCamX = this._heliTargetX - cosA * trailDist + nx * lateralDist;
       const destCamY = this._heliTargetY + sinA * trailDist + ny * lateralDist;
-      const destCamZ = 64.0 + Math.min(50.0, carGap * 0.40);
+      const destCamZ = 64.0 + Math.min(50.0, carGap * 0.40) + focusElev;
 
       const destTargetX = this._heliTargetX;
       const destTargetY = this._heliTargetY;
-      const destTargetZ = 2.0;
+      const destTargetZ = 2.0 + focusElev;
 
       // Dynamic adaptive FOV zoom ensuring both P1 and P2 stay in the viewport
       const targetFov = Math.max(40, Math.min(62, 40 + (carGap / 70) * 16));
@@ -4945,17 +4950,18 @@ export class Renderer3D {
 
         const cosA = Math.cos(this._chaseAngle);
         const sinA = Math.sin(this._chaseAngle);
+        const focusElev = this.getTerrainHeight(this._chaseTargetX, this._chaseTargetY);
 
         const distBehind = 42.0;
         const heightAbove = 15.2;
         const destCamX = this._chaseTargetX - cosA * distBehind;
         const destCamY = this._chaseTargetY + sinA * distBehind;
-        const destCamZ = heightAbove;
+        const destCamZ = heightAbove + focusElev;
 
         const lookAhead = 16.0;
         const destTargetX = this._chaseTargetX + cosA * lookAhead;
         const destTargetY = this._chaseTargetY - sinA * lookAhead;
-        const destTargetZ = 2.8;
+        const destTargetZ = 2.8 + focusElev;
 
         const camGlide = 0.08;
         const targetGlide = 0.10;
@@ -4998,24 +5004,59 @@ export class Renderer3D {
         const targetY = -car.y;
         const targetAngle = -car.angle;
 
+        const targetZ = this.getTerrainHeight(targetX, targetY);
+
         if (typeof mesh.userData.curX !== 'number' || Math.hypot(targetX - mesh.userData.curX, targetY - mesh.userData.curY) > 60) {
           mesh.userData.curX = targetX;
           mesh.userData.curY = targetY;
+          mesh.userData.curZ = targetZ;
           mesh.userData.curAngle = targetAngle;
+          mesh.userData.curPitch = 0;
+          mesh.userData.curRoll = 0;
         } else {
           const kPos = 0.60;
           const kRot = 0.38;
           mesh.userData.curX += (targetX - mesh.userData.curX) * kPos;
           mesh.userData.curY += (targetY - mesh.userData.curY) * kPos;
+          mesh.userData.curZ += (targetZ - mesh.userData.curZ) * kPos;
 
           let diff = targetAngle - mesh.userData.curAngle;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
           mesh.userData.curAngle += diff * kRot;
+
+          // Terrain slope gradient & surface conformal rotation
+          const delta = 4.0;
+          const cx = mesh.userData.curX;
+          const cy = mesh.userData.curY;
+          const hE = this.getTerrainHeight(cx + delta, cy);
+          const hW = this.getTerrainHeight(cx - delta, cy);
+          const hN = this.getTerrainHeight(cx, cy + delta);
+          const hS = this.getTerrainHeight(cx, cy - delta);
+          const dzdx = (hE - hW) / (2 * delta);
+          const dzdy = (hN - hS) / (2 * delta);
+
+          const yaw = mesh.userData.curAngle;
+          const cosY = Math.cos(yaw);
+          const sinY = Math.sin(yaw);
+          const forwardSlope = dzdx * cosY + dzdy * sinY;
+          const lateralSlope = -dzdx * sinY + dzdy * cosY;
+
+          const targetPitch = -Math.atan(forwardSlope);
+          const targetRoll = Math.atan(lateralSlope);
+
+          if (typeof mesh.userData.curPitch !== 'number') {
+            mesh.userData.curPitch = targetPitch;
+            mesh.userData.curRoll = targetRoll;
+          } else {
+            mesh.userData.curPitch += (targetPitch - mesh.userData.curPitch) * 0.40;
+            mesh.userData.curRoll += (targetRoll - mesh.userData.curRoll) * 0.40;
+          }
         }
 
-        mesh.position.set(mesh.userData.curX, mesh.userData.curY, 0);
-        mesh.rotation.z = mesh.userData.curAngle;
+        mesh.position.set(mesh.userData.curX, mesh.userData.curY, mesh.userData.curZ);
+        mesh.rotation.order = 'ZYX';
+        mesh.rotation.set(mesh.userData.curRoll, mesh.userData.curPitch, mesh.userData.curAngle);
 
         // Selective P.x position badge: Only shown for Top 3 + 3 nearest chasers
         const rank = carRankMap.get(car);
@@ -5057,26 +5098,60 @@ export class Renderer3D {
       this.playerCar.visible = true;
       const targetX = sim.player.x;
       const targetY = -sim.player.y;
+      const targetZ = this.getTerrainHeight(targetX, targetY);
       const targetAngle = -sim.player.angle;
 
       if (typeof this.playerCar.userData.curX !== 'number' || Math.hypot(targetX - this.playerCar.userData.curX, targetY - this.playerCar.userData.curY) > 60) {
         this.playerCar.userData.curX = targetX;
         this.playerCar.userData.curY = targetY;
+        this.playerCar.userData.curZ = targetZ;
         this.playerCar.userData.curAngle = targetAngle;
+        this.playerCar.userData.curPitch = 0;
+        this.playerCar.userData.curRoll = 0;
       } else {
         const kPos = 0.65;
         const kRot = 0.42;
         this.playerCar.userData.curX += (targetX - this.playerCar.userData.curX) * kPos;
         this.playerCar.userData.curY += (targetY - this.playerCar.userData.curY) * kPos;
+        this.playerCar.userData.curZ += (targetZ - this.playerCar.userData.curZ) * kPos;
 
         let diff = targetAngle - this.playerCar.userData.curAngle;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.playerCar.userData.curAngle += diff * kRot;
+
+        // Terrain slope gradient & surface conformal rotation
+        const delta = 4.0;
+        const cx = this.playerCar.userData.curX;
+        const cy = this.playerCar.userData.curY;
+        const hE = this.getTerrainHeight(cx + delta, cy);
+        const hW = this.getTerrainHeight(cx - delta, cy);
+        const hN = this.getTerrainHeight(cx, cy + delta);
+        const hS = this.getTerrainHeight(cx, cy - delta);
+        const dzdx = (hE - hW) / (2 * delta);
+        const dzdy = (hN - hS) / (2 * delta);
+
+        const yaw = this.playerCar.userData.curAngle;
+        const cosY = Math.cos(yaw);
+        const sinY = Math.sin(yaw);
+        const forwardSlope = dzdx * cosY + dzdy * sinY;
+        const lateralSlope = -dzdx * sinY + dzdy * cosY;
+
+        const targetPitch = -Math.atan(forwardSlope);
+        const targetRoll = Math.atan(lateralSlope);
+
+        if (typeof this.playerCar.userData.curPitch !== 'number') {
+          this.playerCar.userData.curPitch = targetPitch;
+          this.playerCar.userData.curRoll = targetRoll;
+        } else {
+          this.playerCar.userData.curPitch += (targetPitch - this.playerCar.userData.curPitch) * 0.40;
+          this.playerCar.userData.curRoll += (targetRoll - this.playerCar.userData.curRoll) * 0.40;
+        }
       }
 
-      this.playerCar.position.set(this.playerCar.userData.curX, this.playerCar.userData.curY, 0);
-      this.playerCar.rotation.z = this.playerCar.userData.curAngle;
+      this.playerCar.position.set(this.playerCar.userData.curX, this.playerCar.userData.curY, this.playerCar.userData.curZ);
+      this.playerCar.rotation.order = 'ZYX';
+      this.playerCar.rotation.set(this.playerCar.userData.curRoll, this.playerCar.userData.curPitch, this.playerCar.userData.curAngle);
 
       // Update P.x position badge / ELIMINATED badge over player car
       const rank = carRankMap.get(sim.player);
@@ -5132,14 +5207,14 @@ export class Renderer3D {
     const Lmax = CONFIG.sensors.length;
     const ox = car.x;
     const oy = -car.y;
-    const oz = 4.2;
+    const oz = 4.2 + this.getTerrainHeight(ox, oy);
 
     for (let r = 0; r < RAY_ANGLES.length; r++) {
       const a = car.angle + RAY_ANGLES[r];
       const d = car.rayDist[r];
       const ex = ox + Math.cos(a) * d;
       const ey = oy - Math.sin(a) * d;
-      const ez = oz;
+      const ez = 4.2 + this.getTerrainHeight(ex, ey);
 
       const line = this.rayLines[r];
       const pos = line.geometry.attributes.position.array;
