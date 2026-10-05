@@ -527,26 +527,30 @@ export class Renderer3D {
     const nx = dx / trackWidth;
     const ny = dy / trackWidth;
 
-    // 1. High-Impact Checkered Finish Line Band DIRECTLY TOUCHING THE TARMAC (Road Surface)
+    // 1. High-Impact Checkered Finish Line Band DIRECTLY ON THE TARMAC SURFACE
     const tarmacTex = this.createTarmacCheckeredTexture();
-    const cols = 15;
-    const rows = 3;
+    const cols = 16;
+    const rows = 4;
     const sqSize = trackWidth / cols;
     const bandLength = sqSize * rows; // Perfectly square checker tiles
-    const bandWidth = trackWidth + 0.8; // Flush across entire road surface
+    const bandWidth = trackWidth + 1.2; // Flush across entire road surface
 
     const bandGeo = new THREE.PlaneGeometry(bandWidth, bandLength);
-    const bandMat = new THREE.MeshBasicMaterial({
+    const bandMat = new THREE.MeshStandardMaterial({
       map: tarmacTex,
+      roughness: 0.65,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
       depthTest: true,
     });
     const tarmacBand = new THREE.Mesh(bandGeo, bandMat);
+    tarmacBand.renderOrder = 12;
 
-    // Position directly on the tarmac surface (z = 0.02) - zero floating gap
-    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.02);
+    // Position above the tarmac surface (asphalt is at z = 0.20, band at 0.28)
+    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.28);
 
     // Orient: Plane width aligns along road width (dx, dy), length aligns along track tangent (tx, ty)
     const roadAngle = Math.atan2(dy, dx);
@@ -554,19 +558,23 @@ export class Renderer3D {
     this.decorGroup.add(tarmacBand);
 
     // 2. Thick White Start Bar across tarmac in front of starting grid
-    const barGeo = new THREE.PlaneGeometry(trackWidth + 0.8, 2.0);
-    const barMat = new THREE.MeshBasicMaterial({
+    const barGeo = new THREE.PlaneGeometry(trackWidth + 1.2, 2.2);
+    const barMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
+      roughness: 0.6,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -3,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
       depthTest: true,
     });
     const startBar = new THREE.Mesh(barGeo, barMat);
+    startBar.renderOrder = 14;
     startBar.position.set(
       (ix + ox) / 2 - tx * (bandLength + 4.0),
       (iy + oy) / 2 - ty * (bandLength + 4.0),
-      0.025
+      0.30
     );
     startBar.rotation.z = roadAngle;
     this.decorGroup.add(startBar);
@@ -643,28 +651,31 @@ export class Renderer3D {
   createTarmacCheckeredTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 120;
+    canvas.height = 128;
     const ctx = canvas.getContext('2d');
 
-    // 3 rows of 15 high-contrast checkered squares
-    const cols = 15;
-    const rows = 3;
+    // 4 rows of 16 high-contrast checkered squares
+    const cols = 16;
+    const rows = 4;
     const w = 512 / cols;
-    const h = 120 / rows;
+    const h = 128 / rows;
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#0d1117';
+        ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#111827';
         ctx.fillRect(c * w, r * h, w, h);
       }
     }
 
     // High-visibility boundary pin-stripes
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 512, 3);
-    ctx.fillRect(0, 117, 512, 3);
+    ctx.fillRect(0, 0, 512, 4);
+    ctx.fillRect(0, 124, 512, 4);
 
     const tex = new THREE.CanvasTexture(canvas);
+    tex.anisotropy = Math.min(16, this.renderer?.capabilities?.getMaxAnisotropy?.() || 8);
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
     tex.generateMipmaps = true;
     return tex;
   }
