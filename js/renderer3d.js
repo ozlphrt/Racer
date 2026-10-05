@@ -3026,6 +3026,8 @@ export class Renderer3D {
     this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
+    this._autoPreset = null;
+    this._autoNextSwitch = 0;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -3125,7 +3127,19 @@ export class Renderer3D {
 
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
-    const cameraPreset = opts.cameraPreset || 'chase';
+    let cameraPreset = opts.cameraPreset || 'chase';
+
+    if (cameraPreset === 'auto') {
+      const now = performance.now();
+      if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
+        const pool = ['chase', 'action', 'action_rear', 'onboard', 'heli', 'follow', 'broadcast'];
+        const choices = pool.filter((p) => p !== this._autoPreset);
+        this._autoPreset = choices[Math.floor(Math.random() * choices.length)] || 'chase';
+        // Random broadcast shot duration between 6.5s and 9.5s
+        this._autoNextSwitch = now + (6500 + Math.random() * 3000);
+      }
+      cameraPreset = this._autoPreset;
+    }
 
     // 2. Camera View & Preset Positioning
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {

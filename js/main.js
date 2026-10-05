@@ -674,6 +674,7 @@ function setCameraPreset(preset) {
   });
 
   const names = {
+    auto: 'Auto Director (Dynamic Broadcast Cycling)',
     chase: 'Chase Cam (Dynamic Follow)',
     action: 'Action Front (Front Duel Framing P1 & P2)',
     action_rear: 'Action Rear (Rear Battle Framing P2 & P1)',
@@ -772,6 +773,10 @@ window.addEventListener('keydown', (e) => {
       if (cameraPopover) {
         setCameraPopoverOpen(cameraPopover.hidden);
       }
+      break;
+    case 'a':
+    case '0':
+      setCameraPreset('auto');
       break;
     case '1':
       setCameraPreset('chase');
