@@ -2124,10 +2124,18 @@ export class Renderer3D {
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
+    const tx = t.tx ? t.tx[0] : 1;
+    const ty = t.ty ? -t.ty[0] : 0;
+    const nx = -ty;
+    const ny = tx;
 
     if (followMode) {
       this.controls.target.set(startX, startY, 3.5);
-      this.camera.position.set(startX - 175, startY - 155, 82);
+      // Canonical broadcast follow perspective placed behind the start grid looking down straight
+      const camX = startX - tx * 155 + nx * 55;
+      const camY = startY - ty * 155 + ny * 55;
+      const camZ = 68;
+      this.camera.position.set(camX, camY, camZ);
       this.controls.update();
       return;
     }
@@ -2167,6 +2175,13 @@ export class Renderer3D {
   }
 
   render(sim, opts, leader) {
+    if (this.lastGen !== sim.generation) {
+      this.lastGen = sim.generation;
+      if (opts.follow) {
+        this.resetCamera(true);
+      }
+    }
+
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
 

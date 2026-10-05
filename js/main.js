@@ -218,6 +218,12 @@ sim.onGeneration = () => {
   leaderboard.reset();
   eliminationModals.clear();
   chart.draw(sim.history);
+  if (state.view3d && renderer3d && state.follow) {
+    renderer3d.resetCamera(true);
+  }
+  if (renderer) {
+    renderer.cam = null;
+  }
   persistState();
 };
 
@@ -288,6 +294,12 @@ function restartCurrentGen() {
     sim.startGeneration(sim.cars.map((c) => c.brain.genome));
   } else {
     sim.startGeneration(Array.from({ length: CONFIG.ga.population }, () => NeuralNetwork.randomGenome(LAYERS)));
+  }
+  if (state.view3d && renderer3d && state.follow) {
+    renderer3d.resetCamera(true);
+  }
+  if (renderer) {
+    renderer.cam = null;
   }
   persistState();
   updateHud(sim.leader);
