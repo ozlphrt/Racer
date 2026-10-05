@@ -650,15 +650,14 @@ export class Renderer3D {
     centerDashMesh.renderOrder = 3;
     this.decorGroup.add(centerDashMesh);
 
-    // Red & White 3D Apex Kerbs with smooth tapered entry and exit
+    // Red & White 3D Apex Kerbs (FIA-standard verge-side rumble strips)
     const kerbRedGeo = new THREE.BufferGeometry();
     const kerbWhiteGeo = new THREE.BufferGeometry();
     const redVerts = [];
     const whiteVerts = [];
-    const maxKerbInset = 0.08;   // Max inward width onto tarmac
-    const maxKerbOutset = 0.04;  // Max outward width onto verge
+    const maxKerbWidth = Math.max(4.5, (t.width || 80) * 0.075); // Standard ~7.5% track width
 
-    // 1. Identify contiguous kerb zones around the track loop
+    // 1. Identify contiguous corner/apex zones along the track loop
     const isKerb = new Array(N);
     let kerbCount = 0;
     for (let k = 0; k < N; k++) {
@@ -684,7 +683,8 @@ export class Renderer3D {
             curr = (curr + 1) % N;
           }
           const L = runIndices.length;
-          const taperLen = Math.min(4, Math.max(1, Math.floor(L / 2)));
+          // Transition taper length at entry and exit (3 to 6 sample points)
+          const taperLen = Math.min(6, Math.max(2, Math.floor(L * 0.28)));
           for (let s = 0; s < L; s++) {
             let factor = 1.0;
             if (s < taperLen) {
@@ -692,8 +692,8 @@ export class Renderer3D {
             } else if (s >= L - taperLen) {
               factor = (L - 1 - s) / taperLen;
             }
-            // Smooth sine curve easing for natural organic track taper
-            taperWeight[runIndices[s]] = Math.sin(factor * Math.PI * 0.5);
+            // Smooth cosine (Hann window) S-curve taper from 0 to 1 and back to 0
+            taperWeight[runIndices[s]] = 0.5 - 0.5 * Math.cos(factor * Math.PI);
           }
         }
       }
@@ -709,32 +709,44 @@ export class Renderer3D {
       const isRed = k % 2 === 0;
       const target = isRed ? redVerts : whiteVerts;
 
-      const insetK = maxKerbInset * wK;
-      const outsetK = maxKerbOutset * wK;
-      const insetJ = maxKerbInset * wJ;
-      const outsetJ = maxKerbOutset * wJ;
+      const widthK = maxKerbWidth * wK;
+      const widthJ = maxKerbWidth * wJ;
 
-      const zOuterK = 0.025 + (0.045 - 0.025) * wK;
-      const zInnerK = 0.025 + (0.035 - 0.025) * wK;
-      const zOuterJ = 0.025 + (0.045 - 0.025) * wJ;
-      const zInnerJ = 0.025 + (0.035 - 0.025) * wJ;
+      // Realistic FIA bevel: flush with track edge at z=0.026, slightly elevated on outer verge edge
+      const zTrackK = 0.026;
+      const zVergeK = 0.026 + 0.012 * wK;
+      const zTrackJ = 0.026;
+      const zVergeJ = 0.026 + 0.012 * wJ;
 
       for (const [xs, ys] of [[t.ix, t.iy], [t.ox, t.oy]]) {
-        // Outward edge (verge side)
-        const oxK = xs[k] + (xs[k] - t.cx[k]) * outsetK;
-        const oyK = ys[k] + (ys[k] - t.cy[k]) * outsetK;
-        const oxJ = xs[j] + (xs[j] - t.cx[j]) * outsetJ;
-        const oyJ = ys[j] + (ys[j] - t.cy[j]) * outsetJ;
+        // Compute outward unit normal from track centerline towards the outer verge
+        const dxK = xs[k] - t.cx[k];
+        const dyK = -ys[k] - (-t.cy[k]);
+        const lenK = Math.hypot(dxK, dyK) || 1;
+        const nxK = dxK / lenK;
+        const nyK = dyK / lenK;
 
-        // Inward edge (tarmac side)
-        const ixK = xs[k] + (t.cx[k] - xs[k]) * insetK;
-        const iyK = ys[k] + (t.cy[k] - ys[k]) * insetK;
-        const ixJ = xs[j] + (t.cx[j] - xs[j]) * insetJ;
-        const iyJ = ys[j] + (t.cy[j] - ys[j]) * insetJ;
+        const dxJ = xs[j] - t.cx[j];
+        const dyJ = -ys[j] - (-t.cy[j]);
+        const lenJ = Math.hypot(dxJ, dyJ) || 1;
+        const nxJ = dxJ / lenJ;
+        const nyJ = dyJ / lenJ;
+
+        // 1. Track-side edge: locked flush to the tarmac boundary / white borderline
+        const trkXK = xs[k];
+        const trkYK = -ys[k];
+        const trkXJ = xs[j];
+        const trkYJ = -ys[j];
+
+        // 2. Verge-side edge: extends outward into the run-off / grass area
+        const vrgXK = xs[k] + nxK * widthK;
+        const vrgYK = -ys[k] + nyK * widthK;
+        const vrgXJ = xs[j] + nxJ * widthJ;
+        const vrgYJ = -ys[j] + nyJ * widthJ;
 
         // Quad triangles with double-sided robust winding
-        target.push(oxK, -oyK, zOuterK, ixK, -iyK, zInnerK, ixJ, -iyJ, zInnerJ);
-        target.push(oxK, -oyK, zOuterK, ixJ, -iyJ, zInnerJ, oxJ, -oyJ, zOuterJ);
+        target.push(trkXK, trkYK, zTrackK, vrgXK, vrgYK, zVergeK, vrgXJ, vrgYJ, zVergeJ);
+        target.push(trkXK, trkYK, zTrackK, vrgXJ, vrgYJ, zVergeJ, trkXJ, trkYJ, zTrackJ);
       }
     }
 
