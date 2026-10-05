@@ -474,11 +474,18 @@ export class Renderer3D {
   }
 
   createTerrainDetailMaps() {
-    if (this._terrainNormalMap && this._terrainRoughnessMap) {
-      return { normalMap: this._terrainNormalMap, roughnessMap: this._terrainRoughnessMap };
+    if (this._terrainDetailMaps) {
+      return this._terrainDetailMaps;
     }
 
     const size = 512;
+    const dCanvas = document.createElement('canvas');
+    dCanvas.width = size;
+    dCanvas.height = size;
+    const dCtx = dCanvas.getContext('2d');
+    const dImg = dCtx.createImageData(size, size);
+    const dData = dImg.data;
+
     const nCanvas = document.createElement('canvas');
     nCanvas.width = size;
     nCanvas.height = size;
@@ -496,16 +503,20 @@ export class Renderer3D {
     const heights = new Float32Array(size * size);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const nx1 = Math.sin(x * 0.08) * Math.cos(y * 0.08);
-        const nx2 = Math.sin(x * 0.22 + y * 0.15) * 0.5;
-        const nx3 = Math.cos(x * 0.65 - y * 0.45) * 0.25;
-        const nx4 = Math.sin(x * 1.4 + y * 1.2) * 0.12;
-        heights[y * size + x] = nx1 + nx2 + nx3 + nx4;
+        const n1 = Math.sin(x * 0.04 + y * 0.02) * Math.cos(x * 0.02 - y * 0.04);
+        const n2 = Math.sin(x * 0.10 - y * 0.08) * 0.5;
+        const n3 = Math.cos(x * 0.28 + y * 0.22) * 0.25;
+        const n4 = Math.sin(x * 0.70 + y * 0.60) * 0.12;
+        const n5 = Math.cos(x * 1.5 + y * 1.3) * 0.06;
+        heights[y * size + x] = (n1 + n2 + n3 + n4 + n5) * 0.5 + 0.5;
       }
     }
 
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
+        const idx = (y * size + x) * 4;
+        const h = heights[y * size + x];
+
         const x0 = (x - 1 + size) % size;
         const x1 = (x + 1) % size;
         const y0 = (y - 1 + size) % size;
@@ -516,22 +527,27 @@ export class Renderer3D {
         const hU = heights[y0 * size + x];
         const hD = heights[y1 * size + x];
 
-        const dx = (hR - hL) * 2.8;
-        const dy = (hD - hU) * 2.8;
+        const dx = (hR - hL) * 3.8;
+        const dy = (hD - hU) * 3.8;
         const dz = 1.0;
-        const len = Math.hypot(dx, dy, dz);
+        const len = Math.hypot(dx, dy, dz) || 1;
 
-        const nx = ((-dx / len) * 0.5 + 0.5) * 255;
-        const ny = ((-dy / len) * 0.5 + 0.5) * 255;
-        const nz = ((dz / len) * 0.5 + 0.5) * 255;
-
-        const idx = (y * size + x) * 4;
-        nData[idx] = nx;
-        nData[idx + 1] = ny;
-        nData[idx + 2] = nz;
+        nData[idx] = ((-dx / len) * 0.5 + 0.5) * 255;
+        nData[idx + 1] = ((-dy / len) * 0.5 + 0.5) * 255;
+        nData[idx + 2] = ((dz / len) * 0.5 + 0.5) * 255;
         nData[idx + 3] = 255;
 
-        const rough = Math.min(255, Math.max(160, Math.floor(210 + (heights[y * size + x]) * 35)));
+        const grain = Math.sin(x * 2.5 + y * 1.9) * 0.08 + Math.cos(x * 3.8 - y * 3.4) * 0.05;
+        const val = Math.max(0, Math.min(1, h + grain));
+
+        // High dynamic range ground albedo: organic grass blades, moss clumps & rich soil
+        dData[idx] = Math.floor(65 + val * 95);
+        dData[idx + 1] = Math.floor(105 + val * 110);
+        dData[idx + 2] = Math.floor(50 + val * 45);
+        dData[idx + 3] = 255;
+
+        // Roughness: 0.72 for lush grass to 0.92 for soil/stone
+        const rough = Math.floor(180 + (1 - val) * 60);
         rData[idx] = rough;
         rData[idx + 1] = rough;
         rData[idx + 2] = rough;
@@ -539,21 +555,24 @@ export class Renderer3D {
       }
     }
 
+    dCtx.putImageData(dImg, 0, 0);
     nCtx.putImageData(nImg, 0, 0);
     rCtx.putImageData(rImg, 0, 0);
 
+    const diffuseMap = new THREE.CanvasTexture(dCanvas);
+    diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
+    diffuseMap.repeat.set(220, 220);
+
     const normalMap = new THREE.CanvasTexture(nCanvas);
     normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
-    normalMap.repeat.set(160, 160);
+    normalMap.repeat.set(220, 220);
 
     const roughnessMap = new THREE.CanvasTexture(rCanvas);
     roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-    roughnessMap.repeat.set(160, 160);
+    roughnessMap.repeat.set(220, 220);
 
-    this._terrainNormalMap = normalMap;
-    this._terrainRoughnessMap = roughnessMap;
-
-    return { normalMap, roughnessMap };
+    this._terrainDetailMaps = { diffuseMap, normalMap, roughnessMap };
+    return this._terrainDetailMaps;
   }
 
   createWaterNormalMap() {
@@ -747,54 +766,60 @@ export class Renderer3D {
         }
       }
 
+      // Organic world-space color variation for macro natural mottling
+      const macroVar = Math.sin(vx * 0.0035 + vy * 0.0028) * 0.06 + Math.cos(vx * 0.007 - vy * 0.006) * 0.04;
+
       let r, g, b;
       if (nearShore) {
         // Wet golden sand & riverstone pebble shoreline
-        r = 0.52; g = 0.46; b = 0.35;
+        r = 0.58; g = 0.50; b = 0.36;
       } else if (nz < 0.76) {
         // Steep granite & slate cliff rock face
-        const rockTone = 0.28 + (1.0 - nz) * 0.15;
-        r = rockTone * 1.05;
-        g = rockTone * 1.02;
-        b = rockTone * 1.08;
+        const rockTone = 0.32 + (1.0 - nz) * 0.18 + macroVar * 0.5;
+        r = rockTone * 1.08;
+        g = rockTone * 1.04;
+        b = rockTone * 1.12;
       } else if (nz < 0.88) {
-        // Upland hillside pasture with terracotta loam
-        r = 0.28; g = 0.34; b = 0.18;
+        // Upland hillside pasture with warm terracotta loam
+        r = 0.32 + macroVar;
+        g = 0.38 + macroVar;
+        b = 0.20 + macroVar * 0.5;
       } else if (h > 240.0) {
         // High mountain frost & snow-dusted ridges
         const sNorm = Math.min(1.0, (h - 240.0) / 100.0);
-        r = 0.45 + sNorm * 0.40;
-        g = 0.48 + sNorm * 0.42;
-        b = 0.52 + sNorm * 0.42;
+        r = 0.55 + sNorm * 0.40;
+        g = 0.58 + sNorm * 0.38;
+        b = 0.62 + sNorm * 0.35;
       } else if (h > 110.0) {
         // Alpine scree & weathered rock
         const aNorm = Math.min(1.0, (h - 110.0) / 130.0);
-        r = 0.22 + aNorm * 0.22;
-        g = 0.34 + aNorm * 0.12;
-        b = 0.18 + aNorm * 0.24;
+        r = 0.26 + aNorm * 0.20 + macroVar;
+        g = 0.38 + aNorm * 0.12 + macroVar;
+        b = 0.22 + aNorm * 0.22 + macroVar;
       } else {
         // Lush lowland grass & meadows
         const hLow = Math.min(1.0, h / 110.0);
-        r = 0.15 + hLow * 0.08;
-        g = 0.30 + hLow * 0.06;
-        b = 0.13 + hLow * 0.06;
+        r = 0.18 + hLow * 0.08 + macroVar;
+        g = 0.36 + hLow * 0.06 + macroVar * 1.2;
+        b = 0.14 + hLow * 0.06 + macroVar * 0.8;
       }
 
-      colors[i * 3] = r;
-      colors[i * 3 + 1] = g;
-      colors[i * 3 + 2] = b;
+      colors[i * 3] = Math.max(0, Math.min(1, r));
+      colors[i * 3 + 1] = Math.max(0, Math.min(1, g));
+      colors[i * 3 + 2] = Math.max(0, Math.min(1, b));
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    const { normalMap, roughnessMap } = this.createTerrainDetailMaps();
+    const { diffuseMap, normalMap, roughnessMap } = this.createTerrainDetailMaps();
 
     const mat = new THREE.MeshStandardMaterial({
+      map: diffuseMap,
       vertexColors: true,
-      roughness: 0.88,
-      metalness: 0.03,
+      roughness: 0.84,
+      metalness: 0.04,
       normalMap: normalMap,
-      normalScale: new THREE.Vector2(0.55, 0.55),
+      normalScale: new THREE.Vector2(1.4, 1.4),
       roughnessMap: roughnessMap,
       flatShading: false,
     });
