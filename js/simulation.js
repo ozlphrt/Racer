@@ -151,15 +151,21 @@ export class Simulation {
           genome: Float32Array.from(genome),
           fitness: meta.fitness,
           generation: this.generation,
-          bestLap: meta.bestLap ?? (this.allTimeBest ? this.allTimeBest.bestLap : Infinity),
+          bestLap: meta.bestLap ?? Infinity,
         };
       }
-      if (meta.bestLap && Number.isFinite(meta.bestLap) && meta.bestLap > 0) {
-        this.bestLapEver = Math.min(this.bestLapEver, meta.bestLap);
-      }
+      // When explicitly importing a brain, align the best lap record with the imported brain
+      this.bestLapEver = (meta.bestLap && Number.isFinite(meta.bestLap) && meta.bestLap > 0)
+        ? meta.bestLap
+        : Infinity;
+
       const fit = meta.fitness || (this.allTimeBest ? this.allTimeBest.fitness : 100000);
-      const bestL = meta.bestLap && Number.isFinite(meta.bestLap) ? meta.bestLap : (this.bestLapEver < Infinity ? this.bestLapEver : Infinity);
+      const bestL = this.bestLapEver;
       const popSize = this.mode === 'race' ? 20 : this.config.ga.population;
+
+      // Clean up future history entries so chart starts cleanly from the imported generation
+      this.history = (this.history || []).filter((h) => h.generation < this.generation);
+
       this.history.push({
         generation: this.generation,
         best: fit,
