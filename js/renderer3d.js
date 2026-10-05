@@ -952,17 +952,17 @@ export class Renderer3D {
     startBar.rotation.z = roadAngle;
     this.decorGroup.add(startBar);
 
-    // 3. Sleek 3D Overhead Gantry Arch with 5 F1 Starting Light Pods
+    // 3. Sleek 3D Overhead Gantry Arch with 5 F1 Starting Light Pods & Double-Sided LED Scoreboard
     const gantryGroup = new THREE.Group();
-    const gantryHeight = 26;
-    const pillarRadius = 1.4;
-    const pillarClearance = 8; // Margin outside road edge
+    const gantryHeight = 18.0; // Scaled for direct forward eye-level sightline as cars pass under
+    const pillarRadius = 1.3;
+    const pillarClearance = 7.5; // Margin outside road edge
 
     const innerPillarPos = new THREE.Vector3(ix - nx * pillarClearance, iy - ny * pillarClearance, gantryHeight / 2);
     const outerPillarPos = new THREE.Vector3(ox + nx * pillarClearance, oy + ny * pillarClearance, gantryHeight / 2);
 
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
-    const beamMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.2 });
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.85, roughness: 0.25 });
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0x0b1120, metalness: 0.9, roughness: 0.2 });
 
     // Left & Right Vertical Columns
     const cylGeo = new THREE.CylinderGeometry(pillarRadius, pillarRadius, gantryHeight, 16);
@@ -980,7 +980,7 @@ export class Renderer3D {
 
     // Overhead Horizontal Crossbeam
     const spanDist = innerPillarPos.distanceTo(outerPillarPos);
-    const beamGeo = new THREE.BoxGeometry(spanDist + 4, 4.0, 3.2);
+    const beamGeo = new THREE.BoxGeometry(spanDist + 3.5, 3.8, 3.0);
     const beam = new THREE.Mesh(beamGeo, beamMat);
 
     const gantryCenter = new THREE.Vector3().addVectors(innerPillarPos, outerPillarPos).multiplyScalar(0.5);
@@ -992,74 +992,72 @@ export class Renderer3D {
     beam.castShadow = true;
     gantryGroup.add(beam);
 
-    // 5 F1 Starting Light Pods on Gantry (Red -> Green Launch sequence)
+    // 4. Large Digital Overhead Scoreboard Housing (Mounted right on the crossbeam spanning the track)
+    const plateWidth = Math.min(38.0, spanDist * 0.72);
+    const plateHeight = 6.4;
+    const plateDepth = 2.2;
+
+    const plateHousingGeo = new THREE.BoxGeometry(plateWidth, plateDepth, plateHeight);
+    const plateHousingMat = new THREE.MeshStandardMaterial({
+      color: 0x030712,
+      metalness: 0.92,
+      roughness: 0.2,
+    });
+    const plateHousing = new THREE.Mesh(plateHousingGeo, plateHousingMat);
+    plateHousing.position.copy(gantryCenter);
+    plateHousing.rotation.z = beamAngle;
+    plateHousing.castShadow = true;
+    gantryGroup.add(plateHousing);
+
+    // Carbon / Neon Trim Framing Border around the Scoreboard
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+    const topTrimGeo = new THREE.BoxGeometry(plateWidth + 0.6, plateDepth + 0.3, 0.4);
+    const topTrim = new THREE.Mesh(topTrimGeo, trimMat);
+    topTrim.position.set(0, 0, plateHeight * 0.5 + 0.2);
+    plateHousing.add(topTrim);
+    const btmTrim = new THREE.Mesh(topTrimGeo, trimMat);
+    btmTrim.position.set(0, 0, -plateHeight * 0.5 - 0.2);
+    plateHousing.add(btmTrim);
+
+    // 5 F1 Starting Light Pods mounted under the crossbeam facing incoming cars
     this.gantryLedMats = [];
     this.gantryLeds = [];
     this._lastStartLightStep = -1;
     for (let i = -2; i <= 2; i++) {
-      const housingGeo = new THREE.BoxGeometry(2.4, 1.8, 3.2);
+      const housingGeo = new THREE.BoxGeometry(2.2, 1.6, 2.6);
       const housing = new THREE.Mesh(housingGeo, beamMat);
       const offset = new THREE.Vector3(
-        Math.cos(beamAngle) * (i * 6.5),
-        Math.sin(beamAngle) * (i * 6.5),
-        -2.4
+        Math.cos(beamAngle) * (i * 5.8),
+        Math.sin(beamAngle) * (i * 5.8),
+        -plateHeight * 0.5 - 1.4
       );
       housing.position.addVectors(gantryCenter, offset);
       housing.rotation.z = beamAngle;
       gantryGroup.add(housing);
 
       // LED bulb facing incoming cars
-      const ledGeo = new THREE.SphereGeometry(0.85, 12, 12);
+      const ledGeo = new THREE.SphereGeometry(0.75, 14, 14);
       const ledMat = new THREE.MeshStandardMaterial({
         color: 0xef4444,
         emissive: 0xef4444,
-        emissiveIntensity: 3.0,
+        emissiveIntensity: 3.2,
         roughness: 0.1,
       });
       const led = new THREE.Mesh(ledGeo, ledMat);
-      led.position.addVectors(housing.position, new THREE.Vector3(-tx * 1.0, -ty * 1.0, 0));
+      led.position.addVectors(housing.position, new THREE.Vector3(-tx * 0.9, -ty * 0.9, 0));
       gantryGroup.add(led);
       this.gantryLedMats.push(ledMat);
       this.gantryLeds.push(led);
     }
 
-    // 4. Digital Remaining Laps Plate on top of Gantry Arch
-    const plateWidth = Math.min(30, spanDist * 0.45);
-    const plateHeight = 7.5;
-    const plateDepth = 2.0;
-
-    const plateHousingGeo = new THREE.BoxGeometry(plateWidth, plateDepth, plateHeight);
-    const plateHousingMat = new THREE.MeshStandardMaterial({
-      color: 0x090d16,
-      metalness: 0.85,
-      roughness: 0.25,
-    });
-    const plateHousing = new THREE.Mesh(plateHousingGeo, plateHousingMat);
-    plateHousing.position.copy(gantryCenter);
-    plateHousing.position.z += 5.2; // Positioned securely on top of crossbeam
-    plateHousing.rotation.z = beamAngle;
-    plateHousing.castShadow = true;
-    gantryGroup.add(plateHousing);
-
-    // Support Struts mounting plate to crossbeam
-    const strutMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.9, roughness: 0.2 });
-    for (const sx of [-plateWidth * 0.32, plateWidth * 0.32]) {
-      const strutGeo = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 8);
-      strutGeo.rotateX(Math.PI / 2);
-      const strut = new THREE.Mesh(strutGeo, strutMat);
-      const sOffset = new THREE.Vector3(
-        Math.cos(beamAngle) * sx,
-        Math.sin(beamAngle) * sx,
-        2.2
-      );
-      strut.position.addVectors(gantryCenter, sOffset);
-      gantryGroup.add(strut);
-    }
-
-    // Dynamic High-Res Display Canvas Texture
+    // Dynamic Ultra-Sharp Canvas Texture for Overhead Scoreboard (1024 x 320)
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 160;
+    canvas.width = 1024;
+    canvas.height = 320;
     this.lapPlateCanvas = canvas;
     this.lapPlateCtx = canvas.getContext('2d');
     this.lapPlateTexture = new THREE.CanvasTexture(canvas);
@@ -1071,32 +1069,32 @@ export class Renderer3D {
       map: this.lapPlateTexture,
       emissive: 0xffffff,
       emissiveMap: this.lapPlateTexture,
-      emissiveIntensity: 0.9,
-      roughness: 0.2,
-      metalness: 0.1,
+      emissiveIntensity: 1.4,
+      roughness: 0.15,
+      metalness: 0.05,
     });
 
     // Front Display (Facing incoming cars upstream)
-    const frontDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.8, plateHeight - 0.8);
+    const frontDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.6, plateHeight - 0.6);
     frontDisplayGeo.rotateX(Math.PI / 2);
     frontDisplayGeo.rotateY(Math.PI);
     const frontDisplay = new THREE.Mesh(frontDisplayGeo, displayMat);
     frontDisplay.position.copy(plateHousing.position);
-    frontDisplay.position.add(new THREE.Vector3(-tx * (plateDepth * 0.5 + 0.05), -ty * (plateDepth * 0.5 + 0.05), 0));
+    frontDisplay.position.add(new THREE.Vector3(-tx * (plateDepth * 0.5 + 0.06), -ty * (plateDepth * 0.5 + 0.06), 0));
     frontDisplay.rotation.z = beamAngle;
     gantryGroup.add(frontDisplay);
 
     // Back Display (Facing cars downstream)
-    const backDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.8, plateHeight - 0.8);
+    const backDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.6, plateHeight - 0.6);
     backDisplayGeo.rotateX(Math.PI / 2);
     const backDisplay = new THREE.Mesh(backDisplayGeo, displayMat);
     backDisplay.position.copy(plateHousing.position);
-    backDisplay.position.add(new THREE.Vector3(tx * (plateDepth * 0.5 + 0.05), ty * (plateDepth * 0.5 + 0.05), 0));
+    backDisplay.position.add(new THREE.Vector3(tx * (plateDepth * 0.5 + 0.06), ty * (plateDepth * 0.5 + 0.06), 0));
     backDisplay.rotation.z = beamAngle;
     gantryGroup.add(backDisplay);
 
     this._lastLapPlateKey = '';
-    this.updateLapPlateTexture('LAP 1/5', '4 LAPS REMAINING', '#38bdf8', false);
+    this.updateLapPlateTexture('4 LAPS TO GO', 'LAP 1 OF 5 · LEADER P1', '#38bdf8', false);
 
     this.decorGroup.add(gantryGroup);
   }
@@ -1118,7 +1116,7 @@ export class Renderer3D {
           activeRedCount++;
           mat.color.setHex(0xef4444);
           mat.emissive.setHex(0xef4444);
-          mat.emissiveIntensity = 3.5;
+          mat.emissiveIntensity = 3.8;
         } else {
           mat.color.setHex(0x221111);
           mat.emissive.setHex(0x000000);
@@ -1140,7 +1138,7 @@ export class Renderer3D {
         if (mat) {
           mat.color.setHex(0x22c55e);
           mat.emissive.setHex(0x22c55e);
-          mat.emissiveIntensity = 4.5;
+          mat.emissiveIntensity = 5.0;
         }
       }
     } else {
@@ -1153,7 +1151,7 @@ export class Renderer3D {
         if (mat) {
           mat.color.setHex(0x14532d);
           mat.emissive.setHex(0x16a34a);
-          mat.emissiveIntensity = 0.6;
+          mat.emissiveIntensity = 0.7;
         }
       }
     }
@@ -1162,59 +1160,69 @@ export class Renderer3D {
   updateLapPlateTexture(mainText, subText, accentColor = '#38bdf8', isFinal = false) {
     if (!this.lapPlateCtx) return;
     const ctx = this.lapPlateCtx;
-    const w = 512;
-    const h = 160;
+    const w = 1024;
+    const h = 320;
 
     ctx.clearRect(0, 0, w, h);
 
-    // Dark carbon/glass background
-    ctx.fillStyle = '#050a14';
+    // Deep high-contrast dark chassis background
+    ctx.fillStyle = '#040711';
     ctx.fillRect(0, 0, w, h);
 
-    // Outer neon border
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = accentColor;
-    ctx.strokeRect(3, 3, w - 6, h - 6);
+    // Subtle carbon grid scanline pattern
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+    for (let y = 0; y < h; y += 8) {
+      ctx.fillRect(0, y, w, 4);
+    }
 
-    // Inner glow border
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.strokeRect(9, 9, w - 18, h - 18);
+    // Outer neon glow border
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = accentColor;
+    ctx.strokeRect(5, 5, w - 10, h - 10);
+
+    // Inner bevel border
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.strokeRect(16, 16, w - 32, h - 32);
 
     if (isFinal) {
-      // Checkered pattern side accents
-      const chSize = 14;
-      for (let r = 0; r < Math.floor(h / chSize); r++) {
-        for (let c = 0; c < 3; c++) {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#0f172a';
-          ctx.fillRect(12 + c * chSize, 12 + r * chSize, chSize, chSize);
-          ctx.fillRect(w - 12 - (c + 1) * chSize, 12 + r * chSize, chSize, chSize);
+      // Checkered pattern side accents for Final Lap / Chequered Flag
+      const chSize = 24;
+      const chRows = Math.floor((h - 32) / chSize);
+      for (let r = 0; r < chRows; r++) {
+        for (let c = 0; c < 4; c++) {
+          ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#090d16';
+          ctx.fillRect(20 + c * chSize, 20 + r * chSize, chSize, chSize);
+          ctx.fillRect(w - 20 - (c + 1) * chSize, 20 + r * chSize, chSize, chSize);
         }
       }
     }
 
-    // Top Subtext / Header Tag (e.g. "4 LAPS REMAINING")
+    // Top Header Tag (e.g. "LAP 2 OF 5 · LEADER P1" or "RACE FINISHED")
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.font = '700 24px "Outfit", sans-serif';
+    ctx.font = '800 36px "Outfit", "Segoe UI", system-ui, sans-serif';
     ctx.fillStyle = accentColor;
-    ctx.fillText(subText.toUpperCase(), w / 2, 20);
+    ctx.shadowColor = accentColor;
+    ctx.shadowBlur = 10;
+    ctx.fillText(subText.toUpperCase(), w / 2, 32);
+    ctx.shadowBlur = 0;
 
-    // Divider Line
+    // Glowing Divider Line
     ctx.strokeStyle = accentColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(w * 0.2, 54);
-    ctx.lineTo(w * 0.8, 54);
+    ctx.moveTo(w * 0.16, 88);
+    ctx.lineTo(w * 0.84, 88);
     ctx.stroke();
 
-    // Main Digital Counter (e.g. "LAP 2 / 5" or "FINAL LAP")
+    // Main Digital Text (e.g. "3 LAPS TO GO", "FINAL LAP", "CHEQUERED FLAG")
     ctx.textBaseline = 'middle';
-    ctx.font = '900 68px "JetBrains Mono", "Outfit", Impact, sans-serif';
+    ctx.font = '900 112px "JetBrains Mono", "Outfit", Impact, system-ui, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = accentColor;
-    ctx.shadowBlur = 14;
-    ctx.fillText(mainText, w / 2, 106);
+    ctx.shadowBlur = 24;
+    ctx.fillText(mainText, w / 2, 196);
     ctx.shadowBlur = 0;
 
     if (this.lapPlateTexture) {
@@ -1228,39 +1236,41 @@ export class Renderer3D {
     const startDelay = CONFIG.generation?.startDelay || 2.0;
     const simTime = sim ? sim.time : startDelay;
     const maxLaps = CONFIG.generation?.maxLaps || 5;
-    const currentLeader = sim?.leader || leader;
-    const lapsDone = currentLeader ? currentLeader.laps : 0;
+    const currentLeader = (sim?.player && (sim.player.alive || sim.player.finished)) ? sim.player : (sim?.leader || leader);
+    const lapsDone = currentLeader ? (currentLeader.laps || 0) : 0;
     const currentLap = Math.min(lapsDone + 1, maxLaps);
     const lapsRemaining = Math.max(0, maxLaps - lapsDone);
     const isFinished = currentLeader ? currentLeader.finished : false;
 
-    let mainText = `LAP ${currentLap}/${maxLaps}`;
-    let subText = `${lapsRemaining} ${lapsRemaining === 1 ? 'LAP' : 'LAPS'} REMAINING`;
-    let color = '#38bdf8'; // Cyan
+    let mainText = `${lapsRemaining} ${lapsRemaining === 1 ? 'LAP' : 'LAPS'} TO GO`;
+    let subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
+    let color = '#38bdf8'; // Electric Cyan
     let isFinal = false;
 
     if (simTime < startDelay) {
-      mainText = 'READY';
-      subText = 'RED LIGHTS ON · HOLD GRID';
+      mainText = 'START COUNTDOWN';
+      subText = 'WATCH 5 RED LIGHTS · HOLD GRID';
       color = '#ef4444'; // Red
       isFinal = false;
-    } else if (simTime < startDelay + 2.5) {
+    } else if (simTime < startDelay + 2.8) {
       mainText = 'GO GO GO!';
       subText = 'GREEN LIGHTS · RACE ON';
       color = '#22c55e'; // Bright Green
       isFinal = true;
     } else if (isFinished) {
-      mainText = 'FINISH';
-      subText = 'CHEQUERED FLAG';
-      color = '#a3e635'; // Lime green
+      mainText = 'CHEQUERED FLAG';
+      subText = 'RACE FINISHED · WINNER P1';
+      color = '#a3e635'; // Neon Lime Green
       isFinal = true;
-    } else if (currentLap === maxLaps) {
-      mainText = 'FINAL LAP';
-      subText = '1 LAP REMAINING';
-      color = '#fbbf24'; // Amber / Gold
+    } else if (currentLap === maxLaps || lapsRemaining === 1) {
+      mainText = '1 LAP TO GO';
+      subText = 'FINAL LAP · LEADER ON LAST LAP';
+      color = '#fbbf24'; // Radiant Gold
       isFinal = true;
-    } else if (lapsRemaining <= 2) {
-      color = '#f472b6'; // Magenta
+    } else if (lapsRemaining === 2) {
+      mainText = '2 LAPS TO GO';
+      subText = `LAP ${currentLap} OF ${maxLaps} · RACE LEADER`;
+      color = '#f472b6'; // Hot Pink / Magenta
     }
 
     const stateKey = `${mainText}|${subText}|${color}|${isFinal}`;
