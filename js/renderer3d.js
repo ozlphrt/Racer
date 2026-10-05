@@ -4335,14 +4335,45 @@ export class Renderer3D {
     if (cameraPreset === 'auto') {
       const now = performance.now();
       if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
-        const pool = ['chase', 'action', 'action_rear', 'onboard', 'heli', 'follow', 'broadcast'];
-        const choices = pool.filter((p) => p !== this._autoPreset);
-        this._autoPreset = choices[Math.floor(Math.random() * choices.length)] || 'chase';
-        // T-Cam (onboard) is a fast action cut: keep it short & punchy (2.2s - 3.2s) to prevent viewer fatigue
-        // Other cinematic broadcast angles stay for 6.5s - 9.5s
-        const duration = this._autoPreset === 'onboard'
-          ? (2200 + Math.random() * 1000)
-          : (6500 + Math.random() * 3000);
+        // Weighted preset pool:
+        // Prioritized: 8 (orbit), 7 (broadcast), 6 (heli), 3 (action_rear)
+        // Standard: 1 (chase), 2 (action), 5 (follow)
+        // Deprioritized: 4 (onboard)
+        const weightedPool = [
+          { preset: 'orbit', weight: 26 },       // Camera 8 (Free Orbit) - Prioritized
+          { preset: 'broadcast', weight: 24 },   // Camera 7 (TV Gantry) - Prioritized
+          { preset: 'heli', weight: 26 },        // Camera 6 (Helicopter) - Prioritized
+          { preset: 'action_rear', weight: 26 }, // Camera 3 (Action Rear) - Prioritized
+          { preset: 'chase', weight: 10 },       // Camera 1 (Chase Cam) - Standard
+          { preset: 'action', weight: 10 },      // Camera 2 (Action Front) - Standard
+          { preset: 'follow', weight: 10 },      // Camera 5 (Broadcast Follow) - Standard
+          { preset: 'onboard', weight: 3 },      // Camera 4 (Onboard T-Cam) - Deprioritized
+        ];
+
+        const eligible = weightedPool.filter((item) => item.preset !== this._autoPreset);
+        const totalWeight = eligible.reduce((sum, item) => sum + item.weight, 0);
+        let rnd = Math.random() * totalWeight;
+        let chosen = eligible[0]?.preset || 'orbit';
+        for (const item of eligible) {
+          if (rnd < item.weight) {
+            chosen = item.preset;
+            break;
+          }
+          rnd -= item.weight;
+        }
+        this._autoPreset = chosen;
+
+        // Dynamic shot duration per camera archetype
+        let duration;
+        if (this._autoPreset === 'onboard') {
+          duration = 1800 + Math.random() * 1000; // 1.8s - 2.8s (brief action cut)
+        } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
+          duration = 7500 + Math.random() * 3500; // 7.5s - 11.0s (grand sweeping panoramic)
+        } else if (this._autoPreset === 'action_rear' || this._autoPreset === 'broadcast') {
+          duration = 6500 + Math.random() * 3000; // 6.5s - 9.5s (intense battle & gantry)
+        } else {
+          duration = 5000 + Math.random() * 2500; // 5.0s - 7.5s (standard follow/action)
+        }
         this._autoNextSwitch = now + duration;
       }
       cameraPreset = this._autoPreset;
@@ -4353,6 +4384,14 @@ export class Renderer3D {
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {
       this.controls.autoRotate = true;
       this.controls.autoRotateSpeed = 0.55;
+      if (this.isAutoDirector && focusCar) {
+        const targetX = focusCar.x;
+        const targetY = -focusCar.y;
+        const targetZ = 3.0;
+        this.controls.target.x += (targetX - this.controls.target.x) * 0.05;
+        this.controls.target.y += (targetY - this.controls.target.y) * 0.05;
+        this.controls.target.z += (targetZ - this.controls.target.z) * 0.05;
+      }
       if (Math.abs(this.camera.fov - 42) > 0.1) {
         this.camera.fov += (42 - this.camera.fov) * 0.08;
         this.camera.updateProjectionMatrix();
