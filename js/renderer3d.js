@@ -954,18 +954,24 @@ export class Renderer3D {
 
     // 3. Sleek 3D Overhead Gantry Arch with 5 F1 Starting Light Pods & Double-Sided LED Scoreboard
     const gantryGroup = new THREE.Group();
-    const gantryHeight = 18.0; // Scaled for direct forward eye-level sightline as cars pass under
+    const gantryHeight = 17.5; // Clear center eye-level height for the scoreboard display
+    const plateWidth = Math.min(38.0, spanDist * 0.72);
+    const plateHeight = 6.2;
+    const plateDepth = 1.8;
+
+    const topBeamZ = gantryHeight + plateHeight * 0.5 + 1.4; // Top structural crossbeam sits cleanly above the display
+    const totalColHeight = topBeamZ + 1.0;
     const pillarRadius = 1.3;
     const pillarClearance = 7.5; // Margin outside road edge
 
-    const innerPillarPos = new THREE.Vector3(ix - nx * pillarClearance, iy - ny * pillarClearance, gantryHeight / 2);
-    const outerPillarPos = new THREE.Vector3(ox + nx * pillarClearance, oy + ny * pillarClearance, gantryHeight / 2);
+    const innerPillarPos = new THREE.Vector3(ix - nx * pillarClearance, iy - ny * pillarClearance, totalColHeight / 2);
+    const outerPillarPos = new THREE.Vector3(ox + nx * pillarClearance, oy + ny * pillarClearance, totalColHeight / 2);
 
     const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.85, roughness: 0.25 });
     const beamMat = new THREE.MeshStandardMaterial({ color: 0x0b1120, metalness: 0.9, roughness: 0.2 });
 
-    // Left & Right Vertical Columns
-    const cylGeo = new THREE.CylinderGeometry(pillarRadius, pillarRadius, gantryHeight, 16);
+    // Left & Right Vertical Columns extending to topBeamZ
+    const cylGeo = new THREE.CylinderGeometry(pillarRadius, pillarRadius, totalColHeight, 16);
     cylGeo.rotateX(Math.PI / 2);
 
     const innerCol = new THREE.Mesh(cylGeo, pillarMat);
@@ -978,24 +984,23 @@ export class Renderer3D {
     outerCol.castShadow = true;
     gantryGroup.add(outerCol);
 
-    // Overhead Horizontal Crossbeam
-    const spanDist = innerPillarPos.distanceTo(outerPillarPos);
-    const beamGeo = new THREE.BoxGeometry(spanDist + 3.5, 3.8, 3.0);
+    // Overhead Structural Top Crossbeam (Positioned ABOVE the scoreboard, connecting the pillars)
+    const beamGeo = new THREE.BoxGeometry(spanDist + 3.0, 2.0, 1.8);
     const beam = new THREE.Mesh(beamGeo, beamMat);
 
     const gantryCenter = new THREE.Vector3().addVectors(innerPillarPos, outerPillarPos).multiplyScalar(0.5);
-    gantryCenter.z = gantryHeight;
-    beam.position.copy(gantryCenter);
+    const topBeamPos = gantryCenter.clone();
+    topBeamPos.z = topBeamZ;
+    beam.position.copy(topBeamPos);
 
     const beamAngle = Math.atan2(outerPillarPos.y - innerPillarPos.y, outerPillarPos.x - innerPillarPos.x);
     beam.rotation.z = beamAngle;
     beam.castShadow = true;
     gantryGroup.add(beam);
 
-    // 4. Large Digital Overhead Scoreboard Housing (Mounted right on the crossbeam spanning the track)
-    const plateWidth = Math.min(38.0, spanDist * 0.72);
-    const plateHeight = 6.4;
-    const plateDepth = 2.2;
+    // 4. Large Digital Overhead Scoreboard Housing (Suspended cleanly below the top beam at eye level)
+    const scoreboardCenter = gantryCenter.clone();
+    scoreboardCenter.z = gantryHeight;
 
     const plateHousingGeo = new THREE.BoxGeometry(plateWidth, plateDepth, plateHeight);
     const plateHousingMat = new THREE.MeshStandardMaterial({
@@ -1004,10 +1009,26 @@ export class Renderer3D {
       roughness: 0.2,
     });
     const plateHousing = new THREE.Mesh(plateHousingGeo, plateHousingMat);
-    plateHousing.position.copy(gantryCenter);
+    plateHousing.position.copy(scoreboardCenter);
     plateHousing.rotation.z = beamAngle;
     plateHousing.castShadow = true;
     gantryGroup.add(plateHousing);
+
+    // Steel Support Struts mounting Scoreboard to Top Crossbeam
+    const strutMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.9, roughness: 0.2 });
+    const strutH = topBeamZ - (gantryHeight + plateHeight * 0.5);
+    for (const sx of [-plateWidth * 0.35, -plateWidth * 0.12, plateWidth * 0.12, plateWidth * 0.35]) {
+      const strutGeo = new THREE.CylinderGeometry(0.3, 0.3, strutH + 0.4, 8);
+      strutGeo.rotateX(Math.PI / 2);
+      const strut = new THREE.Mesh(strutGeo, strutMat);
+      const sOffset = new THREE.Vector3(
+        Math.cos(beamAngle) * sx,
+        Math.sin(beamAngle) * sx,
+        (gantryHeight + plateHeight * 0.5) + strutH * 0.5 - scoreboardCenter.z
+      );
+      strut.position.addVectors(scoreboardCenter, sOffset);
+      gantryGroup.add(strut);
+    }
 
     // Carbon / Neon Trim Framing Border around the Scoreboard
     const trimMat = new THREE.MeshStandardMaterial({
@@ -1015,27 +1036,27 @@ export class Renderer3D {
       metalness: 0.8,
       roughness: 0.3,
     });
-    const topTrimGeo = new THREE.BoxGeometry(plateWidth + 0.6, plateDepth + 0.3, 0.4);
+    const topTrimGeo = new THREE.BoxGeometry(plateWidth + 0.6, plateDepth + 0.2, 0.35);
     const topTrim = new THREE.Mesh(topTrimGeo, trimMat);
-    topTrim.position.set(0, 0, plateHeight * 0.5 + 0.2);
+    topTrim.position.set(0, 0, plateHeight * 0.5 + 0.18);
     plateHousing.add(topTrim);
     const btmTrim = new THREE.Mesh(topTrimGeo, trimMat);
-    btmTrim.position.set(0, 0, -plateHeight * 0.5 - 0.2);
+    btmTrim.position.set(0, 0, -plateHeight * 0.5 - 0.18);
     plateHousing.add(btmTrim);
 
-    // 5 F1 Starting Light Pods mounted under the crossbeam facing incoming cars
+    // 5 F1 Starting Light Pods mounted under the scoreboard facing incoming cars
     this.gantryLedMats = [];
     this.gantryLeds = [];
     this._lastStartLightStep = -1;
     for (let i = -2; i <= 2; i++) {
-      const housingGeo = new THREE.BoxGeometry(2.2, 1.6, 2.6);
+      const housingGeo = new THREE.BoxGeometry(2.2, 1.4, 2.2);
       const housing = new THREE.Mesh(housingGeo, beamMat);
       const offset = new THREE.Vector3(
         Math.cos(beamAngle) * (i * 5.8),
         Math.sin(beamAngle) * (i * 5.8),
-        -plateHeight * 0.5 - 1.4
+        -plateHeight * 0.5 - 1.2
       );
-      housing.position.addVectors(gantryCenter, offset);
+      housing.position.addVectors(scoreboardCenter, offset);
       housing.rotation.z = beamAngle;
       gantryGroup.add(housing);
 
@@ -1048,7 +1069,7 @@ export class Renderer3D {
         roughness: 0.1,
       });
       const led = new THREE.Mesh(ledGeo, ledMat);
-      led.position.addVectors(housing.position, new THREE.Vector3(-tx * 0.9, -ty * 0.9, 0));
+      led.position.addVectors(housing.position, new THREE.Vector3(-tx * 0.8, -ty * 0.8, 0));
       gantryGroup.add(led);
       this.gantryLedMats.push(ledMat);
       this.gantryLeds.push(led);
@@ -1079,7 +1100,7 @@ export class Renderer3D {
     frontDisplayGeo.rotateX(Math.PI / 2);
     frontDisplayGeo.rotateY(Math.PI);
     const frontDisplay = new THREE.Mesh(frontDisplayGeo, displayMat);
-    frontDisplay.position.copy(plateHousing.position);
+    frontDisplay.position.copy(scoreboardCenter);
     frontDisplay.position.add(new THREE.Vector3(-tx * (plateDepth * 0.5 + 0.06), -ty * (plateDepth * 0.5 + 0.06), 0));
     frontDisplay.rotation.z = beamAngle;
     gantryGroup.add(frontDisplay);
@@ -1088,7 +1109,7 @@ export class Renderer3D {
     const backDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.6, plateHeight - 0.6);
     backDisplayGeo.rotateX(Math.PI / 2);
     const backDisplay = new THREE.Mesh(backDisplayGeo, displayMat);
-    backDisplay.position.copy(plateHousing.position);
+    backDisplay.position.copy(scoreboardCenter);
     backDisplay.position.add(new THREE.Vector3(tx * (plateDepth * 0.5 + 0.06), ty * (plateDepth * 0.5 + 0.06), 0));
     backDisplay.rotation.z = beamAngle;
     gantryGroup.add(backDisplay);
