@@ -557,7 +557,7 @@ export class Renderer3D {
     const kerbWhiteGeo = new THREE.BufferGeometry();
     const redVerts = [];
     const whiteVerts = [];
-    const inset = 0.08;
+    const inset = 0.09;
 
     for (let k = 0; k < N; k++) {
       if (Math.abs(t.curvature[k]) < 1 / 160) continue;
@@ -571,20 +571,49 @@ export class Renderer3D {
         const bx = xs[j] + (t.cx[j] - xs[j]) * inset;
         const by = ys[j] + (t.cy[j] - ys[j]) * inset;
 
-        target.push(xs[k], -ys[k], 0.03, ax, -ay, 0.03, bx, -by, 0.03);
-        target.push(xs[k], -ys[k], 0.03, bx, -by, 0.03, xs[j], -ys[j], 0.03);
+        const zOuter = 0.045;
+        const zInner = 0.035;
+
+        // Quad triangles with double-sided robust winding
+        target.push(xs[k], -ys[k], zOuter, ax, -ay, zInner, bx, -by, zInner);
+        target.push(xs[k], -ys[k], zOuter, bx, -by, zInner, xs[j], -ys[j], zOuter);
       }
     }
+
+    const kerbRedMat = new THREE.MeshStandardMaterial({
+      color: C.kerbRed,
+      roughness: 0.55,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
+      depthTest: true,
+    });
+    const kerbWhiteMat = new THREE.MeshStandardMaterial({
+      color: C.kerbWhite,
+      roughness: 0.55,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
+      depthTest: true,
+    });
 
     if (redVerts.length) {
       kerbRedGeo.setAttribute('position', new THREE.Float32BufferAttribute(redVerts, 3));
       kerbRedGeo.computeVertexNormals();
-      this.decorGroup.add(new THREE.Mesh(kerbRedGeo, new THREE.MeshStandardMaterial({ color: C.kerbRed, roughness: 0.6 })));
+      const redKerbMesh = new THREE.Mesh(kerbRedGeo, kerbRedMat);
+      redKerbMesh.renderOrder = 8;
+      this.decorGroup.add(redKerbMesh);
     }
     if (whiteVerts.length) {
       kerbWhiteGeo.setAttribute('position', new THREE.Float32BufferAttribute(whiteVerts, 3));
       kerbWhiteGeo.computeVertexNormals();
-      this.decorGroup.add(new THREE.Mesh(kerbWhiteGeo, new THREE.MeshStandardMaterial({ color: C.kerbWhite, roughness: 0.6 })));
+      const whiteKerbMesh = new THREE.Mesh(kerbWhiteGeo, kerbWhiteMat);
+      whiteKerbMesh.renderOrder = 8;
+      this.decorGroup.add(whiteKerbMesh);
     }
 
     // Checkered Start / Finish Line & Overhead Racing Gantry Arch
