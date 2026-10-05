@@ -908,17 +908,9 @@ h1 {
   padding: 1px 2px 0;
 }
 
-/* Steering Wheel Section */
-.cockpit-steer-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5px;
-}
-
 .wheel-wrapper {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -930,15 +922,6 @@ h1 {
   height: 100%;
   transform-origin: 50% 50%;
   will-change: transform;
-}
-
-.cockpit-steer-val {
-  font-family: var(--mono);
-  font-size: 8.5px;
-  font-weight: 700;
-  color: #a78bfa;
-  text-align: center;
-  line-height: 1;
 }
 
 /* Pedals Section */

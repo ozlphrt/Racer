@@ -1043,7 +1043,6 @@ let smoothSteer = 0;
 let smoothBrake = 0;
 let smoothGas = 0;
 const elCockpitWheel = $('cockpit-wheel');
-const elCockpitSteerVal = $('cockpit-steer-val');
 const elPedalBrakeFill = $('pedal-brake-fill');
 const elPedalGasFill = $('pedal-gas-fill');
 
@@ -1065,9 +1064,6 @@ function updateCockpitAnimation() {
   if (elCockpitWheel) {
     elCockpitWheel.style.transform = `rotate(${steerDeg.toFixed(1)}deg)`;
   }
-  const absDeg = Math.abs(steerDeg);
-  const steerText = absDeg < 0.5 ? '0°' : steerDeg > 0 ? `R ${absDeg.toFixed(0)}°` : `L ${absDeg.toFixed(0)}°`;
-  if (elCockpitSteerVal) elCockpitSteerVal.textContent = steerText;
 
   if (elPedalBrakeFill) elPedalBrakeFill.style.height = `${(smoothBrake * 100).toFixed(1)}%`;
   if (elPedalGasFill) elPedalGasFill.style.height = `${(smoothGas * 100).toFixed(1)}%`;
