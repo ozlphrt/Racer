@@ -3174,25 +3174,25 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = -cosA;
 
-      // Distance ahead scales moderately with gap so P1 is prominently framed
-      const leadDist = 16.0 + Math.min(22.0, carGap * 0.18);
-      const destCamX = this._actionTargetX + cosA * leadDist + nx * 1.5;
-      const destCamY = this._actionTargetY - sinA * leadDist + ny * 1.5;
-      // Altitude elevates slightly with gap for clear line-of-sight to P2 behind
-      const destCamZ = 3.0 + Math.min(6.5, carGap * 0.08);
+      // Distance ahead scales smoothly with gap so P1 and chasing pack are framed with comfortable clearance
+      const leadDist = 32.0 + Math.min(28.0, carGap * 0.22);
+      const destCamX = this._actionTargetX + cosA * leadDist + nx * 2.0;
+      const destCamY = this._actionTargetY - sinA * leadDist + ny * 2.0;
+      // Altitude elevates comfortably for clear broadcast sightline over P1 to chasers behind
+      const destCamZ = 5.5 + Math.min(8.0, carGap * 0.10);
 
-      // Look target is anchored directly on P1 to guarantee P1 NEVER leaves the viewport
-      const destTargetX = p1X;
-      const destTargetY = p1Y;
+      // Look target is anchored on P1 to guarantee P1 NEVER leaves the viewport
+      const destTargetX = p1X - cosA * 2.0;
+      const destTargetY = p1Y + sinA * 2.0;
       const destTargetZ = 1.6;
 
       // Dynamic adaptive wide-angle FOV so both P1 and chasing P2 remain in frame
-      const targetFov = Math.max(50, Math.min(76, 48 + (carGap / 50) * 22));
-      this.camera.fov += (targetFov - this.camera.fov) * 0.12;
+      const targetFov = Math.max(46, Math.min(68, 46 + (carGap / 60) * 16));
+      this.camera.fov += (targetFov - this.camera.fov) * 0.10;
       this.camera.updateProjectionMatrix();
 
-      const camGlide = 0.22;
-      const targetGlide = 0.35; // Instant target lock on P1
+      const camGlide = 0.18;
+      const targetGlide = 0.30; // Responsive target lock on P1
 
       this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
       this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
