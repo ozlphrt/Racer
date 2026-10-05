@@ -568,10 +568,11 @@ export class Renderer3D {
         const grain = g1 + g2;
         const val = Math.max(0, Math.min(1, h + grain));
 
-        // Natural earthy ground albedo that blends with vertex colors
-        dData[idx] = Math.floor(75 + val * 80);
-        dData[idx + 1] = Math.floor(105 + val * 90);
-        dData[idx + 2] = Math.floor(58 + val * 40);
+        // Neutral earthy ground albedo micro-texture (modulates vertex colors cleanly without tint shifting)
+        const lum = Math.floor(128 + (val - 0.5) * 55);
+        dData[idx] = Math.min(255, Math.max(0, lum + 2));
+        dData[idx + 1] = Math.min(255, Math.max(0, lum));
+        dData[idx + 2] = Math.min(255, Math.max(0, lum - 3));
         dData[idx + 3] = 255;
 
         // Roughness: 0.74 to 0.92
@@ -812,83 +813,76 @@ export class Renderer3D {
         }
       }
 
-      // Multi-frequency 2D procedural biome & patch noise to break altitude banding
-      const bNoise1 = Math.sin(vx * 0.0022 + vy * 0.0017) * 0.6 + Math.cos(vx * 0.0019 - vy * 0.0025) * 0.4;
-      const bNoise2 = Math.sin(vx * 0.0063 - vy * 0.0051 + 1.2) * 0.35 + Math.cos(vx * 0.0048 + vy * 0.0071) * 0.25;
-      const biomeVal = bNoise1 * 0.65 + bNoise2 * 0.35; // Macro biome distribution (-1 to +1)
+      // Multi-octave continuous 2D procedural noise for natural desaturated biomes & micro-mottling
+      const n1 = Math.sin(vx * 0.0018 + vy * 0.0014) * 0.5 + Math.cos(vx * 0.0013 - vy * 0.0020) * 0.5;
+      const n2 = Math.sin(vx * 0.0055 - vy * 0.0042 + 1.2) * 0.35 + Math.cos(vx * 0.0038 + vy * 0.0061) * 0.25;
+      const n3 = Math.sin(vx * 0.016 + vy * 0.013) * 0.15 + Math.cos(vx * 0.024 - vy * 0.019) * 0.10;
+      const nMicro = Math.sin(vx * 0.065 - vy * 0.052) * 0.04 + Math.cos(vx * 0.088 + vy * 0.076) * 0.03;
 
-      // Micro/medium soil & ground mottling
-      const patchVal = Math.sin(vx * 0.015 + vy * 0.012) * 0.05 + Math.cos(vx * 0.028 - vy * 0.024) * 0.035;
+      const macroBiome = n1 * 0.60 + n2 * 0.40; // Macro biome distribution (-1 to +1)
+      const mesoPatch = n2 * 0.50 + n3 * 0.50;  // Medium soil/grass patches (-0.5 to +0.5)
+      const microGrain = nMicro;                 // High-frequency ground grain (-0.07 to +0.07)
 
       let r, g, b;
       if (nearShore) {
-        // Wet golden sand & riverstone pebble shoreline with local variations
-        const sandVar = patchVal * 1.5;
-        r = 0.58 + sandVar;
-        g = 0.50 + sandVar * 0.8;
-        b = 0.36 + sandVar * 0.5;
+        // Wet riverstone sand & gravel shore
+        r = 0.48 + mesoPatch * 0.10 + microGrain;
+        g = 0.44 + mesoPatch * 0.08 + microGrain;
+        b = 0.35 + mesoPatch * 0.06 + microGrain;
       } else if (nz < 0.74) {
-        // Steep granite & slate cliff rock face (faceted with local mineral grain)
-        const rockTone = 0.30 + (1.0 - nz) * 0.20 + biomeVal * 0.06 + patchVal * 0.8;
-        r = rockTone * 1.06;
-        g = rockTone * 1.02;
-        b = rockTone * 1.10;
+        // Steep granite & slate cliff face (faceted mineral rock)
+        const rockTone = 0.31 + (1.0 - nz) * 0.16 + macroBiome * 0.04 + microGrain;
+        r = rockTone * 1.04;
+        g = rockTone * 1.00;
+        b = rockTone * 1.08;
       } else if (nz < 0.86) {
         // Transitional rocky hillsides and upland slopes
-        if (biomeVal > 0.15) {
-          // Lush mossy rock hillside
-          r = 0.25 + biomeVal * 0.06 + patchVal;
-          g = 0.36 + biomeVal * 0.08 + patchVal;
-          b = 0.18 + patchVal * 0.6;
+        if (macroBiome > 0.1) {
+          // Mossy hill slope
+          r = 0.25 + macroBiome * 0.04 + mesoPatch * 0.06 + microGrain;
+          g = 0.33 + macroBiome * 0.04 + mesoPatch * 0.06 + microGrain;
+          b = 0.21 + mesoPatch * 0.04 + microGrain;
         } else {
-          // Terracotta clay & weathered scree slope
-          r = 0.35 - biomeVal * 0.08 + patchVal * 1.2;
-          g = 0.33 - biomeVal * 0.06 + patchVal;
-          b = 0.22 - biomeVal * 0.04 + patchVal * 0.5;
+          // Earthy scree & clay slope
+          r = 0.33 - macroBiome * 0.05 + mesoPatch * 0.08 + microGrain;
+          g = 0.32 - macroBiome * 0.04 + mesoPatch * 0.06 + microGrain;
+          b = 0.24 - macroBiome * 0.03 + mesoPatch * 0.04 + microGrain;
         }
       } else if (h > 240.0) {
         // High mountain frost & snow-dusted ridges
         const sNorm = Math.min(1.0, (h - 240.0) / 100.0);
-        r = 0.55 + sNorm * 0.40 + biomeVal * 0.04;
-        g = 0.58 + sNorm * 0.38 + biomeVal * 0.04;
-        b = 0.62 + sNorm * 0.35 + biomeVal * 0.03;
+        r = 0.52 + sNorm * 0.38 + macroBiome * 0.03;
+        g = 0.54 + sNorm * 0.36 + macroBiome * 0.03;
+        b = 0.58 + sNorm * 0.34 + macroBiome * 0.02;
       } else if (h > 120.0) {
-        // Alpine scree & highland vegetation with biome variety
+        // Alpine moorland / steppe
         const aNorm = Math.min(1.0, (h - 120.0) / 120.0);
-        if (biomeVal > 0.2) {
-          // Highland moorland / heather
-          r = 0.28 + aNorm * 0.16 + patchVal;
-          g = 0.36 + aNorm * 0.10 + patchVal;
-          b = 0.24 + aNorm * 0.18 + patchVal;
-        } else {
-          // Highland weathered rock & dry steppe
-          r = 0.32 + aNorm * 0.18 + patchVal;
-          g = 0.34 + aNorm * 0.12 + patchVal;
-          b = 0.26 + aNorm * 0.14 + patchVal;
-        }
+        r = 0.30 + aNorm * 0.14 + mesoPatch * 0.08 + microGrain;
+        g = 0.33 + aNorm * 0.08 + mesoPatch * 0.06 + microGrain;
+        b = 0.25 + aNorm * 0.12 + mesoPatch * 0.06 + microGrain;
       } else {
-        // Lowland & rolling hills: Diverse Biomes across the landscape
+        // Lowland & Rolling Pasture: Natural, desaturated organic landscape
         const hLow = Math.min(1.0, h / 120.0);
-        if (biomeVal > 0.18) {
-          // Biome A: Deep Lush Emerald & Clover field
-          r = 0.13 + hLow * 0.06 + patchVal * 0.8;
-          g = 0.38 + hLow * 0.06 + patchVal * 1.1;
-          b = 0.13 + hLow * 0.05 + patchVal * 0.6;
-        } else if (biomeVal < -0.18) {
-          // Biome B: Golden Prairie / Amber Savanna Meadow
-          r = 0.31 + hLow * 0.07 + patchVal * 1.2;
-          g = 0.36 + hLow * 0.05 + patchVal * 0.9;
-          b = 0.16 + hLow * 0.04 + patchVal * 0.5;
-        } else if (patchVal > 0.022) {
-          // Biome C: Rich Terracotta Loam / Earthy clearing
-          r = 0.28 + hLow * 0.06 + patchVal * 1.4;
-          g = 0.32 + hLow * 0.05 + patchVal * 1.0;
-          b = 0.17 + hLow * 0.04 + patchVal * 0.6;
+        if (macroBiome > 0.25) {
+          // Biome A: Deep Clover & Dense Forest Turf
+          r = 0.21 + hLow * 0.04 + mesoPatch * 0.05 + microGrain;
+          g = 0.32 + hLow * 0.04 + mesoPatch * 0.06 + microGrain;
+          b = 0.19 + hLow * 0.03 + mesoPatch * 0.04 + microGrain;
+        } else if (macroBiome < -0.22) {
+          // Biome B: Sun-bleached Golden Prairie / Dry Straw Turf
+          r = 0.34 + hLow * 0.05 + mesoPatch * 0.07 + microGrain;
+          g = 0.35 + hLow * 0.04 + mesoPatch * 0.05 + microGrain;
+          b = 0.23 + hLow * 0.03 + mesoPatch * 0.04 + microGrain;
+        } else if (mesoPatch > 0.06) {
+          // Biome C: Warm Ochre Loam / Earthy Clearing
+          r = 0.31 + hLow * 0.04 + mesoPatch * 0.08 + microGrain;
+          g = 0.31 + hLow * 0.03 + mesoPatch * 0.06 + microGrain;
+          b = 0.22 + hLow * 0.03 + mesoPatch * 0.04 + microGrain;
         } else {
-          // Biome D: Temperate Pasture & Green Valley
-          r = 0.19 + hLow * 0.07 + patchVal;
-          g = 0.35 + hLow * 0.06 + patchVal * 1.2;
-          b = 0.16 + hLow * 0.05 + patchVal * 0.7;
+          // Biome D: Natural Temperate Meadow Grass
+          r = 0.25 + hLow * 0.05 + mesoPatch * 0.06 + microGrain;
+          g = 0.33 + hLow * 0.04 + mesoPatch * 0.07 + microGrain;
+          b = 0.21 + hLow * 0.03 + mesoPatch * 0.05 + microGrain;
         }
       }
 
@@ -3286,6 +3280,12 @@ export class Renderer3D {
     this.rockGroup = new THREE.Group();
     const t = this.track;
     const b = t.bounds;
+    const cxArr = t.cx || [];
+    const cyArr = t.cy || [];
+    const txArr = t.tx || [];
+    const tyArr = t.ty || [];
+    const numTrackPts = cxArr.length;
+    const roadHalf = (t.width || 84) * 0.5;
 
     // Deterministic PRNG seeded with track bounds
     let s = (Math.round(b.minX * 7 + b.minY * 11 + b.w * 31 + b.h * 47) & 0x7fffffff) || 849201;
@@ -3294,43 +3294,62 @@ export class Renderer3D {
       return s / 4294967296;
     };
 
-    const pad = Math.max(1200, Math.max(b.w, b.h) * 0.75);
+    const pad = Math.max(900, Math.max(b.w, b.h) * 0.65);
     const minX = b.minX - pad;
     const maxX = b.maxX + pad;
     const minY = b.minY - pad;
     const maxY = b.maxY + pad;
 
-    // 1. Rock outcrops & craggy clusters
-    const numClusters = 22 + Math.floor(rand() * 10);
-    const clusterCenters = [];
-    for (let c = 0; c < numClusters; c++) {
-      const rockType = Math.floor(rand() * 3); // 0: Slate/Granite, 1: Sandstone/Limestone, 2: Mossy Basalt
-      clusterCenters.push({
-        cx: minX + rand() * (maxX - minX),
-        cy: minY + rand() * (maxY - minY),
-        radius: 40 + rand() * 90,
-        count: 5 + Math.floor(rand() * 8),
-        rockType,
-      });
+    const candidates = [];
+
+    // 1. Roadside & Corner Verge Boulders (Directly lining the race track corridor outside the asphalt)
+    if (numTrackPts > 0) {
+      for (let i = 0; i < numTrackPts; i += 2) {
+        const ptX = cxArr[i];
+        const ptY = cyArr[i];
+        const tX = txArr[i];
+        const tY = tyArr[i];
+        const nx = -tY;
+        const ny = tX;
+
+        for (const side of [-1, 1]) {
+          if (rand() < 0.72) {
+            const count = 1 + Math.floor(rand() * 4);
+            const rockType = Math.floor(rand() * 3);
+            for (let k = 0; k < count; k++) {
+              const lateralDist = side * (roadHalf + 7.5 + rand() * 52.0);
+              const longDist = (rand() - 0.5) * 26.0;
+              candidates.push({
+                x: ptX + nx * lateralDist + tX * longDist,
+                y: ptY + ny * lateralDist + tY * longDist,
+                rockType,
+              });
+            }
+          }
+        }
+      }
     }
 
-    const candidates = [];
-    for (const cl of clusterCenters) {
-      for (let i = 0; i < cl.count; i++) {
+    // 2. Hillside & Mountain Crag Outcrops (Rock formations on rolling hillsides)
+    const numClusters = 34;
+    for (let c = 0; c < numClusters; c++) {
+      const cX = minX + rand() * (maxX - minX);
+      const cY = minY + rand() * (maxY - minY);
+      const rockType = Math.floor(rand() * 3);
+      const count = 5 + Math.floor(rand() * 8);
+      for (let k = 0; k < count; k++) {
         const angle = rand() * Math.PI * 2;
-        const dist = Math.sqrt(rand()) * cl.radius;
-        const rockType = rand() < 0.85 ? cl.rockType : Math.floor(rand() * 3);
+        const dist = Math.sqrt(rand()) * (50 + rand() * 110);
         candidates.push({
-          x: cl.cx + Math.cos(angle) * dist,
-          y: cl.cy + Math.sin(angle) * dist,
+          x: cX + Math.cos(angle) * dist,
+          y: cY + Math.sin(angle) * dist,
           rockType,
         });
       }
     }
 
-    // Standalone boulders scattered across hillsides & ridge meadows
-    const standalone = 110 + Math.floor(rand() * 40);
-    for (let i = 0; i < standalone; i++) {
+    // 3. Standalone Mountain Megaliths & Landmark Monoliths
+    for (let i = 0; i < 90; i++) {
       candidates.push({
         x: minX + rand() * (maxX - minX),
         y: minY + rand() * (maxY - minY),
@@ -3343,28 +3362,23 @@ export class Renderer3D {
     const placedType2 = [];
 
     const { lakes: wLakes, river: wRiver } = this.getWaterBodies();
-    const trackPts = t.points || [];
 
     for (const cand of candidates) {
       const { x, y, rockType } = cand;
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
 
-      // In Three.js world space, the point is at (x, -y)
-      const groundZ = this.getTerrainHeight(x, -y);
-
-      // Rocks must be placed where terrain is elevated (exclude flat area near track or ground zero)
-      if (groundZ <= 0.2) continue;
-
-      // Ensure safe clearance from track spline (at least 24m)
-      let nearTrack = false;
-      for (let i = 0; i < trackPts.length; i += 3) {
-        const pt = trackPts[i];
-        if (Math.hypot(x - pt.x, y - pt.y) < 24.0) {
-          nearTrack = true;
-          break;
+      // Ensure minimum clearance from track asphalt centerline
+      let minDistToTrack = Infinity;
+      if (numTrackPts > 0) {
+        for (let i = 0; i < numTrackPts; i += 2) {
+          const d = Math.hypot(x - cxArr[i], y - cyArr[i]);
+          if (d < minDistToTrack) minDistToTrack = d;
         }
       }
-      if (nearTrack) continue;
+      if (minDistToTrack < roadHalf + 5.5) continue; // Safe buffer outside tarmac
+
+      // In Three.js world space, the point is at (x, -y)
+      const groundZ = this.getTerrainHeight(x, -y);
 
       // Exclude water bodies
       let inWater = false;
@@ -3388,15 +3402,17 @@ export class Renderer3D {
       if (inWater) continue;
 
       // Boulder scale distribution:
-      // 60% small/medium (1.6m - 3.4m), 30% large (3.6m - 6.5m), 10% massive mountain monoliths (7.0m - 13.0m)
+      // 50% Medium boulders (2.4m - 4.5m)
+      // 35% Large rock formations (4.8m - 9.0m)
+      // 15% Giant landmark monoliths & crags (10.0m - 22.0m)
       const roll = rand();
       let baseR;
-      if (roll < 0.60) {
-        baseR = 1.6 + rand() * 1.8;
-      } else if (roll < 0.90) {
-        baseR = 3.6 + rand() * 2.9;
+      if (roll < 0.50) {
+        baseR = 2.4 + rand() * 2.1;
+      } else if (roll < 0.85) {
+        baseR = 4.8 + rand() * 4.2;
       } else {
-        baseR = 7.0 + rand() * 6.0;
+        baseR = 10.0 + rand() * 12.0;
       }
 
       const rockData = {
@@ -3405,12 +3421,12 @@ export class Renderer3D {
         r: baseR,
         scaleX: baseR * (0.75 + rand() * 0.50),
         scaleY: baseR * (0.75 + rand() * 0.50),
-        scaleZ: baseR * (0.55 + rand() * 0.50),
+        scaleZ: baseR * (0.55 + rand() * 0.55),
         rotX: rand() * Math.PI * 2,
         rotY: rand() * Math.PI * 2,
         rotZ: rand() * Math.PI * 2,
         groundZ,
-        tint: 0.92 + rand() * 0.16,
+        tint: 0.90 + rand() * 0.20,
       };
 
       if (rockType === 0) placedType0.push(rockData);
@@ -3422,8 +3438,8 @@ export class Renderer3D {
       {
         list: placedType0,
         mat: new THREE.MeshStandardMaterial({
-          color: 0x484b50, // Dark Slate Granite
-          roughness: 0.94,
+          color: 0x545860, // Slate / Granite Crag
+          roughness: 0.90,
           metalness: 0.08,
           flatShading: true,
         }),
@@ -3431,8 +3447,8 @@ export class Renderer3D {
       {
         list: placedType1,
         mat: new THREE.MeshStandardMaterial({
-          color: 0x625b50, // Weathered Limestone / Sandstone
-          roughness: 0.96,
+          color: 0x6e6659, // Weathered Sandstone / Limestone
+          roughness: 0.94,
           metalness: 0.04,
           flatShading: true,
         }),
@@ -3440,8 +3456,8 @@ export class Renderer3D {
       {
         list: placedType2,
         mat: new THREE.MeshStandardMaterial({
-          color: 0x363a32, // Mossy Basalt / Shale
-          roughness: 0.90,
+          color: 0x3a4034, // Mossy Basalt / Dark Shale
+          roughness: 0.88,
           metalness: 0.05,
           flatShading: true,
         }),
@@ -3462,7 +3478,7 @@ export class Renderer3D {
         const px = vPos[i];
         const py = vPos[i + 1];
         const pz = vPos[i + 2];
-        const disp = 1.0 + (Math.sin(px * 3.5 + py * 2.8) * 0.18 + Math.cos(py * 3.2 - pz * 2.9) * 0.14);
+        const disp = 1.0 + (Math.sin(px * 3.5 + py * 2.8) * 0.22 + Math.cos(py * 3.2 - pz * 2.9) * 0.16);
         vPos[i] = px * disp;
         vPos[i + 1] = py * disp;
         vPos[i + 2] = pz * (disp * 0.92);
@@ -3474,7 +3490,7 @@ export class Renderer3D {
       for (let i = 0; i < count; i++) {
         const item = rg.list[i];
         // Embed the boulder partially into the ground for natural slope resting
-        dummy.position.set(item.x, -item.y, item.groundZ + item.scaleZ * 0.28);
+        dummy.position.set(item.x, -item.y, item.groundZ + item.scaleZ * 0.22);
         dummy.rotation.set(item.rotX, item.rotY, item.rotZ);
         dummy.scale.set(item.scaleX, item.scaleY, item.scaleZ);
         dummy.updateMatrix();
