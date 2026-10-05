@@ -2827,6 +2827,10 @@ export class Renderer3D {
   resetCamera(followMode = true) {
     this._chaseAngle = null;
     this._lastFocusCar = null;
+    this._actionAngle = null;
+    this._lastActionFocus = null;
+    this._heliAngle = null;
+    this._lastHeliFocus = null;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -2888,25 +2892,166 @@ export class Renderer3D {
     this.updateGantryLights(sim);
     this.updateLapPlate(sim, leader);
 
+    // 1. Compute Dynamic Race Positions (P.1, P.2, ...) for active fleet
+    if (!this._rankedCars) this._rankedCars = [];
+    this._rankedCars.length = 0;
+    const rankedCars = this._rankedCars;
+
+    if (sim && sim.cars) {
+      for (let i = 0; i < sim.cars.length; i++) {
+        const c = sim.cars[i];
+        if (c && (c.alive || c.finished) && !c.crashed) {
+          rankedCars.push(c);
+        }
+      }
+    }
+    if (sim && sim.player && (sim.player.alive || sim.player.finished) && !sim.player.crashed) {
+      rankedCars.push(sim.player);
+    }
+
+    rankedCars.sort((a, b) => {
+      // Finished cars permanently hold the top positions
+      if (a.finished !== b.finished) return a.finished ? -1 : 1;
+      if (a.finished && b.finished) {
+        const tA = a.finishTime !== undefined && a.finishTime !== null ? a.finishTime : a.time;
+        const tB = b.finishTime !== undefined && b.finishTime !== null ? b.finishTime : b.time;
+        return tA - tB;
+      }
+      if (a.laps !== b.laps) return b.laps - a.laps;
+      return b.totalIdx - a.totalIdx;
+    });
+
+    if (!this._carRankMap) this._carRankMap = new Map();
+    this._carRankMap.clear();
+    const carRankMap = this._carRankMap;
+    for (let rank = 0; rank < rankedCars.length; rank++) {
+      carRankMap.set(rankedCars[rank], rank + 1);
+    }
+
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
     const cameraPreset = opts.cameraPreset || 'chase';
 
+    // 2. Camera View & Preset Positioning
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {
       this.controls.autoRotate = true;
       this.controls.autoRotateSpeed = 0.55;
+      if (Math.abs(this.camera.fov - 42) > 0.1) {
+        this.camera.fov += (42 - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
+    } else if (cameraPreset === 'action' && focusCar) {
+      // ACTION BATTLE CAM (Reverse front angle looking back at leader while keeping P2 in viewport)
+      this.controls.autoRotate = false;
+
+      const p1 = focusCar;
+      // Find P2 (the car directly behind P1 or next closest alive car)
+      let p2 = null;
+      if (rankedCars.length > 1) {
+        const p1RankIdx = rankedCars.indexOf(p1);
+        if (p1RankIdx >= 0 && p1RankIdx + 1 < rankedCars.length) {
+          p2 = rankedCars[p1RankIdx + 1];
+        } else if (p1RankIdx > 0) {
+          p2 = rankedCars[p1RankIdx - 1];
+        } else {
+          p2 = rankedCars[1];
+        }
+      }
+
+      const p2X = (p2 && p2.alive) ? p2.x : (p1.x - Math.cos(p1.angle) * 32.0);
+      const p2Y = (p2 && p2.alive) ? -p2.y : (-p1.y + Math.sin(p1.angle) * 32.0);
+
+      const dx = p1.x - p2X;
+      const dy = (-p1.y) - p2Y;
+      const carGap = Math.hypot(dx, dy);
+
+      // Low-pass orientation damping on lead angle
+      if (typeof this._actionAngle !== 'number' || this._lastActionFocus !== p1) {
+        this._actionAngle = p1.angle;
+        this._actionTargetX = p1.x;
+        this._actionTargetY = -p1.y;
+        this._lastActionFocus = p1;
+      } else {
+        let diffAngle = p1.angle - this._actionAngle;
+        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+        this._actionAngle += diffAngle * 0.055; // Smooth gyro-stabilized pan
+
+        this._actionTargetX += (p1.x - this._actionTargetX) * 0.12;
+        this._actionTargetY += (-p1.y - this._actionTargetY) * 0.12;
+      }
+
+      const cosA = Math.cos(this._actionAngle);
+      const sinA = Math.sin(this._actionAngle);
+      // Perpendicular normal to heading for a slight 3/4 leading action angle
+      const nx = -sinA;
+      const ny = -cosA;
+
+      // Distance ahead scales dynamically with car gap so both P1 & P2 stay framed
+      const leadDist = 34.0 + Math.min(65.0, carGap * 0.42);
+      const lateralSweep = Math.sin(sim ? sim.time * 0.35 : 0) * 6.0;
+      const destCamX = this._actionTargetX + cosA * leadDist + nx * (7.0 + lateralSweep);
+      const destCamY = this._actionTargetY - sinA * leadDist + ny * (7.0 + lateralSweep);
+      // Height elevates as gap widens to ensure clear line of sight over P1's wing
+      const destCamZ = 7.5 + Math.min(18.0, carGap * 0.15);
+
+      // Target centered between P1 and P2 (biased 65% on P1)
+      const destTargetX = p1.x * 0.65 + p2X * 0.35;
+      const destTargetY = (-p1.y) * 0.65 + p2Y * 0.35;
+      const destTargetZ = 2.4;
+
+      // Dynamic adaptive FOV zoom
+      const targetFov = 38 + Math.min(14, (carGap / 110) * 14);
+      this.camera.fov += (targetFov - this.camera.fov) * 0.05;
+      this.camera.updateProjectionMatrix();
+
+      const camGlide = 0.075;
+      const targetGlide = 0.095;
+
+      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+    } else if (cameraPreset === 'follow' && focusCar) {
+      // CLASSIC BROADCAST FOLLOW CAM (Smooth high TV tracking altitude 68.0)
+      this.controls.autoRotate = false;
+
+      const targetX = focusCar.x;
+      const targetY = -focusCar.y;
+      const targetZ = 3.5;
+
+      const panSpeed = 0.12;
+      const dx = (targetX - this.controls.target.x) * panSpeed;
+      const dy = (targetY - this.controls.target.y) * panSpeed;
+      const dz = (targetZ - this.controls.target.z) * panSpeed;
+
+      this.controls.target.x += dx;
+      this.controls.target.y += dy;
+      this.controls.target.z += dz;
+
+      this.camera.position.x += dx;
+      this.camera.position.y += dy;
+
+      const canonicalCamZ = 68.0;
+      this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.05;
+
+      if (Math.abs(this.camera.fov - 42) > 0.1) {
+        this.camera.fov += (42 - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
     } else if (cameraPreset === 'onboard' && focusCar) {
-      // 1. Onboard / Cockpit T-Cam (Direct driver perspective looking down nose)
+      // ONBOARD T-CAM (Cockpit driver perspective looking down nose)
       this.controls.autoRotate = false;
       const cosA = Math.cos(focusCar.angle);
       const sinA = Math.sin(focusCar.angle);
 
-      // Roll-hoop T-cam directly above driver helmet
       const destCamX = focusCar.x + cosA * 0.4;
       const destCamY = -focusCar.y - sinA * 0.4;
       const destCamZ = 3.6;
 
-      // Look 45 meters forward down the nose
       const destTargetX = focusCar.x + cosA * 45;
       const destTargetY = -focusCar.y - sinA * 45;
       const destTargetZ = 2.2;
@@ -2921,22 +3066,46 @@ export class Renderer3D {
       this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+
+      if (Math.abs(this.camera.fov - 42) > 0.1) {
+        this.camera.fov += (42 - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
     } else if (cameraPreset === 'heli' && focusCar) {
-      // 2. Helicopter View (High altitude tactical track overhead)
+      // CINEMATIC LOW-ALTITUDE AERIAL PURSUIT HELICOPTER TRACKER
       this.controls.autoRotate = false;
-      const cosA = Math.cos(focusCar.angle);
-      const sinA = Math.sin(focusCar.angle);
 
-      const destCamX = focusCar.x - cosA * 15;
-      const destCamY = -focusCar.y + sinA * 15;
-      const destCamZ = 135.0;
+      if (typeof this._heliAngle !== 'number' || this._lastHeliFocus !== focusCar) {
+        this._heliAngle = focusCar.angle;
+        this._heliTargetX = focusCar.x;
+        this._heliTargetY = -focusCar.y;
+        this._lastHeliFocus = focusCar;
+      } else {
+        let diffAngle = focusCar.angle - this._heliAngle;
+        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+        this._heliAngle += diffAngle * 0.035;
 
-      const destTargetX = focusCar.x;
-      const destTargetY = -focusCar.y;
-      const destTargetZ = 1.0;
+        this._heliTargetX += (focusCar.x - this._heliTargetX) * 0.08;
+        this._heliTargetY += (-focusCar.y - this._heliTargetY) * 0.08;
+      }
 
-      const camGlide = 0.09;
-      const targetGlide = 0.12;
+      const cosA = Math.cos(this._heliAngle);
+      const sinA = Math.sin(this._heliAngle);
+      const nx = -sinA;
+      const ny = -cosA;
+
+      // Sweeping 3/4 isometric aerial tracking ~54m away at altitude 46m
+      const destCamX = this._heliTargetX - cosA * 52.0 + nx * 32.0;
+      const destCamY = this._heliTargetY + sinA * 52.0 + ny * 32.0;
+      const destCamZ = 46.0;
+
+      const destTargetX = this._heliTargetX + cosA * 12.0;
+      const destTargetY = this._heliTargetY - sinA * 12.0;
+      const destTargetZ = 2.0;
+
+      const camGlide = 0.055;
+      const targetGlide = 0.075;
 
       this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
       this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
@@ -2945,8 +3114,13 @@ export class Renderer3D {
       this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+
+      if (Math.abs(this.camera.fov - 42) > 0.1) {
+        this.camera.fov += (42 - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
     } else if (cameraPreset === 'broadcast') {
-      // 3. TV Broadcast Camera (Start / Finish Gantry view)
+      // TV GANTRY CAMERA (Start / Finish Gantry view)
       this.controls.autoRotate = false;
       const t = this.track;
       const cx = t.cx[0];
@@ -2956,7 +3130,6 @@ export class Renderer3D {
       const nx = -ty;
       const ny = tx;
 
-      // Downstream vantage point in front of finish line looking back up the straight
       const destCamX = cx + tx * 80 + nx * 28;
       const destCamY = cy + ty * 80 + ny * 28;
       const destCamZ = 10.5;
@@ -2976,12 +3149,16 @@ export class Renderer3D {
       this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+
+      if (Math.abs(this.camera.fov - 42) > 0.1) {
+        this.camera.fov += (42 - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
     } else {
-      // 4. Default: 'chase' preset (Dynamic Smooth 3rd-person follow)
+      // DEFAULT: 'chase' preset (Dynamic Decoupled Smooth 3rd-person follow)
       this.controls.autoRotate = false;
 
       if (hasFinisher && !opts.manual) {
-        // When race finishes and car crosses line, transition gracefully to finish line broadcast view
         const t = this.track;
         const cx = t.cx[0];
         const cy = -t.cy[0];
@@ -3010,38 +3187,33 @@ export class Renderer3D {
         this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
         this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
       } else if (focusCar) {
-        // Dynamic decoupled chase camera with low-pass angular inertia and positional spring
         if (typeof this._chaseAngle !== 'number' || this._lastFocusCar !== focusCar) {
           this._chaseAngle = focusCar.angle;
           this._chaseTargetX = focusCar.x;
           this._chaseTargetY = -focusCar.y;
           this._lastFocusCar = focusCar;
         } else {
-          // 1. Smoothly follow car translation (absorbs micro-bumps and wall impacts)
           const posFollowK = 0.10;
           this._chaseTargetX += (focusCar.x - this._chaseTargetX) * posFollowK;
           this._chaseTargetY += (-focusCar.y - this._chaseTargetY) * posFollowK;
 
-          // 2. Low-pass filter heading angle (absorbs rapid steering oscillations & twitching)
           let diffAngle = focusCar.angle - this._chaseAngle;
           while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
           while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
 
-          const angularDamping = 0.048; // Gentle, cinematic rotational inertia
+          const angularDamping = 0.048;
           this._chaseAngle += diffAngle * angularDamping;
         }
 
         const cosA = Math.cos(this._chaseAngle);
         const sinA = Math.sin(this._chaseAngle);
 
-        // Position camera behind and above car along smoothed trajectory
         const distBehind = 42.0;
         const heightAbove = 15.2;
         const destCamX = this._chaseTargetX - cosA * distBehind;
         const destCamY = this._chaseTargetY + sinA * distBehind;
         const destCamZ = heightAbove;
 
-        // Look ahead along smoothed heading
         const lookAhead = 16.0;
         const destTargetX = this._chaseTargetX + cosA * lookAhead;
         const destTargetY = this._chaseTargetY - sinA * lookAhead;
@@ -3058,49 +3230,16 @@ export class Renderer3D {
         this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
         this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
       }
+
+      if (Math.abs(this.camera.fov - 42) > 0.1) {
+        this.camera.fov += (42 - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
     }
 
     this.controls.update();
     if (this.skyMesh) {
       this.skyMesh.position.copy(this.camera.position);
-    }
-
-    // Compute Dynamic Race Positions (P.1, P.2, ...) for all active cars
-    if (!this._rankedCars) this._rankedCars = [];
-    this._rankedCars.length = 0;
-    const rankedCars = this._rankedCars;
-
-    if (sim && sim.cars) {
-      for (let i = 0; i < sim.cars.length; i++) {
-        const c = sim.cars[i];
-        if (c && (c.alive || c.finished) && !c.crashed) {
-          rankedCars.push(c);
-        }
-      }
-    }
-    if (sim && sim.player && (sim.player.alive || sim.player.finished) && !sim.player.crashed) {
-      rankedCars.push(sim.player);
-    }
-
-    rankedCars.sort((a, b) => {
-      // 1. Finished cars permanently hold the top positions
-      if (a.finished !== b.finished) return a.finished ? -1 : 1;
-      // 2. Between finished cars, the car that crossed the line first keeps the higher position (P1 stays P1, P2 stays P2)
-      if (a.finished && b.finished) {
-        const tA = a.finishTime !== undefined && a.finishTime !== null ? a.finishTime : a.time;
-        const tB = b.finishTime !== undefined && b.finishTime !== null ? b.finishTime : b.time;
-        return tA - tB;
-      }
-      // 3. For active cars, sort by lap count then track progress index
-      if (a.laps !== b.laps) return b.laps - a.laps;
-      return b.totalIdx - a.totalIdx;
-    });
-
-    if (!this._carRankMap) this._carRankMap = new Map();
-    this._carRankMap.clear();
-    const carRankMap = this._carRankMap;
-    for (let rank = 0; rank < rankedCars.length; rank++) {
-      carRankMap.set(rankedCars[rank], rank + 1);
     }
 
     // Identify Top 10 positions on track for selective billboard position badges

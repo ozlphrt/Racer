@@ -615,7 +615,10 @@ h1 {
   position: absolute;
   right: 0;
   bottom: calc(100% + 10px);
-  width: 232px;
+  width: 236px;
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  scrollbar-width: thin;
   padding: 10px;
   border-radius: 14px;
   background: rgba(10, 15, 31, 0.94);
