@@ -302,6 +302,7 @@ h1 {
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none;
 }
 
 #track-canvas-3d[hidden],
@@ -2158,24 +2159,73 @@ input[type='range']:disabled {
   text-transform: uppercase;
 }
 
-/* ===== Responsive ===== */
-@media (max-width: 1000px) {
-  body {
-    overflow: auto;
+/* ===== Mobile & Tablet Responsive ===== */
+@media (max-width: 768px) {
+  :root {
+    --panel-w: min(380px, 92vw);
   }
 
-  .app {
-    height: auto;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 62vh auto;
+  .hud {
+    top: 10px;
+    left: 10px;
+    gap: 7px;
+    padding: 5px 8px 8px;
+    border-radius: 8px;
   }
 
-  .panel {
-    overflow: visible;
+  .hud-label {
+    font-size: 7.5px;
+    letter-spacing: 0.06em;
+  }
+
+  .hud-value {
+    font-size: 15px;
+  }
+
+  .hud-value.small {
+    font-size: 12px;
+  }
+
+  .ghost-timer-pill {
+    top: 56px;
+  }
+
+  .bottom-action-bar {
+    left: 10px;
+    bottom: 10px;
+    gap: 6px;
+  }
+
+  .bottom-right-dock {
+    right: 10px;
+    bottom: 10px;
+    gap: 6px;
+  }
+
+  .circle-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .leaderboard-tower {
+    right: 0;
+    width: min(250px, calc(100vw - 20px));
+    max-height: calc(100vh - 140px);
   }
 
   .leader-card {
-    display: none;
+    right: 0;
+  }
+
+  .shortcuts-popover {
+    width: min(280px, calc(100vw - 24px));
+    left: 0;
+  }
+
+  .hyper-modal {
+    width: min(480px, 94vw);
+    max-height: 90vh;
+    padding: 16px;
   }
 }
 
