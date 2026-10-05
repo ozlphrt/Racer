@@ -650,39 +650,91 @@ export class Renderer3D {
     centerDashMesh.renderOrder = 3;
     this.decorGroup.add(centerDashMesh);
 
-    // Red & White 3D Apex Kerbs (Balanced circuit rumble strips)
+    // Red & White 3D Apex Kerbs with smooth tapered entry and exit
     const kerbRedGeo = new THREE.BufferGeometry();
     const kerbWhiteGeo = new THREE.BufferGeometry();
     const redVerts = [];
     const whiteVerts = [];
-    const kerbInset = 0.08;   // Extends slightly inward onto the tarmac edge
-    const kerbOutset = 0.04;  // Extends slightly outward onto the track verge
+    const maxKerbInset = 0.08;   // Max inward width onto tarmac
+    const maxKerbOutset = 0.04;  // Max outward width onto verge
+
+    // 1. Identify contiguous kerb zones around the track loop
+    const isKerb = new Array(N);
+    let kerbCount = 0;
+    for (let k = 0; k < N; k++) {
+      isKerb[k] = Math.abs(t.curvature[k]) >= 1 / 165;
+      if (isKerb[k]) kerbCount++;
+    }
+
+    const taperWeight = new Float32Array(N);
+
+    if (kerbCount === N) {
+      taperWeight.fill(1.0);
+    } else if (kerbCount > 0) {
+      // Find all run starting points (transition from false -> true)
+      const visited = new Uint8Array(N);
+      for (let k = 0; k < N; k++) {
+        const prev = (k - 1 + N) % N;
+        if (isKerb[k] && !isKerb[prev] && !visited[k]) {
+          const runIndices = [];
+          let curr = k;
+          while (isKerb[curr] && !visited[curr]) {
+            visited[curr] = 1;
+            runIndices.push(curr);
+            curr = (curr + 1) % N;
+          }
+          const L = runIndices.length;
+          const taperLen = Math.min(4, Math.max(1, Math.floor(L / 2)));
+          for (let s = 0; s < L; s++) {
+            let factor = 1.0;
+            if (s < taperLen) {
+              factor = s / taperLen;
+            } else if (s >= L - taperLen) {
+              factor = (L - 1 - s) / taperLen;
+            }
+            // Smooth sine curve easing for natural organic track taper
+            taperWeight[runIndices[s]] = Math.sin(factor * Math.PI * 0.5);
+          }
+        }
+      }
+    }
 
     for (let k = 0; k < N; k++) {
-      if (Math.abs(t.curvature[k]) < 1 / 165) continue;
+      if (!isKerb[k]) continue;
       const j = (k + 1) % N;
+      if (!isKerb[j]) continue;
+
+      const wK = taperWeight[k];
+      const wJ = taperWeight[j];
       const isRed = k % 2 === 0;
       const target = isRed ? redVerts : whiteVerts;
 
+      const insetK = maxKerbInset * wK;
+      const outsetK = maxKerbOutset * wK;
+      const insetJ = maxKerbInset * wJ;
+      const outsetJ = maxKerbOutset * wJ;
+
+      const zOuterK = 0.025 + (0.045 - 0.025) * wK;
+      const zInnerK = 0.025 + (0.035 - 0.025) * wK;
+      const zOuterJ = 0.025 + (0.045 - 0.025) * wJ;
+      const zInnerJ = 0.025 + (0.035 - 0.025) * wJ;
+
       for (const [xs, ys] of [[t.ix, t.iy], [t.ox, t.oy]]) {
         // Outward edge (verge side)
-        const oxK = xs[k] + (xs[k] - t.cx[k]) * kerbOutset;
-        const oyK = ys[k] + (ys[k] - t.cy[k]) * kerbOutset;
-        const oxJ = xs[j] + (xs[j] - t.cx[j]) * kerbOutset;
-        const oyJ = ys[j] + (ys[j] - t.cy[j]) * kerbOutset;
+        const oxK = xs[k] + (xs[k] - t.cx[k]) * outsetK;
+        const oyK = ys[k] + (ys[k] - t.cy[k]) * outsetK;
+        const oxJ = xs[j] + (xs[j] - t.cx[j]) * outsetJ;
+        const oyJ = ys[j] + (ys[j] - t.cy[j]) * outsetJ;
 
         // Inward edge (tarmac side)
-        const ixK = xs[k] + (t.cx[k] - xs[k]) * kerbInset;
-        const iyK = ys[k] + (t.cy[k] - ys[k]) * kerbInset;
-        const ixJ = xs[j] + (t.cx[j] - xs[j]) * kerbInset;
-        const iyJ = ys[j] + (t.cy[j] - ys[j]) * kerbInset;
-
-        const zOuter = 0.045;
-        const zInner = 0.035;
+        const ixK = xs[k] + (t.cx[k] - xs[k]) * insetK;
+        const iyK = ys[k] + (t.cy[k] - ys[k]) * insetK;
+        const ixJ = xs[j] + (t.cx[j] - xs[j]) * insetJ;
+        const iyJ = ys[j] + (t.cy[j] - ys[j]) * insetJ;
 
         // Quad triangles with double-sided robust winding
-        target.push(oxK, -oyK, zOuter, ixK, -iyK, zInner, ixJ, -iyJ, zInner);
-        target.push(oxK, -oyK, zOuter, ixJ, -iyJ, zInner, oxJ, -oyJ, zOuter);
+        target.push(oxK, -oyK, zOuterK, ixK, -iyK, zInnerK, ixJ, -iyJ, zInnerJ);
+        target.push(oxK, -oyK, zOuterK, ixJ, -iyJ, zInnerJ, oxJ, -oyJ, zOuterJ);
       }
     }
 
