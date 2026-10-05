@@ -4368,6 +4368,10 @@ export class Renderer3D {
     this._lastHeliFocus = null;
     this._autoPreset = 'heli';
     this._autoNextSwitch = performance.now() + 8500;
+    this._lastGantryCutTime = null;
+    this._lastGantryCutLap = null;
+    this._gantryRollLap = null;
+    this._gantryCrossedLineTime = null;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -4501,14 +4505,29 @@ export class Renderer3D {
         }
       }
 
-      // If P1 is 2-3s prior to start line and cooldown passed (>8s since last gantry cut), cut to TV Gantry
-      const gantryCooldownPassed = !this._lastGantryCutTime || (now - this._lastGantryCutTime > 8000);
+      // Check if this lap should trigger TV Gantry (avoid selecting on every lap end)
+      const p1Lap = p1 ? (p1.laps || 0) : 0;
+      const maxLaps = CONFIG.generation?.maxLaps || 5;
+      const isRaceFinish = p1 && (p1Lap >= maxLaps - 1 || p1.finished || hasFinisher);
+      const lapDiff = typeof this._lastGantryCutLap === 'number' ? (p1Lap - this._lastGantryCutLap) : 99;
+      const gantryCooldownPassed = !this._lastGantryCutTime || (now - this._lastGantryCutTime > 20000);
+
+      // On race finish: high chance (85%) for dramatic checkered flag shot
+      // On regular laps: only 30% chance AND requires at least 2 laps gap since last gantry cut
       if (p1ApproachingGantry && gantryCooldownPassed && this._autoPreset !== 'broadcast') {
-        this._autoPreset = 'broadcast';
-        this._lastGantryCutTime = now;
-        this._gantryEntryLap = p1 ? (p1.laps || 0) : 0;
-        this._gantryCrossedLineTime = null;
-        this._autoNextSwitch = now + 10000; // Safety guard timeout
+        if (this._gantryRollLap !== p1Lap) {
+          this._gantryRollLap = p1Lap;
+          this._gantryRollPassed = isRaceFinish ? (Math.random() < 0.85) : (lapDiff >= 2 && Math.random() < 0.30);
+        }
+
+        if (this._gantryRollPassed) {
+          this._autoPreset = 'broadcast';
+          this._lastGantryCutTime = now;
+          this._lastGantryCutLap = p1Lap;
+          this._gantryEntryLap = p1Lap;
+          this._gantryCrossedLineTime = null;
+          this._autoNextSwitch = now + 10000; // Safety guard timeout
+        }
       }
 
       // When TV Gantry camera is active: WAIT until P1 actually passes by the start line!
