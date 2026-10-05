@@ -824,9 +824,9 @@ export class Renderer {
     const t = this.trail;
     const n = t.length / 2;
     if (n < 2) return;
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 2.0;
     for (let i = 1; i < n; i++) {
-      ctx.strokeStyle = `rgba(251, 191, 36, ${(i / n) * 0.12})`;
+      ctx.strokeStyle = `rgba(251, 191, 36, ${(i / n) * 0.25})`;
       ctx.beginPath();
       ctx.moveTo(t[(i - 1) * 2], t[(i - 1) * 2 + 1]);
       ctx.lineTo(t[i * 2], t[i * 2 + 1]);
@@ -836,7 +836,7 @@ export class Renderer {
 
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
-    const allCars = sim.player && sim.player.alive ? [...sim.cars, sim.player] : sim.cars;
+    const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars.slice(0, 8)] : sim.cars.slice(0, 8);
     const maxSkidSegments = 1600;
 
     for (let i = 0; i < allCars.length; i++) {
@@ -846,15 +846,15 @@ export class Renderer {
         continue;
       }
 
-      const isHeavyBraking = car.throttle < -0.22 && car.speed > 45;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.08 && car.speed > 40;
-      const isCrashSlide = car.crashed && car.speed > 15;
+      const isHeavyBraking = car.throttle < -0.32 && car.speed > 60;
+      const isSlip = Math.abs(car.slipAngle || 0) > 0.12 && car.speed > 55;
+      const isCrashSlide = car.crashed && car.speed > 20;
 
       if (isHeavyBraking || isSlip || isCrashSlide) {
-        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.06) * 3.0);
-        const brakeInt = isHeavyBraking ? Math.min(0.95, (-car.throttle - 0.20) * 2.0) : 0;
-        const crashInt = isCrashSlide ? 0.85 : 0;
-        const intensity = Math.min(0.95, Math.max(slipInt, brakeInt, crashInt));
+        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.10) * 2.5);
+        const brakeInt = isHeavyBraking ? Math.min(0.75, (-car.throttle - 0.30) * 1.5) : 0;
+        const crashInt = isCrashSlide ? 0.70 : 0;
+        const intensity = Math.min(0.75, Math.max(slipInt, brakeInt, crashInt));
 
         const cos = Math.cos(car.angle);
         const sin = Math.sin(car.angle);
@@ -867,7 +867,7 @@ export class Renderer {
         const prev = this.carPrevTires.get(car);
         if (prev) {
           const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.35 && dL < 35) {
+          if (dL > 0.45 && dL < 30) {
             this.skidmarks.push({
               x0: prev.lx, y0: prev.ly,
               x1: lx, y1: ly,
@@ -889,22 +889,22 @@ export class Renderer {
               p0x: prev.lx, p0y: prev.ly,
               p1x: lx, p1y: ly,
               nx: normX, ny: normY,
-              w0: 1.6, w1: 1.6,
-              alpha: intensity * 0.55,
+              w0: 1.0, w1: 1.0,
+              alpha: intensity * 0.32,
               life: 1.0,
-              decay: 0.85 + Math.random() * 0.25,
+              decay: 1.45 + Math.random() * 0.35,
             });
             this.tireSmokes.push({
               p0x: prev.rx, p0y: prev.ry,
               p1x: rx, p1y: ry,
               nx: normX, ny: normY,
-              w0: 1.6, w1: 1.6,
-              alpha: intensity * 0.55,
+              w0: 1.0, w1: 1.0,
+              alpha: intensity * 0.32,
               life: 1.0,
-              decay: 0.85 + Math.random() * 0.25,
+              decay: 1.45 + Math.random() * 0.35,
             });
-            if (this.tireSmokes.length > 600) {
-              this.tireSmokes.splice(0, this.tireSmokes.length - 600);
+            if (this.tireSmokes.length > 300) {
+              this.tireSmokes.splice(0, this.tireSmokes.length - 300);
             }
           }
         }
