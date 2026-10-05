@@ -128,7 +128,7 @@ export class FitnessChart {
     ctx.textAlign = 'right';
     ctx.fillText(`Gen ${this.history[n - 1].generation}`, w - pad.r, h - 5);
 
-    // 2. Population Min-Max Variance Band (Purple translucent ribbon)
+    // 2. Population Min-Max Variance Band (Neutral translucent smoke)
     const hasMinMax = this.history.some((r) => r.min !== undefined || r.max !== undefined);
     if (hasMinMax && n > 1) {
       ctx.beginPath();
@@ -144,7 +144,7 @@ export class FitnessChart {
         ctx.lineTo(X(i), Y(val));
       }
       ctx.closePath();
-      ctx.fillStyle = 'rgba(167, 139, 250, 0.12)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
       ctx.fill();
     }
 
@@ -158,10 +158,10 @@ export class FitnessChart {
       });
     };
 
-    // 3. Best Fitness (Cyan): Gradient Area + Solid Stroke
+    // 3. Best Fitness (Titanium Pure White): Subtle Gradient Area + Solid Stroke
     const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph);
-    grad.addColorStop(0, 'rgba(34, 211, 238, 0.32)');
-    grad.addColorStop(1, 'rgba(34, 211, 238, 0.01)');
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
     drawCurve('best');
     ctx.lineTo(X(n - 1), Y(0));
     ctx.lineTo(X(0), Y(0));
@@ -171,26 +171,26 @@ export class FitnessChart {
 
     ctx.lineJoin = 'round';
     drawCurve('best');
-    ctx.strokeStyle = '#22d3ee';
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.0;
     ctx.stroke();
 
-    // 4. Population Average (Purple): Dashed Stroke
+    // 4. Population Average (Slate Steel Grey): Dashed Stroke
     drawCurve('avg');
-    ctx.strokeStyle = '#a78bfa';
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 1.6;
     ctx.setLineDash([4, 3]);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 5. Active Hover Crosshair or Last Points Glow
+    // 5. Active Hover Crosshair or Last Points
     const activeIdx = this.hoverIdx !== null ? this.hoverIdx : n - 1;
     const r = this.history[activeIdx];
     const hx = X(activeIdx);
 
     if (this.hoverIdx !== null) {
       // Draw vertical crosshair guide
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 2]);
       ctx.beginPath();
@@ -201,40 +201,34 @@ export class FitnessChart {
 
       // Highlight best dot
       const by = Y(r.best);
-      ctx.fillStyle = '#22d3ee';
-      ctx.shadowColor = '#22d3ee';
-      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 6;
       ctx.beginPath();
-      ctx.arc(hx, by, 4.5, 0, Math.PI * 2);
+      ctx.arc(hx, by, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
 
       // Highlight avg dot
       const ay = Y(r.avg);
-      ctx.fillStyle = '#a78bfa';
-      ctx.shadowColor = '#a78bfa';
-      ctx.shadowBlur = 8;
+      ctx.fillStyle = '#94a3b8';
       ctx.beginPath();
-      ctx.arc(hx, ay, 4, 0, Math.PI * 2);
+      ctx.arc(hx, ay, 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
 
       // Render Floating Telemetry Card
       this.drawTooltip(ctx, r, hx, w, h, pad);
     } else {
-      // Latest point glow
+      // Latest point dot
       const lx = X(n - 1);
       const ly = Y(this.history[n - 1].best);
-      ctx.fillStyle = '#22d3ee';
-      ctx.shadowColor = '#22d3ee';
-      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
 
       const lay = Y(this.history[n - 1].avg);
-      ctx.fillStyle = '#a78bfa';
+      ctx.fillStyle = '#64748b';
       ctx.beginPath();
       ctx.arc(lx, lay, 3, 0, Math.PI * 2);
       ctx.fill();
@@ -251,11 +245,11 @@ export class FitnessChart {
 
     // Box shadow & background
     ctx.save();
-    ctx.fillStyle = 'rgba(10, 15, 28, 0.94)';
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)';
+    ctx.fillStyle = 'rgba(15, 18, 26, 0.96)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 1;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = 14;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 16;
 
     // Rounded rectangle
     const radius = 6;
@@ -280,28 +274,28 @@ export class FitnessChart {
 
     // Header: Generation
     ctx.font = 'bold 11px Outfit, sans-serif';
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(`Generation ${r.generation}`, boxX + 10, boxY + 14);
 
-    // Cyan Best info
+    // Best info (Crisp White)
     ctx.font = '10px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#22d3ee';
+    ctx.fillStyle = '#ffffff';
     const bestLapStr = r.bestLap ? fmtLap(r.bestLap) : '–';
     ctx.fillText(`Best: ${compact(r.best)}  (${bestLapStr})`, boxX + 10, boxY + 31);
 
-    // Purple Avg & Median info
-    ctx.fillStyle = '#a78bfa';
+    // Avg & Median info (Muted Slate)
+    ctx.fillStyle = '#94a3b8';
     const medStr = r.median !== undefined ? compact(r.median) : compact(r.avg);
     ctx.fillText(`Pop Avg: ${compact(r.avg)}  ·  Med: ${medStr}`, boxX + 10, boxY + 47);
 
-    // Pace delta vs Avg Lap
-    ctx.fillStyle = '#38bdf8';
+    // Pace delta
+    ctx.fillStyle = '#cbd5e1';
     const avgLapStr = r.avgLap && Number.isFinite(r.avgLap) ? fmtLap(r.avgLap) : '–';
     const deltaStr = r.lapImprovementPct ? ` (+${r.lapImprovementPct.toFixed(1)}% pace)` : '';
     ctx.fillText(`Avg Lap: ${avgLapStr}${deltaStr}`, boxX + 10, boxY + 63);
 
-    // Survival / Finishers
-    ctx.fillStyle = '#34d399';
+    // Survival
+    ctx.fillStyle = '#94a3b8';
     const pop = r.population || 20;
     const fin = r.finishers || 0;
     const elim = r.eliminated != null ? r.eliminated : pop - fin;
