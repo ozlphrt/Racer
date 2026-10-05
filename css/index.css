@@ -2865,10 +2865,124 @@ input[type='range']:disabled {
   margin-top: 2px;
 }
 
+/* ===== AI Generation Preset Ribbon (Top Center Scale) ===== */
+.gen-presets-ribbon {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  background: rgba(10, 16, 28, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 9999px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 38;
+  user-select: none;
+  max-width: calc(100vw - 360px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.gen-presets-ribbon::-webkit-scrollbar {
+  display: none;
+}
+
+.gen-presets-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #a855f7;
+  padding-right: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+}
+
+.gen-presets-track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-gen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-gen-chip:hover {
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-gen-chip.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.32), rgba(168, 85, 247, 0.32));
+  border-color: rgba(56, 189, 248, 0.75);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+}
+
+.btn-gen-chip.is-current {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.btn-gen-chip.is-current.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.35), rgba(56, 189, 248, 0.35));
+  border-color: rgba(34, 197, 94, 0.85);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.5);
+}
+
+.btn-gen-chip .chip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+.btn-gen-chip .chip-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
 /* ===== Ghost Mode 30s Countdown Timer Pill (Top Center) ===== */
 .ghost-timer-pill {
   position: absolute;
-  top: 16px;
+  top: 58px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -2951,7 +3065,7 @@ input[type='range']:disabled {
 /* ===== F1 Broadcast Elimination Notification ===== */
 .elimination-stack {
   position: absolute;
-  top: 60px;
+  top: 98px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;

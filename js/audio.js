@@ -307,7 +307,7 @@ export class SpatialAudioEngine {
   }
 
   init() {
-    if (this.inited) return;
+    if (this.inited || typeof window === 'undefined') return;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
 

@@ -9,6 +9,7 @@ import { LeaderboardTower } from './leaderboard.js';
 import { EliminationModalManager } from './eliminationModal.js';
 import { audio } from './audio.js';
 import * as storage from './storage.js';
+import { PRESET_BRAINS, PRESET_MILESTONES } from './presetBrains.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
@@ -1296,6 +1297,114 @@ function finishHyperTraining() {
 $('btn-hyper-start')?.addEventListener('click', startHyperTraining);
 $('btn-hyper-stop')?.addEventListener('click', stopHyperTraining);
 
+// ---------- Generation Preset Scale Ribbon (Top Header) ----------
+let activePresetGen = null;
+let lastRibbonCurrentGen = -1;
+
+function formatGenLabel(g) {
+  if (g >= 1000) {
+    const k = g / 1000;
+    return `Gen ${k % 1 === 0 ? k : k.toFixed(1)}k`;
+  }
+  return `Gen ${g}`;
+}
+
+export function loadGenerationPreset(g) {
+  const preset = PRESET_BRAINS[g];
+  if (!preset || !preset.genome) {
+    activePresetGen = null;
+    renderGenPresetsRibbon();
+    toast(`⚡ Resumed Live Generation ${sim.generation}`, 'info');
+    return;
+  }
+
+  activePresetGen = g;
+  const layers = preset.layers || CONFIG.nn.layers;
+  const genome = preset.genome;
+
+  // Immediately seed the population with the selected preset brain genome
+  sim.generation = g;
+  if (preset.bestLap && Number.isFinite(preset.bestLap)) {
+    sim.bestLapEver = preset.bestLap;
+  }
+  sim.startGeneration(sim.cars.map(() => Array.from(genome)));
+
+  // Store in champion snapshot
+  storage.saveBrain({
+    generation: g,
+    fitness: preset.fitness || 0,
+    bestLap: preset.bestLap || Infinity,
+    genome: Array.from(genome),
+  }, layers);
+
+  refreshSavedInfo();
+  updateHubAnalytics();
+  audio.playSuccess();
+
+  const fitStr = preset.fitness ? ` · Fit ${compact(preset.fitness)}` : '';
+  const lapStr = preset.bestLap ? ` · Lap ${preset.bestLap}s` : '';
+  toast(`⚡ Loaded Gen ${formatGenLabel(g)} Preset${fitStr}${lapStr}`, 'success');
+
+  renderGenPresetsRibbon();
+}
+
+export function renderGenPresetsRibbon() {
+  const container = $('gen-presets-track');
+  if (!container) return;
+
+  const currentGen = sim ? sim.generation : 1;
+  const isPresetMatch = PRESET_MILESTONES.includes(currentGen);
+
+  // Build the list of chips: milestone presets + user's current Gen placed in between
+  const chips = [];
+  let currentInserted = false;
+
+  for (const m of PRESET_MILESTONES) {
+    if (!currentInserted && !isPresetMatch && currentGen < m) {
+      chips.push({ gen: currentGen, isCurrent: true });
+      currentInserted = true;
+    }
+    chips.push({ gen: m, isCurrent: m === currentGen });
+  }
+  if (!currentInserted && !isPresetMatch) {
+    chips.push({ gen: currentGen, isCurrent: true });
+  }
+
+  let html = '';
+  for (const chip of chips) {
+    const isCurrent = chip.isCurrent;
+    const isSelected = activePresetGen === chip.gen || (activePresetGen === null && isCurrent);
+    const label = formatGenLabel(chip.gen);
+
+    if (isCurrent && !isPresetMatch) {
+      html += `<button class="btn-gen-chip is-current ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Your live trained generation ${chip.gen}">
+        <span class="chip-dot"></span>
+        <span class="chip-text">${label}</span>
+        <span class="chip-badge">LIVE</span>
+      </button>`;
+    } else if (isCurrent && isPresetMatch) {
+      html += `<button class="btn-gen-chip is-current ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Gen ${chip.gen} milestone (Current Live)">
+        <span class="chip-dot"></span>
+        <span class="chip-text">${label}</span>
+      </button>`;
+    } else {
+      html += `<button class="btn-gen-chip ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Load pre-trained Gen ${chip.gen} champion">
+        <span class="chip-text">${label}</span>
+      </button>`;
+    }
+  }
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.btn-gen-chip').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const g = Number(btn.getAttribute('data-gen'));
+      loadGenerationPreset(g);
+    });
+  });
+}
+
 // ---------- HUD ----------
 function updateHud(leader) {
   const isRaceMode = sim.mode === 'race';
@@ -1304,6 +1413,11 @@ function updateHud(leader) {
     const el = $(id);
     if (el) el.textContent = val;
   };
+
+  if (lastRibbonCurrentGen !== sim.generation) {
+    lastRibbonCurrentGen = sim.generation;
+    renderGenPresetsRibbon();
+  }
 
   setTxt('pill-pop', pop);
   setTxt('hud-gen', sim.generation);
@@ -1543,6 +1657,7 @@ setSliderFill(mutSlider);
 refreshSavedInfo();
 updateStatus();
 setCameraPreset(state.cameraPreset, false);
+renderGenPresetsRibbon();
 updateHud(sim.leader);
 chart.draw(sim.history);
 requestAnimationFrame(frame);
