@@ -289,11 +289,10 @@ export class FitnessChart {
     const bestLapStr = r.bestLap ? fmtLap(r.bestLap) : '–';
     ctx.fillText(`Best: ${compact(r.best)}  (${bestLapStr})`, boxX + 10, boxY + 31);
 
-    // Purple Avg & Range info
+    // Purple Avg & Median info
     ctx.fillStyle = '#a78bfa';
-    const minStr = r.min !== undefined ? compact(r.min) : '–';
-    const maxStr = r.max !== undefined ? compact(r.max) : '–';
-    ctx.fillText(`Pop Avg: ${compact(r.avg)} [${minStr}–${maxStr}]`, boxX + 10, boxY + 47);
+    const medStr = r.median !== undefined ? compact(r.median) : compact(r.avg);
+    ctx.fillText(`Pop Avg: ${compact(r.avg)}  ·  Med: ${medStr}`, boxX + 10, boxY + 47);
 
     // Pace delta vs Avg Lap
     ctx.fillStyle = '#38bdf8';

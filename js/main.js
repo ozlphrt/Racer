@@ -813,14 +813,8 @@ function runHyperBatch() {
   const statPopAvg = $('hyper-stat-pop-avg');
   if (statPopAvg) statPopAvg.textContent = lastRecord ? compact(lastRecord.avg) : '–';
 
-  const statPopRange = $('hyper-stat-pop-range');
-  if (statPopRange) {
-    if (lastRecord && lastRecord.min !== undefined && lastRecord.max !== undefined) {
-      statPopRange.textContent = `${compact(lastRecord.min)} – ${compact(lastRecord.max)}`;
-    } else {
-      statPopRange.textContent = '–';
-    }
-  }
+  const statPopMedian = $('hyper-stat-pop-median');
+  if (statPopMedian) statPopMedian.textContent = lastRecord && lastRecord.median !== undefined ? compact(lastRecord.median) : '–';
 
   const statPopSurvival = $('hyper-stat-pop-survival');
   if (statPopSurvival) {

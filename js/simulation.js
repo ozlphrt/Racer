@@ -445,6 +445,13 @@ export class Simulation {
       }
     }
 
+    // Compute Median Fitness
+    const sortedFits = scored.map((s) => s.fitness).sort((a, b) => a - b);
+    const mid = Math.floor(sortedFits.length / 2);
+    const medianFitness = sortedFits.length % 2 === 0
+      ? (sortedFits[mid - 1] + sortedFits[mid]) / 2
+      : sortedFits[mid];
+
     const avgFitness = sum / scored.length;
     const avgLap = lapCount > 0 ? lapSum / lapCount : Infinity;
     const fitnessDeltaPct = avgFitness > 0 ? ((best.fitness - avgFitness) / avgFitness) * 100 : 0;
@@ -456,6 +463,7 @@ export class Simulation {
       generation: this.generation,
       best: best.fitness,
       avg: avgFitness,
+      median: medianFitness,
       min: Number.isFinite(minFitness) ? minFitness : 0,
       max: Number.isFinite(maxFitness) ? maxFitness : best.fitness,
       bestLap: genBestLap,
