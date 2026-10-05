@@ -3749,7 +3749,7 @@ export class Renderer3D {
 
     if (this.tireCount > 0) {
       this.tireMesh = new THREE.InstancedMesh(tireGeo, tireMat, this.tireCount);
-      this.tireMesh.castShadow = true;
+      this.tireMesh.castShadow = false; // Disable heavy shadow-map pass for 3,862 instances
       this.tireMesh.receiveShadow = true;
 
       for (let i = 0; i < this.tireCount; i++) {
@@ -3952,7 +3952,7 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeQuads = 2400;
+    this.maxSmokeQuads = 600;
     this.smokeQuads = [];
     const maxVerts = this.maxSmokeQuads * 4;
     const maxIndices = this.maxSmokeQuads * 6;
@@ -3995,37 +3995,17 @@ export class Renderer3D {
       varying float vAlpha;
       varying vec2 vUv;
 
-      float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-      }
-
-      float noise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        vec2 u = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
-                   mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-      }
-
-      float fbm(vec2 p) {
-        float v = 0.0;
-        v += 0.55 * noise(p); p = p * 2.1;
-        v += 0.30 * noise(p); p = p * 2.2;
-        v += 0.15 * noise(p);
-        return v;
-      }
-
       void main() {
         // Continuous soft Gaussian edge falloff across ribbon width (u in [0, 1])
         float uDist = abs(vUv.x - 0.5) * 2.0;
-        float softEdge = exp(-uDist * uDist * 4.0);
+        float softEdge = exp(-uDist * uDist * 3.8);
 
-        // Continuous streaming longitudinal wisps
-        float turb = fbm(vec2(vUv.x * 3.0, vUv.y * 10.0));
+        // Fast analytic longitudinal wisps (no heavy GPU noise loops)
+        float wisp = 0.72 + 0.28 * sin(vUv.y * 22.0 + vUv.x * 5.0);
 
         // Translucent motorsport white-grey tire friction vapor
         vec3 smokeColor = vec3(0.92, 0.94, 0.96);
-        float alpha = softEdge * vAlpha * (0.65 + 0.35 * turb) * 0.65;
+        float alpha = softEdge * vAlpha * wisp * 0.65;
 
         gl_FragColor = vec4(smokeColor, alpha);
       }
@@ -4132,14 +4112,22 @@ export class Renderer3D {
       writeIdx++;
     }
 
+    this.smokeMesh.geometry.attributes.position.updateRange.offset = 0;
+    this.smokeMesh.geometry.attributes.position.updateRange.count = writeIdx * 4 * 3;
     this.smokeMesh.geometry.attributes.position.needsUpdate = true;
+
+    this.smokeMesh.geometry.attributes.alpha.updateRange.offset = 0;
+    this.smokeMesh.geometry.attributes.alpha.updateRange.count = writeIdx * 4;
     this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
+
+    this.smokeMesh.geometry.attributes.uv.updateRange.offset = 0;
+    this.smokeMesh.geometry.attributes.uv.updateRange.count = writeIdx * 4 * 2;
     this.smokeMesh.geometry.attributes.uv.needsUpdate = true;
     this.smokeMesh.geometry.setDrawRange(0, writeIdx * 6);
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 120000;
+    this.maxSkidQuads = 24000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -4318,11 +4306,14 @@ export class Renderer3D {
               rx + nx, ry + ny,
               intensity
             );
-            // Continuous extruded tire smoke vapor ribbons
-            const normX = -sin;
-            const normY = -cos;
-            this.addTireSmokeQuad(prev.lx, prev.ly, lx, ly, normX, normY, intensity);
-            this.addTireSmokeQuad(prev.rx, prev.ry, rx, ry, normX, normY, intensity);
+            // Continuous extruded tire smoke vapor ribbons for nearby / focused cars
+            const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+            if (camDistSq < 320 || car === sim.player) {
+              const normX = -sin;
+              const normY = -cos;
+              this.addTireSmokeQuad(prev.lx, prev.ly, lx, ly, normX, normY, intensity);
+              this.addTireSmokeQuad(prev.rx, prev.ry, rx, ry, normX, normY, intensity);
+            }
             added = true;
           }
         }
