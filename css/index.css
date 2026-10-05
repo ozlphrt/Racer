@@ -532,13 +532,13 @@ h1 {
   text-overflow: ellipsis;
 }
 
-/* ===== F1 Live Timing Leaderboard Tower (Left Side) ===== */
+/* ===== F1 Live Timing Leaderboard Tower (Bottom Right Side) ===== */
 .leaderboard-tower {
   position: absolute;
-  top: 86px;
-  left: 16px;
+  bottom: 16px;
+  right: 98px;
   width: 254px;
-  max-height: calc(100% - 150px);
+  max-height: calc(100vh - 120px);
   padding: 8px 10px;
   border-radius: 12px;
   display: flex;
