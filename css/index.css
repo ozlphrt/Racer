@@ -833,17 +833,18 @@ h1 {
 /* ===== Leader / Cockpit Telemetry Card ===== */
 .leader-card {
   position: absolute;
-  top: 16px;
+  bottom: 16px;
   right: 16px;
-  width: 126px;
-  padding: 5px 6px;
-  border-radius: 8px;
+  width: auto;
+  min-width: 76px;
+  padding: 4px 5px;
+  border-radius: 7px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  background: rgba(10, 15, 31, 0.88);
+  gap: 2.5px;
+  background: rgba(10, 15, 31, 0.9);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55), 0 0 14px rgba(34, 211, 238, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6), 0 0 14px rgba(34, 211, 238, 0.08);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: 20;
@@ -853,12 +854,12 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1px 4px;
+  padding: 1px 3.5px;
   border-radius: 3px;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   background: rgba(36, 24, 4, 0.9);
   color: #fbbf24;
   border: 1px solid rgba(251, 191, 36, 0.6);
@@ -871,33 +872,33 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  padding: 2px 5px;
+  padding: 1.5px 3.5px;
   background: rgba(15, 23, 42, 0.6);
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1px solid var(--border);
 }
 
 .cockpit-speed-box {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  gap: 1.5px;
   flex-shrink: 0;
 }
 
 .cockpit-speed-val {
   font-family: var(--mono);
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1;
   color: #ffffff;
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
 }
 
 .cockpit-speed-unit {
-  font-size: 7.5px;
+  font-size: 6.5px;
   font-weight: 700;
   color: var(--text-faint);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 /* Telemetry Section: Steering Wheel + Pedals */
@@ -905,16 +906,17 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1px 2px 0;
+  gap: 6px;
+  padding: 1px 1px 0;
 }
 
 .wheel-wrapper {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
 
 .steering-wheel {
@@ -928,17 +930,17 @@ h1 {
 .cockpit-pedals-section {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3.5px;
 }
 
 .pedal-gauge {
   position: relative;
-  width: 11px;
-  height: 34px;
-  border-radius: 2.5px;
+  width: 9px;
+  height: 29px;
+  border-radius: 2px;
   background: #0f172a;
   border: 1px solid #334155;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
   overflow: hidden;
   display: flex;
   flex-direction: column-reverse;
