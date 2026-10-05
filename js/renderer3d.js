@@ -525,32 +525,130 @@ export class Renderer3D {
     // Decorative track lines & kerbs
     this.decorGroup = new THREE.Group();
 
-    // Outer & Inner white edge lines
-    const lineMat = new THREE.LineBasicMaterial({ color: C.edgeLine, linewidth: 2 });
-    const outerPts = [];
-    const innerPts = [];
-    for (let i = 0; i <= N; i++) {
-      const idx = i % N;
-      outerPts.push(new THREE.Vector3(t.ox[idx], -t.oy[idx], 0.03));
-      innerPts.push(new THREE.Vector3(t.ix[idx], -t.iy[idx], 0.03));
-    }
-    const outerLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(outerPts), lineMat);
-    const innerLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(innerPts), lineMat);
-    this.decorGroup.add(outerLine);
-    this.decorGroup.add(innerLine);
+    // Outer & Inner Solid White Boundary Line Mesh Ribbons (2.2px wide)
+    const lineWidth = 2.2;
+    const borderMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.35,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      depthTest: true,
+    });
 
-    // Centerline dashed markings
-    const centerPts = [];
-    for (let i = 0; i < N; i += 2) {
-      const i2 = (i + 1) % N;
-      centerPts.push(new THREE.Vector3(t.cx[i], -t.cy[i], 0.02));
-      centerPts.push(new THREE.Vector3(t.cx[i2], -t.cy[i2], 0.02));
+    const outerBorderVerts = [];
+    const outerBorderIndices = [];
+    const innerBorderVerts = [];
+    const innerBorderIndices = [];
+
+    for (let i = 0; i < N; i++) {
+      const nxt = (i + 1) % N;
+
+      // 1. Outer track edge normal pointing inwards towards centerline
+      const odx = t.cx[i] - t.ox[i];
+      const ody = -t.cy[i] - (-t.oy[i]);
+      const oDist = Math.hypot(odx, ody) || 1;
+      const onx = odx / oDist;
+      const ony = ody / oDist;
+
+      const v0 = i * 2;
+      const v1 = i * 2 + 1;
+      const v2 = nxt * 2;
+      const v3 = nxt * 2 + 1;
+
+      outerBorderVerts.push(
+        t.ox[i], -t.oy[i], 0.025,
+        t.ox[i] + onx * lineWidth, -t.oy[i] + ony * lineWidth, 0.025
+      );
+      outerBorderIndices.push(v0, v1, v2, v1, v3, v2);
+
+      // 2. Inner track edge normal pointing outwards towards centerline
+      const idx = t.cx[i] - t.ix[i];
+      const idy = -t.cy[i] - (-t.iy[i]);
+      const iDist = Math.hypot(idx, idy) || 1;
+      const inx = idx / iDist;
+      const iny = idy / iDist;
+
+      innerBorderVerts.push(
+        t.ix[i], -t.iy[i], 0.025,
+        t.ix[i] + inx * lineWidth, -t.iy[i] + iny * lineWidth, 0.025
+      );
+      innerBorderIndices.push(v0, v1, v2, v1, v3, v2);
     }
-    const centerLine = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(centerPts),
-      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 }),
-    );
-    this.decorGroup.add(centerLine);
+
+    const outerBorderGeo = new THREE.BufferGeometry();
+    outerBorderGeo.setAttribute('position', new THREE.Float32BufferAttribute(outerBorderVerts, 3));
+    outerBorderGeo.setIndex(outerBorderIndices);
+    outerBorderGeo.computeVertexNormals();
+    const outerBorderMesh = new THREE.Mesh(outerBorderGeo, borderMat);
+    outerBorderMesh.renderOrder = 4;
+    this.decorGroup.add(outerBorderMesh);
+
+    const innerBorderGeo = new THREE.BufferGeometry();
+    innerBorderGeo.setAttribute('position', new THREE.Float32BufferAttribute(innerBorderVerts, 3));
+    innerBorderGeo.setIndex(innerBorderIndices);
+    innerBorderGeo.computeVertexNormals();
+    const innerBorderMesh = new THREE.Mesh(innerBorderGeo, borderMat);
+    innerBorderMesh.renderOrder = 4;
+    this.decorGroup.add(innerBorderMesh);
+
+    // 3. Centerline Solid Dashed Markings (Bold dashed quads)
+    const centerDashVerts = [];
+    const centerDashIndices = [];
+    const dashHalfWidth = 0.8;
+    const centerMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.4,
+      metalness: 0.05,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      depthTest: true,
+    });
+
+    let dashIdx = 0;
+    for (let i = 0; i < N; i += 4) {
+      const iEnd = (i + 2) % N;
+
+      const dx1 = t.ox[i] - t.ix[i];
+      const dy1 = -t.oy[i] - (-t.iy[i]);
+      const len1 = Math.hypot(dx1, dy1) || 1;
+      const nx1 = dx1 / len1;
+      const ny1 = dy1 / len1;
+
+      const dx2 = t.ox[iEnd] - t.ix[iEnd];
+      const dy2 = -t.oy[iEnd] - (-t.iy[iEnd]);
+      const len2 = Math.hypot(dx2, dy2) || 1;
+      const nx2 = dx2 / len2;
+      const ny2 = dy2 / len2;
+
+      const v0 = dashIdx * 4;
+      const v1 = dashIdx * 4 + 1;
+      const v2 = dashIdx * 4 + 2;
+      const v3 = dashIdx * 4 + 3;
+
+      centerDashVerts.push(
+        t.cx[i] - nx1 * dashHalfWidth, -t.cy[i] - ny1 * dashHalfWidth, 0.022,
+        t.cx[i] + nx1 * dashHalfWidth, -t.cy[i] + ny1 * dashHalfWidth, 0.022,
+        t.cx[iEnd] - nx2 * dashHalfWidth, -t.cy[iEnd] - ny2 * dashHalfWidth, 0.022,
+        t.cx[iEnd] + nx2 * dashHalfWidth, -t.cy[iEnd] + ny2 * dashHalfWidth, 0.022
+      );
+      centerDashIndices.push(v0, v1, v2, v1, v3, v2);
+      dashIdx++;
+    }
+
+    const centerDashGeo = new THREE.BufferGeometry();
+    centerDashGeo.setAttribute('position', new THREE.Float32BufferAttribute(centerDashVerts, 3));
+    centerDashGeo.setIndex(centerDashIndices);
+    centerDashGeo.computeVertexNormals();
+    const centerDashMesh = new THREE.Mesh(centerDashGeo, centerMat);
+    centerDashMesh.renderOrder = 3;
+    this.decorGroup.add(centerDashMesh);
 
     // Red & White 3D Apex Kerbs
     const kerbRedGeo = new THREE.BufferGeometry();
