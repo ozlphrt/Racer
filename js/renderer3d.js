@@ -455,7 +455,7 @@ export class Renderer3D {
 
     const terrain = new THREE.Mesh(geo, mat);
     terrain.receiveShadow = true;
-    terrain.position.z = -0.1;
+    terrain.position.z = 0;
     this.scene.add(terrain);
   }
 
@@ -479,17 +479,17 @@ export class Renderer3D {
     const t = this.track;
     const N = t.N;
 
-    // Track surface mesh
+    // Track surface mesh flush at ground level
     const vertices = [];
     const indices = [];
     const uvs = [];
 
     for (let i = 0; i < N; i++) {
       // Outer point
-      vertices.push(t.ox[i], -t.oy[i], 0.2);
+      vertices.push(t.ox[i], -t.oy[i], 0.01);
       uvs.push(0, i / N * 20);
       // Inner point
-      vertices.push(t.ix[i], -t.iy[i], 0.2);
+      vertices.push(t.ix[i], -t.iy[i], 0.01);
       uvs.push(1, i / N * 20);
 
       const nxt = (i + 1) % N;
@@ -512,9 +512,13 @@ export class Renderer3D {
       color: C.asphalt,
       roughness: 0.85,
       metalness: 0.1,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     this.trackMesh = new THREE.Mesh(geo, mat);
+    this.trackMesh.castShadow = false;
     this.trackMesh.receiveShadow = true;
     this.scene.add(this.trackMesh);
 
@@ -527,8 +531,8 @@ export class Renderer3D {
     const innerPts = [];
     for (let i = 0; i <= N; i++) {
       const idx = i % N;
-      outerPts.push(new THREE.Vector3(t.ox[idx], -t.oy[idx], 0.4));
-      innerPts.push(new THREE.Vector3(t.ix[idx], -t.iy[idx], 0.4));
+      outerPts.push(new THREE.Vector3(t.ox[idx], -t.oy[idx], 0.03));
+      innerPts.push(new THREE.Vector3(t.ix[idx], -t.iy[idx], 0.03));
     }
     const outerLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(outerPts), lineMat);
     const innerLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(innerPts), lineMat);
@@ -539,8 +543,8 @@ export class Renderer3D {
     const centerPts = [];
     for (let i = 0; i < N; i += 2) {
       const i2 = (i + 1) % N;
-      centerPts.push(new THREE.Vector3(t.cx[i], -t.cy[i], 0.35));
-      centerPts.push(new THREE.Vector3(t.cx[i2], -t.cy[i2], 0.35));
+      centerPts.push(new THREE.Vector3(t.cx[i], -t.cy[i], 0.02));
+      centerPts.push(new THREE.Vector3(t.cx[i2], -t.cy[i2], 0.02));
     }
     const centerLine = new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints(centerPts),
@@ -567,8 +571,8 @@ export class Renderer3D {
         const bx = xs[j] + (t.cx[j] - xs[j]) * inset;
         const by = ys[j] + (t.cy[j] - ys[j]) * inset;
 
-        target.push(xs[k], -ys[k], 0.5, ax, -ay, 0.5, bx, -by, 0.5);
-        target.push(xs[k], -ys[k], 0.5, bx, -by, 0.5, xs[j], -ys[j], 0.5);
+        target.push(xs[k], -ys[k], 0.03, ax, -ay, 0.03, bx, -by, 0.03);
+        target.push(xs[k], -ys[k], 0.03, bx, -by, 0.03, xs[j], -ys[j], 0.03);
       }
     }
 
@@ -626,8 +630,8 @@ export class Renderer3D {
     const tarmacBand = new THREE.Mesh(bandGeo, bandMat);
     tarmacBand.renderOrder = 12;
 
-    // Position above the tarmac surface (asphalt is at z = 0.20, band at 0.28)
-    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.28);
+    // Position flush on the tarmac surface
+    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.025);
 
     // Orient: Plane width aligns along road width (dx, dy), length aligns along track tangent (tx, ty)
     const roadAngle = Math.atan2(dy, dx);
@@ -651,7 +655,7 @@ export class Renderer3D {
     startBar.position.set(
       (ix + ox) / 2 - tx * (bandLength + 4.0),
       (iy + oy) / 2 - ty * (bandLength + 4.0),
-      0.30
+      0.026
     );
     startBar.rotation.z = roadAngle;
     this.decorGroup.add(startBar);
@@ -1954,7 +1958,7 @@ export class Renderer3D {
   addSkidQuad(v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y, alpha) {
     const quadIdx = this.skidHead;
     const vOffset = quadIdx * 4;
-    const z = 0.22;
+    const z = 0.02;
 
     // v0
     this.skidPosArr[vOffset * 3] = v0x;
