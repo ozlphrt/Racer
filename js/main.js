@@ -1035,7 +1035,6 @@ function updateHud(leader) {
     setTxt('leader-pos-badge', `P.${rank}`);
 
     const prog = Math.min(100, Math.max(0, car.lapProgress * 100));
-    setTxt('leader-progress', `${prog.toFixed(0)}%`);
     const pb = $('leader-progress-bar');
     if (pb) pb.style.width = `${prog}%`;
   } else {
@@ -1052,9 +1051,7 @@ let smoothGas = 0;
 const elCockpitWheel = $('cockpit-wheel');
 const elCockpitSteerVal = $('cockpit-steer-val');
 const elPedalBrakeFill = $('pedal-brake-fill');
-const elPedalBrakeVal = $('pedal-brake-val');
 const elPedalGasFill = $('pedal-gas-fill');
-const elPedalGasVal = $('pedal-gas-val');
 
 function updateCockpitAnimation() {
   const car = state.manual && sim.player ? sim.player : sim.leader;
@@ -1079,10 +1076,7 @@ function updateCockpitAnimation() {
   if (elCockpitSteerVal) elCockpitSteerVal.textContent = steerText;
 
   if (elPedalBrakeFill) elPedalBrakeFill.style.height = `${(smoothBrake * 100).toFixed(1)}%`;
-  if (elPedalBrakeVal) elPedalBrakeVal.textContent = `${Math.round(smoothBrake * 100)}%`;
-
   if (elPedalGasFill) elPedalGasFill.style.height = `${(smoothGas * 100).toFixed(1)}%`;
-  if (elPedalGasVal) elPedalGasVal.textContent = `${Math.round(smoothGas * 100)}%`;
 }
 
 // ---------- Main loop ----------

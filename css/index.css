@@ -835,12 +835,12 @@ h1 {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 246px;
-  padding: 12px 14px;
-  border-radius: 16px;
+  width: 196px;
+  padding: 8px 10px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   background: rgba(10, 15, 31, 0.84);
   border: 1px solid var(--border-strong);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 0 0 20px rgba(34, 211, 238, 0.1);
@@ -853,7 +853,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -862,17 +862,17 @@ h1 {
 .leader-badge-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .pos-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 7px;
-  border-radius: 6px;
+  padding: 1.5px 6px;
+  border-radius: 5px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
   background: rgba(36, 24, 4, 0.9);
@@ -882,35 +882,35 @@ h1 {
 }
 
 .leader-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2.5px;
   background: var(--amber);
-  box-shadow: 0 0 12px var(--amber);
+  box-shadow: 0 0 10px var(--amber);
 }
 
 .leader-dot.player {
   background: var(--lime);
-  box-shadow: 0 0 12px var(--lime);
+  box-shadow: 0 0 10px var(--lime);
 }
 
 .leader-head-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .lap-badge {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 6px;
+  padding: 2px 7px;
+  border-radius: 5px;
   color: #38bdf8;
   background: rgba(14, 165, 233, 0.16);
   border: 1px solid rgba(56, 189, 248, 0.45);
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
-  letter-spacing: 0.06em;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+  letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
@@ -919,47 +919,47 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 5px 8px;
+  gap: 8px;
+  padding: 4px 6px;
   background: rgba(15, 23, 42, 0.6);
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
 }
 
 .cockpit-speed-box {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
 .cockpit-speed-val {
   font-family: var(--mono);
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1;
   color: #ffffff;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
 }
 
 .cockpit-speed-unit {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   color: var(--text-faint);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
 .cockpit-lap-box {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex: 1;
 }
 
 .cockpit-lap-bar {
   position: relative;
   flex: 1;
-  height: 6px;
-  border-radius: 6px;
+  height: 5px;
+  border-radius: 5px;
   background: rgba(148, 163, 184, 0.15);
   overflow: hidden;
 }
@@ -975,22 +975,13 @@ h1 {
   transition: width 0.1s linear;
 }
 
-.cockpit-lap-pct {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--cyan);
-  min-width: 32px;
-  text-align: right;
-}
-
 /* Telemetry Grid: Steering Wheel + Pedals */
 .cockpit-telemetry {
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: center;
-  gap: 10px;
-  padding: 4px 2px 2px;
+  gap: 6px;
+  padding: 2px 0 0;
 }
 
 /* Steering Wheel Section */
@@ -998,16 +989,16 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
 }
 
 .wheel-wrapper {
-  width: 76px;
-  height: 76px;
+  width: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
 }
 
 .steering-wheel {
@@ -1020,19 +1011,19 @@ h1 {
 .cockpit-meta-label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
+  gap: 4px;
+  font-size: 9px;
   font-weight: 700;
 }
 
 .cockpit-meta-label .label-name {
   color: var(--text-faint);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
 .cockpit-meta-label .label-val {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--violet);
 }
@@ -1041,24 +1032,24 @@ h1 {
 .cockpit-pedals-section {
   display: flex;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .pedal-column {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
 }
 
 .pedal-gauge {
   position: relative;
-  width: 28px;
-  height: 64px;
-  border-radius: 6px;
+  width: 18px;
+  height: 42px;
+  border-radius: 4px;
   background: #0f172a;
   border: 1.5px solid #334155;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
   overflow: hidden;
   display: flex;
   flex-direction: column-reverse;
@@ -1080,12 +1071,12 @@ h1 {
 
 .pedal-fill.brake {
   background: linear-gradient(0deg, #991b1b, #ef4444);
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
 }
 
 .pedal-fill.gas {
   background: linear-gradient(0deg, #0284c7, #22d3ee);
-  box-shadow: 0 0 14px rgba(34, 211, 238, 0.8);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
 }
 
 .pedal-ribs {
@@ -1095,7 +1086,22 @@ h1 {
   flex-direction: column;
   justify-content: space-evenly;
   pointer-events: none;
-  padding: 4px 0;
+  padding: 2px 0;
+}
+
+.pedal-name {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.pedal-name.brake {
+  color: #f87171;
+}
+
+.pedal-name.gas {
+  color: #38bdf8;
 }
 
 .pedal-ribs span {
