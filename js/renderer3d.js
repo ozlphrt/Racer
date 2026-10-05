@@ -2815,11 +2815,64 @@ export class Renderer3D {
 
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
+    const cameraPreset = opts.cameraPreset || 'chase';
 
-    if (opts.follow && hasFinisher) {
-      // 1. Finish Line Broadcast Cam: Placed downstream in front of start/finish looking back at oncoming finishers
+    if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {
+      this.controls.autoRotate = true;
+      this.controls.autoRotateSpeed = 0.55;
+    } else if (cameraPreset === 'onboard' && focusCar) {
+      // 1. Onboard / Cockpit T-Cam (Direct driver perspective looking down nose)
       this.controls.autoRotate = false;
+      const cosA = Math.cos(focusCar.angle);
+      const sinA = Math.sin(focusCar.angle);
 
+      // Roll-hoop T-cam directly above driver helmet
+      const destCamX = focusCar.x + cosA * 0.4;
+      const destCamY = -focusCar.y - sinA * 0.4;
+      const destCamZ = 3.6;
+
+      // Look 45 meters forward down the nose
+      const destTargetX = focusCar.x + cosA * 45;
+      const destTargetY = -focusCar.y - sinA * 45;
+      const destTargetZ = 2.2;
+
+      const camGlide = 0.35;
+      const targetGlide = 0.35;
+
+      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+    } else if (cameraPreset === 'heli' && focusCar) {
+      // 2. Helicopter View (High altitude tactical track overhead)
+      this.controls.autoRotate = false;
+      const cosA = Math.cos(focusCar.angle);
+      const sinA = Math.sin(focusCar.angle);
+
+      const destCamX = focusCar.x - cosA * 15;
+      const destCamY = -focusCar.y + sinA * 15;
+      const destCamZ = 135.0;
+
+      const destTargetX = focusCar.x;
+      const destTargetY = -focusCar.y;
+      const destTargetZ = 1.0;
+
+      const camGlide = 0.09;
+      const targetGlide = 0.12;
+
+      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+    } else if (cameraPreset === 'broadcast') {
+      // 3. TV Broadcast Camera (Start / Finish Gantry view)
+      this.controls.autoRotate = false;
       const t = this.track;
       const cx = t.cx[0];
       const cy = -t.cy[0];
@@ -2833,15 +2886,13 @@ export class Renderer3D {
       const destCamY = cy + ty * 80 + ny * 28;
       const destCamZ = 10.5;
 
-      // Track oncoming living cars crossing the line or look at the checkered gantry
-      const incomingFinisher = leader && leader.alive ? leader : null;
-      const destTargetX = incomingFinisher ? incomingFinisher.x : cx - tx * 35;
-      const destTargetY = incomingFinisher ? -incomingFinisher.y : cy - ty * 35;
+      const incoming = (focusCar && focusCar.alive) ? focusCar : (leader && leader.alive ? leader : null);
+      const destTargetX = incoming ? incoming.x : cx - tx * 35;
+      const destTargetY = incoming ? -incoming.y : cy - ty * 35;
       const destTargetZ = 3.2;
 
-      // Smooth cinematic camera glide
-      const camGlide = 0.05;
-      const targetGlide = 0.08;
+      const camGlide = 0.06;
+      const targetGlide = 0.09;
 
       this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
       this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
@@ -2850,35 +2901,64 @@ export class Renderer3D {
       this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
-    } else if (opts.follow && focusCar) {
-      // 2. Smooth Broadcast Follow Cam
-      this.controls.autoRotate = false; // Never fight follow translation with spherical auto-rotation
-
-      const targetX = focusCar.x;
-      const targetY = -focusCar.y;
-      const targetZ = 3.5;
-
-      // Smooth exponential lerp on camera target
-      const panSpeed = 0.12;
-      const dx = (targetX - this.controls.target.x) * panSpeed;
-      const dy = (targetY - this.controls.target.y) * panSpeed;
-      const dz = (targetZ - this.controls.target.z) * panSpeed;
-
-      this.controls.target.x += dx;
-      this.controls.target.y += dy;
-      this.controls.target.z += dz;
-
-      // Translate camera along with target smoothly
-      this.camera.position.x += dx;
-      this.camera.position.y += dy;
-
-      // Restore canonical broadcast follow altitude (68.0) smoothly and gradually
-      const canonicalCamZ = 68.0;
-      const heightGlide = 0.04;
-      this.camera.position.z += (canonicalCamZ - this.camera.position.z) * heightGlide;
     } else {
-      this.controls.autoRotate = true;
-      this.controls.autoRotateSpeed = 0.45;
+      // 4. Default: 'chase' preset (Dynamic Smooth 3rd-person follow)
+      this.controls.autoRotate = false;
+
+      if (hasFinisher && !opts.manual) {
+        // When race finishes and car crosses line, transition gracefully to finish line broadcast view
+        const t = this.track;
+        const cx = t.cx[0];
+        const cy = -t.cy[0];
+        const tx = t.tx[0];
+        const ty = -t.ty[0];
+        const nx = -ty;
+        const ny = tx;
+
+        const destCamX = cx + tx * 80 + nx * 28;
+        const destCamY = cy + ty * 80 + ny * 28;
+        const destCamZ = 10.5;
+
+        const incomingFinisher = leader && leader.alive ? leader : null;
+        const destTargetX = incomingFinisher ? incomingFinisher.x : cx - tx * 35;
+        const destTargetY = incomingFinisher ? -incomingFinisher.y : cy - ty * 35;
+        const destTargetZ = 3.2;
+
+        const camGlide = 0.05;
+        const targetGlide = 0.08;
+
+        this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+        this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+        this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+        this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+        this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+        this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+      } else if (focusCar) {
+        const cosA = Math.cos(focusCar.angle);
+        const sinA = Math.sin(focusCar.angle);
+
+        // Position camera behind and above car heading
+        const destCamX = focusCar.x - cosA * 38;
+        const destCamY = -focusCar.y + sinA * 38;
+        const destCamZ = 14.0;
+
+        // Look ahead of the car nose
+        const destTargetX = focusCar.x + cosA * 16;
+        const destTargetY = -focusCar.y - sinA * 16;
+        const destTargetZ = 2.8;
+
+        const camGlide = 0.12;
+        const targetGlide = 0.16;
+
+        this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+        this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+        this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+        this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+        this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+        this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+      }
     }
 
     this.controls.update();

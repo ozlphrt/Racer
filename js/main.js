@@ -123,6 +123,7 @@ const state = {
   manual: false,
   autosave: true,
   audio: true,
+  cameraPreset: 'chase',
 };
 const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
 
@@ -615,10 +616,74 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ---------- Bottom Right Circular Actions (Leaderboard & Telemetry) ----------
+// ---------- Bottom Right Circular Actions (Camera, Leaderboard & Telemetry) ----------
+const btnCameraMenu = $('btn-camera-menu');
+const cameraPopover = $('camera-popover');
 const btnToggleLeaderboard = $('btn-toggle-leaderboard');
 const btnToggleTelemetry = $('btn-toggle-telemetry');
 const leaderCardEl = $('leader-card');
+
+function setCameraPopoverOpen(open) {
+  if (!cameraPopover) return;
+  cameraPopover.hidden = !open;
+  btnCameraMenu?.setAttribute('aria-expanded', String(open));
+  btnCameraMenu?.classList.toggle('is-active', open);
+}
+
+function setCameraPreset(preset) {
+  state.cameraPreset = preset;
+  if (!state.view3d) {
+    set3DView(true);
+  }
+  if (preset !== 'orbit') {
+    state.follow = true;
+    const toggleFollow = $('toggle-follow');
+    if (toggleFollow) toggleFollow.checked = true;
+  } else {
+    state.follow = false;
+    const toggleFollow = $('toggle-follow');
+    if (toggleFollow) toggleFollow.checked = false;
+  }
+
+  document.querySelectorAll('.btn-cam-preset').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-preset') === preset);
+  });
+
+  const names = {
+    chase: 'Chase Cam (Dynamic Follow)',
+    onboard: 'Onboard T-Cam (Cockpit View)',
+    heli: 'Helicopter View (Tactical Overhead)',
+    broadcast: 'TV Broadcast (Gantry Cam)',
+    orbit: 'Free Orbit (Cinematic Rotate)',
+  };
+  toast(`🎥 ${names[preset] || preset}`, 'info');
+}
+
+if (btnCameraMenu) {
+  btnCameraMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = cameraPopover.hidden;
+    setCameraPopoverOpen(isHidden);
+  });
+}
+
+document.querySelectorAll('.btn-cam-preset').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const preset = btn.getAttribute('data-preset');
+    if (preset) {
+      setCameraPreset(preset);
+      setCameraPopoverOpen(false);
+    }
+  });
+});
+
+document.addEventListener('click', (e) => {
+  const widget = $('camera-widget');
+  if (widget && !widget.contains(e.target)) {
+    setCameraPopoverOpen(false);
+  }
+});
 
 function setLeaderboardOpen(open) {
   leaderboard.toggleCollapse(!open);
@@ -677,6 +742,26 @@ window.addEventListener('keydown', (e) => {
       setToggle('follow', !state.follow);
       break;
     case 'v':
+      if (cameraPopover) {
+        setCameraPopoverOpen(cameraPopover.hidden);
+      }
+      break;
+    case '1':
+      setCameraPreset('chase');
+      break;
+    case '2':
+      setCameraPreset('onboard');
+      break;
+    case '3':
+      setCameraPreset('heli');
+      break;
+    case '4':
+      setCameraPreset('broadcast');
+      break;
+    case '5':
+      setCameraPreset('orbit');
+      break;
+    case 'x':
       setToggle('sensors', !state.sensors);
       break;
     case 'g':
@@ -712,6 +797,7 @@ window.addEventListener('keydown', (e) => {
       openHyperModal();
       break;
     case 'escape':
+      setCameraPopoverOpen(false);
       setControlsPopoverOpen(false);
       setPanelOpen(false);
       break;
