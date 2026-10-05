@@ -2154,7 +2154,7 @@ input[type='range']:disabled {
   font-size: 13.5px;
   font-weight: 700;
   color: #e2e8f0;
-  min-width: 44px;
+  min-width: 28px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -2167,28 +2167,6 @@ input[type='range']:disabled {
 @keyframes ghost-pulse {
   0% { opacity: 0.75; }
   100% { opacity: 1; }
-}
-
-.ghost-timer-progress {
-  width: 42px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 9999px;
-  overflow: hidden;
-}
-
-.ghost-timer-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #00e5ff, #38bdf8);
-  border-radius: 9999px;
-  transition: width 0.08s linear;
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
-}
-
-.ghost-timer-pill.urgent .ghost-timer-fill {
-  background: linear-gradient(90deg, #f59e0b, #ef4444);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
 }
 
 /* ===== F1 Broadcast Elimination Notification ===== */

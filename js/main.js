@@ -960,11 +960,10 @@ function updateHud(leader) {
   setTxt('stat-fps', currentFps);
   setTxt('stat-effective', `×${effSpeed < 10 ? effSpeed.toFixed(1) : effSpeed.toFixed(0)}`);
 
-  // Top-Center Semi-Transparent Ghost Mode 30s Countdown Timer
+  // Top-Center Semi-Transparent Ghost Mode 30s Countdown Timer (Integer Seconds)
   const ghostPill = $('ghost-timer-pill');
   const ghostTitle = $('ghost-timer-title');
   const ghostVal = $('ghost-timer-value');
-  const ghostFill = $('ghost-timer-fill');
   const colConfig = CONFIG.collision || {};
   const warmup = colConfig.warmupTime || 30;
   const remainingGhost = Math.max(0, warmup - sim.time);
@@ -974,15 +973,13 @@ function updateHud(leader) {
       ghostPill.classList.remove('hidden', 'active-contact');
       ghostPill.classList.toggle('urgent', remainingGhost <= 5.0);
       if (ghostTitle) ghostTitle.textContent = remainingGhost <= 5.0 ? 'GHOST EXPIRING' : 'GHOST MODE';
-      if (ghostVal) ghostVal.textContent = remainingGhost.toFixed(1) + 's';
-      if (ghostFill) ghostFill.style.width = `${(remainingGhost / warmup) * 100}%`;
+      if (ghostVal) ghostVal.textContent = Math.ceil(remainingGhost) + 's';
     } else if (sim.time < warmup + 3.0) {
       // 3-second grace transition showing CONTACTS ACTIVE before fading out
       ghostPill.classList.remove('hidden', 'urgent');
       ghostPill.classList.add('active-contact');
       if (ghostTitle) ghostTitle.textContent = 'CONTACTS ACTIVE';
       if (ghostVal) ghostVal.textContent = 'ON';
-      if (ghostFill) ghostFill.style.width = '100%';
     } else {
       // Gracefully fade out once contact physics are active
       ghostPill.classList.add('hidden');
