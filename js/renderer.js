@@ -950,12 +950,20 @@ export class Renderer {
       }
       s.x += s.vx * dt;
       s.y += s.vy * dt;
-      s.vx *= 0.92;
-      s.vy *= 0.92;
+      s.vx *= 0.94;
+      s.vy *= 0.94;
       s.radius += 5.5 * dt;
-      ctx.fillStyle = `rgba(238, 242, 248, ${s.alpha * s.life})`;
+
+      const r = Math.min(s.maxRadius, s.radius);
+      const alpha = s.alpha * Math.pow(s.life, 1.4) * 0.35;
+      const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+      grad.addColorStop(0, `rgba(242, 245, 250, ${alpha})`);
+      grad.addColorStop(0.5, `rgba(230, 235, 242, ${alpha * 0.6})`);
+      grad.addColorStop(1, `rgba(220, 226, 235, 0)`);
+
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, Math.min(s.maxRadius, s.radius), 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();

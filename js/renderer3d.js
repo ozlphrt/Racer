@@ -2492,36 +2492,77 @@ export class Renderer3D {
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
     this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
+    this.smokeRotArr = new Float32Array(this.maxSmokeParticles);
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
+    geo.setAttribute('rotation', new THREE.BufferAttribute(this.smokeRotArr, 1));
     geo.setDrawRange(0, 0);
 
     const vertShader = `
       attribute float size;
       attribute float alpha;
+      attribute float rotation;
       varying float vAlpha;
+      varying float vRotation;
       void main() {
         vAlpha = alpha;
+        vRotation = rotation;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (480.0 / -mvPosition.z);
+        gl_PointSize = size * (420.0 / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
 
     const fragShader = `
       varying float vAlpha;
+      varying float vRotation;
+
+      // 2D Hash & Value Noise for Organic Fractal Billows
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+                   mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        v += 0.55 * noise(p); p = p * 2.1;
+        v += 0.28 * noise(p); p = p * 2.2;
+        v += 0.17 * noise(p);
+        return v;
+      }
+
       void main() {
-        // Soft volumetric circular smoke puff
-        vec2 coord = gl_PointCoord - vec2(0.5);
-        float dist = length(coord);
+        // Rotate point coord around center by particle rotation
+        vec2 pt = gl_PointCoord - vec2(0.5);
+        float cosR = cos(vRotation);
+        float sinR = sin(vRotation);
+        vec2 rotUv = vec2(pt.x * cosR - pt.y * sinR, pt.x * sinR + pt.y * cosR);
+
+        float dist = length(pt);
         if (dist > 0.5) discard;
-        float circle = smoothstep(0.5, 0.05, dist);
-        // Realistic light grey-white rubber tire smoke
-        vec3 smokeColor = vec3(0.92, 0.94, 0.96);
-        gl_FragColor = vec4(smokeColor, circle * vAlpha * 0.45);
+
+        // Multi-octave fractal turbulence
+        float turb = fbm(rotUv * 6.5 + vec2(1.8, 3.4));
+
+        // Soft radial falloff modulated by fractal turbulence
+        float mask = smoothstep(0.5, 0.06, dist + (turb - 0.5) * 0.32);
+
+        // Volumetric ambient lighting with soft crevice shadowing
+        float light = clamp(0.75 + 0.25 * dot(normalize(rotUv + vec2(0.2, -0.3)), vec2(0.0, 1.0)) + (turb - 0.5) * 0.30, 0.68, 1.0);
+        vec3 smokeColor = vec3(0.93, 0.95, 0.97) * light;
+
+        float alpha = mask * vAlpha * 0.36;
+        gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
 
@@ -2561,24 +2602,26 @@ export class Renderer3D {
         }
 
         // Tire rotation slip velocity + thermal upward buoyancy
-        const slipSpd = (car.speed || 50) * 0.08;
-        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 3.5;
-        const driftY = sin * slipSpd + (Math.random() - 0.5) * 3.5;
-        const driftZ = 1.2 + Math.random() * 2.8;
+        const slipSpd = (car.speed || 50) * 0.07;
+        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 2.8;
+        const driftY = sin * slipSpd + (Math.random() - 0.5) * 2.8;
+        const driftZ = 0.9 + Math.random() * 2.2;
 
         this.smokeParticles.push({
-          x: t.x + (Math.random() - 0.5) * 0.8,
-          y: t.y + (Math.random() - 0.5) * 0.8,
+          x: t.x + (Math.random() - 0.5) * 0.7,
+          y: t.y + (Math.random() - 0.5) * 0.7,
           z: 0.35 + Math.random() * 0.25,
           vx: driftX,
           vy: driftY,
           vz: driftZ,
-          size: 3.2 + Math.random() * 2.0,
-          maxSize: 10.0 + Math.random() * 6.5,
-          growthRate: 8.5 + Math.random() * 5.0,
-          alpha: Math.min(0.85, intensity * (0.65 + Math.random() * 0.35)),
+          size: 4.2 + Math.random() * 2.5,
+          maxSize: 14.0 + Math.random() * 8.0,
+          growthRate: 11.0 + Math.random() * 6.5,
+          rotation: Math.random() * Math.PI * 2,
+          spin: (Math.random() - 0.5) * 1.6,
+          alpha: Math.min(0.85, intensity * (0.60 + Math.random() * 0.35)),
           life: 1.0,
-          decay: 1.3 + Math.random() * 0.7,
+          decay: 0.95 + Math.random() * 0.55,
         });
       }
     }
@@ -2604,10 +2647,11 @@ export class Renderer3D {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vx *= 0.91;
-      p.vy *= 0.91;
-      p.vz *= 0.93;
+      p.vx *= 0.93;
+      p.vy *= 0.93;
+      p.vz *= 0.95;
       p.size = Math.min(p.maxSize, p.size + p.growthRate * dt);
+      p.rotation += p.spin * dt;
 
       const idx = writeIdx * 3;
       this.smokePosArr[idx] = p.x;
@@ -2615,13 +2659,15 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.2);
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.4);
+      this.smokeRotArr[writeIdx] = p.rotation;
       writeIdx++;
     }
 
     this.smokePointsMesh.geometry.attributes.position.needsUpdate = true;
     this.smokePointsMesh.geometry.attributes.size.needsUpdate = true;
     this.smokePointsMesh.geometry.attributes.alpha.needsUpdate = true;
+    this.smokePointsMesh.geometry.attributes.rotation.needsUpdate = true;
     this.smokePointsMesh.geometry.setDrawRange(0, writeIdx);
   }
 
