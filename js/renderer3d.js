@@ -3528,15 +3528,33 @@ export class Renderer3D {
     this.tireDummy = new THREE.Object3D();
     this.tireColor = new THREE.Color();
 
-    // FIA Standard safety tire barrier cylinder
-    const tireGeo = new THREE.CylinderGeometry(1.15, 1.15, 0.82, 14);
-    tireGeo.rotateX(Math.PI / 2); // Align vertical height along Z axis
+    // FIA Standard safety protection tyre (Extruded ring with distinct hollow center & rounded rubber tread)
+    const outerRadius = 1.40;
+    const innerRadius = 0.65;
+    const tyreHeight = 0.88;
+
+    const shape = new THREE.Shape();
+    shape.absarc(0, 0, outerRadius, 0, Math.PI * 2, false);
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, innerRadius, 0, Math.PI * 2, true);
+    shape.holes.push(hole);
+
+    const tireGeo = new THREE.ExtrudeGeometry(shape, {
+      depth: tyreHeight - 0.16,
+      bevelEnabled: true,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: 0.08,
+      bevelThickness: 0.08,
+      curveSegments: 12,
+    });
+    tireGeo.center();
 
     const tireMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.82,
-      metalness: 0.15,
-      side: THREE.FrontSide,
+      roughness: 0.86,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
     });
 
     const tires = sim?.tireBarriers?.tires || (this.track ? this.generateTiresForTrack(this.track) : []);

@@ -70,87 +70,107 @@ export class TireBarrierSystem {
 
     for (let c = 0; c < cornerRuns.length; c++) {
       const run = cornerRuns[c];
-      let curK = run.start + 2;
 
-      while (curK <= run.end - 2) {
-        // 4 to 7 tyre stacks next to each other
-        const numStacks = 4 + Math.floor(rand() * 4); // 4, 5, 6, or 7 stacks side-by-side
-        const stackSpacing = 2.4; // Diameter + snug contact spacing (2.3m - 2.4m)
-        const stackTiers = 3 + Math.floor(rand() * 2); // 3 to 4 tires stacked vertically per stack
-
-        // Center track sample for this cluster
-        const centerK = Math.min(run.end, curK + Math.floor(numStacks * 0.8));
-        const kCurv = t.curvature[centerK];
+      // Extract continuous points along the outer edge of the corner run
+      const pts = [];
+      for (let k = run.start; k <= run.end; k++) {
+        const kCurv = t.curvature[k];
         const turnOuterLeft = kCurv >= 0;
-
-        // Base point on outer track edge
-        const edgeX = turnOuterLeft ? t.ox[centerK] : t.ix[centerK];
-        const edgeY = turnOuterLeft ? t.oy[centerK] : t.iy[centerK];
-
-        // Outward normal pointing away from the track centerline
-        const cdx = edgeX - t.cx[centerK];
-        const cdy = edgeY - t.cy[centerK];
+        const edgeX = turnOuterLeft ? t.ox[k] : t.ix[k];
+        const edgeY = turnOuterLeft ? t.oy[k] : t.iy[k];
+        const cdx = edgeX - t.cx[k];
+        const cdy = edgeY - t.cy[k];
         const cLen = Math.hypot(cdx, cdy) || 1;
         const outNx = cdx / cLen;
         const outNy = cdy / cLen;
+        pts.push({
+          x: edgeX,
+          y: edgeY,
+          outNx,
+          outNy,
+          tx: t.tx[k],
+          ty: t.ty[k],
+          yaw: Math.atan2(outNy, outNx) + Math.PI / 2,
+        });
+      }
 
-        // Tangent vector along track edge
-        const tx = t.tx[centerK];
-        const ty = t.ty[centerK];
+      if (pts.length === 0) continue;
 
-        // Runoff margin outside track edge
-        const baseMargin = 4.8;
+      // Resample continuous stacks along the whole kerb curve at snug tyre diameter intervals
+      const stackSpacing = 2.85; // Diameter of tyre (2.8m) + spacing
+      const baseMargin = 4.2;    // Runoff margin directly outside kerb edge
+      const sampledStacks = [pts[0]];
+      let prevPt = pts[0];
+      let distAcc = 0;
 
-        // 2 staggered depth rows (Front row of stacks, Rear row of stacks)
+      for (let i = 1; i < pts.length; i++) {
+        const curr = pts[i];
+        const d = Math.hypot(curr.x - prevPt.x, curr.y - prevPt.y);
+        distAcc += d;
+        if (distAcc >= stackSpacing) {
+          sampledStacks.push(curr);
+          distAcc = 0;
+        }
+        prevPt = curr;
+      }
+
+      // Populate continuous 2-row tyre wall (4 to 7 tyres stacked per column)
+      for (let sIdx = 0; sIdx < sampledStacks.length; sIdx++) {
+        const st = sampledStacks[sIdx];
+        const stackTiers = 4 + Math.floor(rand() * 4); // 4, 5, 6, or 7 tyres high
+
         for (let row = 0; row < 2; row++) {
-          const rowOffset = row * 2.1;
-          const rowStacks = row === 0 ? numStacks : numStacks - 1;
+          const rowOffset = row * 2.35;
+          const staggerTang = (row === 1) ? stackSpacing * 0.5 : 0;
+          const stackX = st.x + st.outNx * (baseMargin + rowOffset) + st.tx * staggerTang;
+          const stackY = st.y + st.outNy * (baseMargin + rowOffset) + st.ty * staggerTang;
 
-          for (let sIdx = 0; sIdx < rowStacks; sIdx++) {
-            const tangOffset = (sIdx - (rowStacks - 1) / 2) * stackSpacing + (row === 1 ? stackSpacing * 0.5 : 0);
-            const stackX = edgeX + outNx * (baseMargin + rowOffset) + tx * tangOffset;
-            const stackY = edgeY + outNy * (baseMargin + rowOffset) + ty * tangOffset;
+          // Alternating FIA colors: Red / White with occasional graphite
+          const colorGroup = (sIdx + row + c) % 2;
+          const stackBaseColor = colors[colorGroup];
 
-            // Alternating stack color
-            const colorGroup = (sIdx + c) % 2;
-            const stackBaseColor = colors[colorGroup];
+          for (let tier = 0; tier < stackTiers; tier++) {
+            // Imperfect stacking: natural organic offset, slight tilt & yaw variation
+            const jitterX = (rand() - 0.5) * 0.16;
+            const jitterY = (rand() - 0.5) * 0.16;
+            const pitch = (rand() - 0.5) * 0.07;
+            const roll = (rand() - 0.5) * 0.07;
+            const yaw = st.yaw + (rand() - 0.5) * 0.35;
+            const z = 0.44 + tier * 0.86;
 
-            // Vertical stack of 3-4 tires
-            for (let tier = 0; tier < stackTiers; tier++) {
-              const z = 0.42 + tier * 0.82;
-              const tireColor = tier === stackTiers - 1 && rand() < 0.25 ? colors[2] : stackBaseColor;
+            const tireColor = tier === stackTiers - 1 && rand() < 0.20 ? colors[2] : stackBaseColor;
+            const posX = stackX + jitterX;
+            const posY = stackY + jitterY;
 
-              this.tires.push({
-                id: id++,
-                x: stackX,
-                y: stackY,
-                z: z,
-                vx: 0,
-                vy: 0,
-                vz: 0,
-                yaw: Math.atan2(outNy, outNx) + Math.PI / 2,
-                pitch: 0,
-                roll: 0,
-                vyaw: 0,
-                vpitch: 0,
-                vroll: 0,
-                baseX: stackX,
-                baseY: stackY,
-                baseZ: z,
-                baseYaw: Math.atan2(outNy, outNx) + Math.PI / 2,
-                radius: 1.15,
-                height: 0.82,
-                mass: 1.0,
-                color: tireColor,
-                sleeping: true,
-                needsRenderUpdate: true,
-              });
-            }
+            this.tires.push({
+              id: id++,
+              x: posX,
+              y: posY,
+              z: z,
+              vx: 0,
+              vy: 0,
+              vz: 0,
+              yaw: yaw,
+              pitch: pitch,
+              roll: roll,
+              vyaw: 0,
+              vpitch: 0,
+              vroll: 0,
+              baseX: posX,
+              baseY: posY,
+              baseZ: z,
+              baseYaw: yaw,
+              basePitch: pitch,
+              baseRoll: roll,
+              radius: 1.40,
+              height: 0.88,
+              mass: 1.0,
+              color: tireColor,
+              sleeping: true,
+              needsRenderUpdate: true,
+            });
           }
         }
-
-        // Advance to next cluster location
-        curK += numStacks * 2 + 8;
       }
     }
   }
