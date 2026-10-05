@@ -192,26 +192,28 @@ export class TireBarrierSystem {
 
           // Natural organic lean direction and magnitude for this stack column
           const stackLeanAngle = rand() * Math.PI * 2;
-          const stackLeanMag = (rand() * 0.22 + 0.08);
+          const stackLeanMag = rand() * 0.55 + 0.20;
           const stackLeanX = Math.cos(stackLeanAngle) * stackLeanMag;
           const stackLeanY = Math.sin(stackLeanAngle) * stackLeanMag;
 
           for (let tier = 0; tier < stackTiers; tier++) {
-            // Progressive cumulative offset higher up the stack
+            // Pronounced per-tier misalignment (steps in/out laterally by 0.45m - 0.95m)
             const tierFrac = tier / Math.max(1, stackTiers - 1);
-            const jitterX = stackLeanX * tierFrac + (rand() - 0.5) * 0.32;
-            const jitterY = stackLeanY * tierFrac + (rand() - 0.5) * 0.32;
+            const tierJitterAngle = rand() * Math.PI * 2;
+            const tierJitterMag = rand() * 0.55 + 0.18;
+            const jitterX = stackLeanX * tierFrac + Math.cos(tierJitterAngle) * tierJitterMag;
+            const jitterY = stackLeanY * tierFrac + Math.sin(tierJitterAngle) * tierJitterMag;
 
-            // Organic tilt: upper tyres lean and tilt noticeably (up to 12-15 degrees)
+            // Organic tilt: tyres lean and tilt noticeably (up to 15-20 degrees on upper/top tyres)
             const isTop = tier === stackTiers - 1;
-            const tiltMax = isTop ? 0.22 : (0.05 + tierFrac * 0.10);
+            const tiltMax = isTop ? 0.32 : (0.10 + tierFrac * 0.16);
             const pitch = (rand() - 0.5) * tiltMax * 2.0;
             const roll = (rand() - 0.5) * tiltMax * 2.0;
             // Fully randomized rotational angle
             const yaw = rand() * Math.PI * 2;
 
             // Varied compression and natural sag in height
-            const z = 0.66 + tier * 1.28 + (rand() - 0.5) * 0.08;
+            const z = 0.66 + tier * 1.25 + (rand() - 0.5) * 0.14;
             const tireColor = (isTop && rand() < 0.25) ? colors[2] : stackBaseColor;
             const posX = stackX + jitterX;
             const posY = stackY + jitterY;
