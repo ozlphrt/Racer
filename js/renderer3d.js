@@ -3960,23 +3960,23 @@ export class Renderer3D {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 256, 256);
 
-    // Multi-lobed organic soft cloud vapor puffs (large feathered billows)
+    // Multi-lobed organic soft cloud vapor puffs (airy feathered wisps)
     const lobes = [
-      { x: 128, y: 128, r: 110, a: 0.85 },
-      { x: 104, y: 112, r: 84, a: 0.70 },
-      { x: 154, y: 108, r: 80, a: 0.70 },
-      { x: 108, y: 150, r: 76, a: 0.65 },
-      { x: 148, y: 146, r: 86, a: 0.65 },
-      { x: 128, y: 88, r: 68, a: 0.55 },
-      { x: 84, y: 132, r: 64, a: 0.50 },
-      { x: 172, y: 128, r: 64, a: 0.50 },
+      { x: 128, y: 128, r: 110, a: 0.42 },
+      { x: 104, y: 112, r: 84, a: 0.32 },
+      { x: 154, y: 108, r: 80, a: 0.32 },
+      { x: 108, y: 150, r: 76, a: 0.28 },
+      { x: 148, y: 146, r: 86, a: 0.28 },
+      { x: 128, y: 88, r: 68, a: 0.24 },
+      { x: 84, y: 132, r: 64, a: 0.20 },
+      { x: 172, y: 128, r: 64, a: 0.20 },
     ];
 
     for (const lobe of lobes) {
       const grad = ctx.createRadialGradient(lobe.x, lobe.y, 0, lobe.x, lobe.y, lobe.r);
       grad.addColorStop(0.0, `rgba(255, 255, 255, ${lobe.a})`);
-      grad.addColorStop(0.35, `rgba(255, 255, 255, ${lobe.a * 0.75})`);
-      grad.addColorStop(0.70, `rgba(255, 255, 255, ${lobe.a * 0.25})`);
+      grad.addColorStop(0.35, `rgba(255, 255, 255, ${lobe.a * 0.70})`);
+      grad.addColorStop(0.70, `rgba(255, 255, 255, ${lobe.a * 0.20})`);
       grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
 
       ctx.fillStyle = grad;
@@ -4039,7 +4039,7 @@ export class Renderer3D {
         );
         
         vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * vAlpha * 0.65;
+        float alpha = texColor.a * vAlpha * 0.40;
         if (alpha < 0.005) discard;
 
         // Rich motorsport white-grey tire friction vapor
@@ -4086,9 +4086,9 @@ export class Renderer3D {
       growthRate: 12.0 + Math.random() * 5.0, // Billows out into continuous clouds
       rotation: Math.random() * Math.PI * 2,
       vRot: (Math.random() - 0.5) * 2.2,
-      alpha: Math.min(0.55, intensity * 0.55),
+      alpha: Math.min(0.28, intensity * 0.28),
       life: 1.0,
-      decay: 1.30 + Math.random() * 0.30,
+      decay: 1.50 + Math.random() * 0.35,
     });
   }
 
@@ -4125,7 +4125,7 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.3);
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.6);
       this.smokeRotArr[writeIdx] = p.rotation;
 
       writeIdx++;
@@ -4330,7 +4330,7 @@ export class Renderer3D {
             if (camDistSq < 600 || car === sim.player) {
               const carVx = car.vx || 0;
               const carVy = -(car.vy || 0);
-              const numPuffs = Math.max(2, Math.min(5, Math.ceil(dL / 0.85)));
+              const numPuffs = Math.max(1, Math.min(3, Math.ceil(dL / 1.4)));
               for (let s = 1; s <= numPuffs; s++) {
                 const frac = s / numPuffs;
                 const pxL = prev.lx + (lx - prev.lx) * frac;
