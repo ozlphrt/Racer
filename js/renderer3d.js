@@ -673,92 +673,169 @@ export class Renderer3D {
       }
     }
 
-    let kerbCount = 0;
+    // Precompute outward unit normals for all samples
+    const outNormalsX = { inner: new Float32Array(N), outer: new Float32Array(N) };
+    const outNormalsY = { inner: new Float32Array(N), outer: new Float32Array(N) };
     for (let k = 0; k < N; k++) {
-      if (isKerb[k]) kerbCount++;
+      // Inner edge normal pointing away from track centerline
+      const idx = t.ix[k] - t.cx[k];
+      const idy = -t.iy[k] - (-t.cy[k]);
+      const ilen = Math.hypot(idx, idy) || 1;
+      outNormalsX.inner[k] = idx / ilen;
+      outNormalsY.inner[k] = idy / ilen;
+
+      // Outer edge normal pointing away from track centerline
+      const odx = t.ox[k] - t.cx[k];
+      const ody = -t.oy[k] - (-t.cy[k]);
+      const olen = Math.hypot(odx, ody) || 1;
+      outNormalsX.outer[k] = odx / olen;
+      outNormalsY.outer[k] = ody / olen;
     }
 
-    const taperWeight = new Float32Array(N);
-
-    if (kerbCount === N) {
-      taperWeight.fill(1.0);
-    } else if (kerbCount > 0) {
-      // Find all run starting points (transition from false -> true)
-      const visited = new Uint8Array(N);
-      for (let k = 0; k < N; k++) {
-        const prev = (k - 1 + N) % N;
-        if (isKerb[k] && !isKerb[prev] && !visited[k]) {
-          const runIndices = [];
-          let curr = k;
-          while (isKerb[curr] && !visited[curr]) {
-            visited[curr] = 1;
-            runIndices.push(curr);
-            curr = (curr + 1) % N;
-          }
-          const L = runIndices.length;
-          if (L < 3) continue;
-
-          // Taper ONLY at the very start (s = 0) and very end (s = L - 1)
-          // All middle blocks are strictly 1.0 (constant full width and parallel)
-          for (let s = 0; s < L; s++) {
-            if (s === 0 || s === L - 1) {
-              taperWeight[runIndices[s]] = 0.0;
-            } else {
-              taperWeight[runIndices[s]] = 1.0;
-            }
-          }
+    // Find all contiguous kerb runs
+    const visited = new Uint8Array(N);
+    const runs = [];
+    for (let k = 0; k < N; k++) {
+      const prev = (k - 1 + N) % N;
+      if (isKerb[k] && !isKerb[prev] && !visited[k]) {
+        const runIndices = [];
+        let curr = k;
+        while (isKerb[curr] && !visited[curr]) {
+          visited[curr] = 1;
+          runIndices.push(curr);
+          curr = (curr + 1) % N;
+        }
+        if (runIndices.length >= 3) {
+          runs.push(runIndices);
         }
       }
     }
 
-    for (let k = 0; k < N; k++) {
-      if (!isKerb[k]) continue;
-      const j = (k + 1) % N;
-      if (!isKerb[j]) continue;
+    // Helper to push a quad to target vertex array
+    const pushQuad = (target, p0x, p0y, p0z, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z) => {
+      target.push(p0x, p0y, p0z, p1x, p1y, p1z, p2x, p2y, p2z);
+      target.push(p0x, p0y, p0z, p2x, p2y, p2z, p3x, p3y, p3z);
+    };
 
-      const wK = taperWeight[k];
-      const wJ = taperWeight[j];
-      const isRed = k % 2 === 0;
-      const target = isRed ? redVerts : whiteVerts;
+    const SUBDIV = 8; // Smoothness of rounded bullnose end caps
 
-      const widthK = maxKerbWidth * wK;
-      const widthJ = maxKerbWidth * wJ;
+    for (const run of runs) {
+      const L = run.length;
+      for (const side of ['inner', 'outer']) {
+        const xs = side === 'inner' ? t.ix : t.ox;
+        const ys = side === 'inner' ? t.iy : t.oy;
+        const nxArr = side === 'inner' ? outNormalsX.inner : outNormalsX.outer;
+        const nyArr = side === 'inner' ? outNormalsY.inner : outNormalsY.outer;
 
-      // Realistic FIA bevel: flush with track edge at z=0.026, slightly elevated on outer verge edge
-      const zTrackK = 0.026;
-      const zVergeK = 0.026 + 0.012 * wK;
-      const zTrackJ = 0.026;
-      const zVergeJ = 0.026 + 0.012 * wJ;
+        // A. Rounded Entry Cap (Segment 0 -> 1)
+        {
+          const k0 = run[0];
+          const k1 = run[1];
+          const target = (k0 % 2 === 0) ? redVerts : whiteVerts;
 
-      for (const [xs, ys] of [[t.ix, t.iy], [t.ox, t.oy]]) {
-        // Compute outward unit normal from track centerline towards the outer verge
-        const dxK = xs[k] - t.cx[k];
-        const dyK = -ys[k] - (-t.cy[k]);
-        const lenK = Math.hypot(dxK, dyK) || 1;
-        const nxK = dxK / lenK;
-        const nyK = dyK / lenK;
+          for (let m = 0; m < SUBDIV; m++) {
+            const u0 = m / SUBDIV;
+            const u1 = (m + 1) / SUBDIV;
 
-        const dxJ = xs[j] - t.cx[j];
-        const dyJ = -ys[j] - (-t.cy[j]);
-        const lenJ = Math.hypot(dxJ, dyJ) || 1;
-        const nxJ = dxJ / lenJ;
-        const nyJ = dyJ / lenJ;
+            // Circular quadrant profile: w(u) = maxW * sqrt(2u - u^2)
+            const w0 = maxKerbWidth * Math.sqrt(Math.max(0, 2 * u0 - u0 * u0));
+            const w1 = maxKerbWidth * Math.sqrt(Math.max(0, 2 * u1 - u1 * u1));
 
-        // 1. Track-side edge: locked flush to the tarmac boundary / white borderline
-        const trkXK = xs[k];
-        const trkYK = -ys[k];
-        const trkXJ = xs[j];
-        const trkYJ = -ys[j];
+            const zTrk = 0.026;
+            const zVrg0 = 0.026 + 0.012 * (w0 / maxKerbWidth);
+            const zVrg1 = 0.026 + 0.012 * (w1 / maxKerbWidth);
 
-        // 2. Verge-side edge: extends outward into the run-off / grass area
-        const vrgXK = xs[k] + nxK * widthK;
-        const vrgYK = -ys[k] + nyK * widthK;
-        const vrgXJ = xs[j] + nxJ * widthJ;
-        const vrgYJ = -ys[j] + nyJ * widthJ;
+            const tx0 = (1 - u0) * xs[k0] + u0 * xs[k1];
+            const ty0 = (1 - u0) * (-ys[k0]) + u0 * (-ys[k1]);
+            const tx1 = (1 - u1) * xs[k0] + u1 * xs[k1];
+            const ty1 = (1 - u1) * (-ys[k0]) + u1 * (-ys[k1]);
 
-        // Quad triangles with double-sided robust winding
-        target.push(trkXK, trkYK, zTrackK, vrgXK, vrgYK, zVergeK, vrgXJ, vrgYJ, zVergeJ);
-        target.push(trkXK, trkYK, zTrackK, vrgXJ, vrgYJ, zVergeJ, trkXJ, trkYJ, zTrackJ);
+            const nx0 = (1 - u0) * nxArr[k0] + u0 * nxArr[k1];
+            const ny0 = (1 - u0) * nyArr[k0] + u0 * nyArr[k1];
+            const len0 = Math.hypot(nx0, ny0) || 1;
+            const unx0 = nx0 / len0;
+            const uny0 = ny0 / len0;
+
+            const nx1 = (1 - u1) * nxArr[k0] + u1 * nxArr[k1];
+            const ny1 = (1 - u1) * nyArr[k0] + u1 * nyArr[k1];
+            const len1 = Math.hypot(nx1, ny1) || 1;
+            const unx1 = nx1 / len1;
+            const uny1 = ny1 / len1;
+
+            const vx0 = tx0 + unx0 * w0;
+            const vy0 = ty0 + uny0 * w0;
+            const vx1 = tx1 + unx1 * w1;
+            const vy1 = ty1 + uny1 * w1;
+
+            pushQuad(target, tx0, ty0, zTrk, vx0, vy0, zVrg0, vx1, vy1, zVrg1, tx1, ty1, zTrk);
+          }
+        }
+
+        // B. Uniform Full-Width Middle Body (Segments 1 -> L - 2)
+        for (let s = 1; s < L - 2; s++) {
+          const k = run[s];
+          const j = run[s + 1];
+          const target = (k % 2 === 0) ? redVerts : whiteVerts;
+
+          const zTrk = 0.026;
+          const zVrg = 0.038;
+
+          const tx0 = xs[k];
+          const ty0 = -ys[k];
+          const tx1 = xs[j];
+          const ty1 = -ys[j];
+
+          const vx0 = tx0 + nxArr[k] * maxKerbWidth;
+          const vy0 = ty0 + nyArr[k] * maxKerbWidth;
+          const vx1 = tx1 + nxArr[j] * maxKerbWidth;
+          const vy1 = ty1 + nyArr[j] * maxKerbWidth;
+
+          pushQuad(target, tx0, ty0, zTrk, vx0, vy0, zVrg, vx1, vy1, zVrg, tx1, ty1, zTrk);
+        }
+
+        // C. Rounded Exit Cap (Segment L - 2 -> L - 1)
+        {
+          const k0 = run[L - 2];
+          const k1 = run[L - 1];
+          const target = (k0 % 2 === 0) ? redVerts : whiteVerts;
+
+          for (let m = 0; m < SUBDIV; m++) {
+            const u0 = m / SUBDIV;
+            const u1 = (m + 1) / SUBDIV;
+
+            // Circular quadrant profile: w(u) = maxW * sqrt(1 - u^2)
+            const w0 = maxKerbWidth * Math.sqrt(Math.max(0, 1 - u0 * u0));
+            const w1 = maxKerbWidth * Math.sqrt(Math.max(0, 1 - u1 * u1));
+
+            const zTrk = 0.026;
+            const zVrg0 = 0.026 + 0.012 * (w0 / maxKerbWidth);
+            const zVrg1 = 0.026 + 0.012 * (w1 / maxKerbWidth);
+
+            const tx0 = (1 - u0) * xs[k0] + u0 * xs[k1];
+            const ty0 = (1 - u0) * (-ys[k0]) + u0 * (-ys[k1]);
+            const tx1 = (1 - u1) * xs[k0] + u1 * xs[k1];
+            const ty1 = (1 - u1) * (-ys[k0]) + u1 * (-ys[k1]);
+
+            const nx0 = (1 - u0) * nxArr[k0] + u0 * nxArr[k1];
+            const ny0 = (1 - u0) * nyArr[k0] + u0 * nyArr[k1];
+            const len0 = Math.hypot(nx0, ny0) || 1;
+            const unx0 = nx0 / len0;
+            const uny0 = ny0 / len0;
+
+            const nx1 = (1 - u1) * nxArr[k0] + u1 * nxArr[k1];
+            const ny1 = (1 - u1) * nyArr[k0] + u1 * nyArr[k1];
+            const len1 = Math.hypot(nx1, ny1) || 1;
+            const unx1 = nx1 / len1;
+            const uny1 = ny1 / len1;
+
+            const vx0 = tx0 + unx0 * w0;
+            const vy0 = ty0 + uny0 * w0;
+            const vx1 = tx1 + unx1 * w1;
+            const vy1 = ty1 + uny1 * w1;
+
+            pushQuad(target, tx0, ty0, zTrk, vx0, vy0, zVrg0, vx1, vy1, zVrg1, tx1, ty1, zTrk);
+          }
+        }
       }
     }
 
