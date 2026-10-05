@@ -152,10 +152,12 @@ function timeAgo(iso) {
 
 function refreshSavedInfo() {
   const data = storage.loadBrain(LAYERS);
+  const curGen = sim.generation;
   $('saved-info').innerHTML = data
-    ? `Gen <strong>${data.generation}</strong> · fitness <strong>${compact(data.fitness)}</strong> · ` +
-      `best lap <strong>${fmtTime(data.bestLap)}</strong><br>Saved ${timeAgo(data.savedAt)}`
-    : 'No saved brain yet. The best brain is auto-saved after each record generation.';
+    ? `🏆 Peak Champion from <strong>Gen ${data.generation}</strong><br>` +
+      `Fitness <strong>${compact(data.fitness)}</strong> · Best lap <strong>${fmtTime(data.bestLap)}</strong><br>` +
+      `<span style="color:var(--text-muted); font-size:11px;">Active Session: Gen ${curGen} · Auto-saved ${timeAgo(data.savedAt)}</span>`
+    : `Active: Gen <strong>${curGen}</strong><br><span style="color:var(--text-muted); font-size:11px;">No champion saved yet. Auto-saves when a new fitness record is set.</span>`;
 }
 
 function setSliderFill(input) {
