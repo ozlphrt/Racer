@@ -120,8 +120,10 @@ const state = {
 };
 const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
 
-$('pill-pop').textContent = CONFIG.ga.population;
-$('pill-arch').textContent = LAYERS.join('·');
+const pillPop = $('pill-pop');
+if (pillPop) pillPop.textContent = CONFIG.ga.population;
+const pillArch = $('pill-arch');
+if (pillArch) pillArch.textContent = LAYERS.join('·');
 
 // ---------- Helpers ----------
 const fmtTime = (s) => (Number.isFinite(s) ? s.toFixed(2) + 's' : '–');
