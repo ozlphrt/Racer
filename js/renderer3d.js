@@ -1045,8 +1045,21 @@ export class Renderer3D {
     const spanDist = innerPillarPos.distanceTo(outerPillarPos);
     const plateWidth = Math.min(38.0, spanDist * 0.72);
 
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.85, roughness: 0.25 });
-    const beamMat = new THREE.MeshStandardMaterial({ color: 0x0b1120, metalness: 0.9, roughness: 0.2 });
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8, // Brushed titanium / aluminum steel
+      metalness: 0.60,
+      roughness: 0.32,
+    });
+    const beamMat = new THREE.MeshStandardMaterial({
+      color: 0xcfd8dc, // Bright aerospace silver aluminum truss
+      metalness: 0.65,
+      roughness: 0.28,
+    });
+    const podHousingMat = new THREE.MeshStandardMaterial({
+      color: 0x334155, // Clean graphite pod housing
+      metalness: 0.50,
+      roughness: 0.35,
+    });
 
     // Left & Right Vertical Columns extending to topBeamZ
     const cylGeo = new THREE.CylinderGeometry(pillarRadius, pillarRadius, totalColHeight, 16);
@@ -1061,6 +1074,17 @@ export class Renderer3D {
     outerCol.position.copy(outerPillarPos);
     outerCol.castShadow = true;
     gantryGroup.add(outerCol);
+
+    // Pillar Base Footing Collar (FIA red/white motorsport styling)
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.35, metalness: 0.2 });
+    const baseGeo = new THREE.CylinderGeometry(pillarRadius * 1.35, pillarRadius * 1.45, 2.4, 16);
+    baseGeo.rotateX(Math.PI / 2);
+    const innerBase = new THREE.Mesh(baseGeo, baseMat);
+    innerBase.position.set(innerPillarPos.x, innerPillarPos.y, 1.2);
+    gantryGroup.add(innerBase);
+    const outerBase = new THREE.Mesh(baseGeo, baseMat);
+    outerBase.position.set(outerPillarPos.x, outerPillarPos.y, 1.2);
+    gantryGroup.add(outerBase);
 
     // Overhead Structural Top Crossbeam (Positioned ABOVE the scoreboard, connecting the pillars)
     const beamGeo = new THREE.BoxGeometry(spanDist + 3.0, 2.0, 1.8);
@@ -1082,9 +1106,9 @@ export class Renderer3D {
 
     const plateHousingGeo = new THREE.BoxGeometry(plateWidth, plateDepth, plateHeight);
     const plateHousingMat = new THREE.MeshStandardMaterial({
-      color: 0x030712,
-      metalness: 0.92,
-      roughness: 0.2,
+      color: 0x1e293b, // Deep anodized slate/titanium casing
+      metalness: 0.45,
+      roughness: 0.38,
     });
     const plateHousing = new THREE.Mesh(plateHousingGeo, plateHousingMat);
     plateHousing.position.copy(scoreboardCenter);
@@ -1093,7 +1117,7 @@ export class Renderer3D {
     gantryGroup.add(plateHousing);
 
     // Steel Support Struts mounting Scoreboard to Top Crossbeam
-    const strutMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.9, roughness: 0.2 });
+    const strutMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.2 });
     const strutH = topBeamZ - (gantryHeight + plateHeight * 0.5);
     for (const sx of [-plateWidth * 0.35, -plateWidth * 0.12, plateWidth * 0.12, plateWidth * 0.35]) {
       const strutGeo = new THREE.CylinderGeometry(0.3, 0.3, strutH + 0.4, 8);
@@ -1108,11 +1132,13 @@ export class Renderer3D {
       gantryGroup.add(strut);
     }
 
-    // Carbon / Neon Trim Framing Border around the Scoreboard
+    // Glowing Cyan Racing Neon Trim Framing Border around the Scoreboard
     const trimMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      metalness: 0.8,
-      roughness: 0.3,
+      color: 0x0284c7,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.6,
+      metalness: 0.3,
+      roughness: 0.2,
     });
     const topTrimGeo = new THREE.BoxGeometry(plateWidth + 0.6, plateDepth + 0.2, 0.35);
     const topTrim = new THREE.Mesh(topTrimGeo, trimMat);
@@ -1128,7 +1154,7 @@ export class Renderer3D {
     this._lastStartLightStep = -1;
     for (let i = -2; i <= 2; i++) {
       const housingGeo = new THREE.BoxGeometry(2.2, 1.4, 2.2);
-      const housing = new THREE.Mesh(housingGeo, beamMat);
+      const housing = new THREE.Mesh(housingGeo, podHousingMat);
       const offset = new THREE.Vector3(
         Math.cos(beamAngle) * (i * 5.8),
         Math.sin(beamAngle) * (i * 5.8),
