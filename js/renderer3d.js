@@ -1014,7 +1014,181 @@ export class Renderer3D {
       gantryGroup.add(led);
     }
 
+    // 4. Digital Remaining Laps Plate on top of Gantry Arch
+    const plateWidth = Math.min(30, spanDist * 0.45);
+    const plateHeight = 7.5;
+    const plateDepth = 2.0;
+
+    const plateHousingGeo = new THREE.BoxGeometry(plateWidth, plateDepth, plateHeight);
+    const plateHousingMat = new THREE.MeshStandardMaterial({
+      color: 0x090d16,
+      metalness: 0.85,
+      roughness: 0.25,
+    });
+    const plateHousing = new THREE.Mesh(plateHousingGeo, plateHousingMat);
+    plateHousing.position.copy(gantryCenter);
+    plateHousing.position.z += 5.2; // Positioned securely on top of crossbeam
+    plateHousing.rotation.z = beamAngle;
+    plateHousing.castShadow = true;
+    gantryGroup.add(plateHousing);
+
+    // Support Struts mounting plate to crossbeam
+    const strutMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.9, roughness: 0.2 });
+    for (const sx of [-plateWidth * 0.32, plateWidth * 0.32]) {
+      const strutGeo = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 8);
+      strutGeo.rotateX(Math.PI / 2);
+      const strut = new THREE.Mesh(strutGeo, strutMat);
+      const sOffset = new THREE.Vector3(
+        Math.cos(beamAngle) * sx,
+        Math.sin(beamAngle) * sx,
+        2.2
+      );
+      strut.position.addVectors(gantryCenter, sOffset);
+      gantryGroup.add(strut);
+    }
+
+    // Dynamic High-Res Display Canvas Texture
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 160;
+    this.lapPlateCanvas = canvas;
+    this.lapPlateCtx = canvas.getContext('2d');
+    this.lapPlateTexture = new THREE.CanvasTexture(canvas);
+    this.lapPlateTexture.anisotropy = Math.min(16, this.renderer?.capabilities?.getMaxAnisotropy?.() || 8);
+    this.lapPlateTexture.minFilter = THREE.LinearFilter;
+    this.lapPlateTexture.magFilter = THREE.LinearFilter;
+
+    const displayMat = new THREE.MeshStandardMaterial({
+      map: this.lapPlateTexture,
+      emissive: 0xffffff,
+      emissiveMap: this.lapPlateTexture,
+      emissiveIntensity: 0.9,
+      roughness: 0.2,
+      metalness: 0.1,
+    });
+
+    // Front Display (Facing incoming cars upstream)
+    const frontDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.8, plateHeight - 0.8);
+    frontDisplayGeo.rotateX(Math.PI / 2);
+    frontDisplayGeo.rotateY(Math.PI);
+    const frontDisplay = new THREE.Mesh(frontDisplayGeo, displayMat);
+    frontDisplay.position.copy(plateHousing.position);
+    frontDisplay.position.add(new THREE.Vector3(-tx * (plateDepth * 0.5 + 0.05), -ty * (plateDepth * 0.5 + 0.05), 0));
+    frontDisplay.rotation.z = beamAngle;
+    gantryGroup.add(frontDisplay);
+
+    // Back Display (Facing cars downstream)
+    const backDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.8, plateHeight - 0.8);
+    backDisplayGeo.rotateX(Math.PI / 2);
+    const backDisplay = new THREE.Mesh(backDisplayGeo, displayMat);
+    backDisplay.position.copy(plateHousing.position);
+    backDisplay.position.add(new THREE.Vector3(tx * (plateDepth * 0.5 + 0.05), ty * (plateDepth * 0.5 + 0.05), 0));
+    backDisplay.rotation.z = beamAngle;
+    gantryGroup.add(backDisplay);
+
+    this._lastLapPlateKey = '';
+    this.updateLapPlateTexture('LAP 1/5', '4 LAPS REMAINING', '#38bdf8', false);
+
     this.decorGroup.add(gantryGroup);
+  }
+
+  updateLapPlateTexture(mainText, subText, accentColor = '#38bdf8', isFinal = false) {
+    if (!this.lapPlateCtx) return;
+    const ctx = this.lapPlateCtx;
+    const w = 512;
+    const h = 160;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Dark carbon/glass background
+    ctx.fillStyle = '#050a14';
+    ctx.fillRect(0, 0, w, h);
+
+    // Outer neon border
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = accentColor;
+    ctx.strokeRect(3, 3, w - 6, h - 6);
+
+    // Inner glow border
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.strokeRect(9, 9, w - 18, h - 18);
+
+    if (isFinal) {
+      // Checkered pattern side accents
+      const chSize = 14;
+      for (let r = 0; r < Math.floor(h / chSize); r++) {
+        for (let c = 0; c < 3; c++) {
+          ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#0f172a';
+          ctx.fillRect(12 + c * chSize, 12 + r * chSize, chSize, chSize);
+          ctx.fillRect(w - 12 - (c + 1) * chSize, 12 + r * chSize, chSize, chSize);
+        }
+      }
+    }
+
+    // Top Subtext / Header Tag (e.g. "4 LAPS REMAINING")
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '700 24px "Outfit", sans-serif';
+    ctx.fillStyle = accentColor;
+    ctx.fillText(subText.toUpperCase(), w / 2, 20);
+
+    // Divider Line
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.2, 54);
+    ctx.lineTo(w * 0.8, 54);
+    ctx.stroke();
+
+    // Main Digital Counter (e.g. "LAP 2 / 5" or "FINAL LAP")
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 68px "JetBrains Mono", "Outfit", Impact, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = accentColor;
+    ctx.shadowBlur = 14;
+    ctx.fillText(mainText, w / 2, 106);
+    ctx.shadowBlur = 0;
+
+    if (this.lapPlateTexture) {
+      this.lapPlateTexture.needsUpdate = true;
+    }
+  }
+
+  updateLapPlate(sim, leader) {
+    if (!this.lapPlateCtx) return;
+
+    const maxLaps = CONFIG.generation?.maxLaps || 5;
+    const currentLeader = sim?.leader || leader;
+    const lapsDone = currentLeader ? currentLeader.laps : 0;
+    const currentLap = Math.min(lapsDone + 1, maxLaps);
+    const lapsRemaining = Math.max(0, maxLaps - lapsDone);
+    const isFinished = currentLeader ? currentLeader.finished : false;
+
+    let mainText = `LAP ${currentLap}/${maxLaps}`;
+    let subText = `${lapsRemaining} ${lapsRemaining === 1 ? 'LAP' : 'LAPS'} REMAINING`;
+    let color = '#38bdf8'; // Cyan
+    let isFinal = false;
+
+    if (isFinished) {
+      mainText = 'FINISH';
+      subText = 'CHEQUERED FLAG';
+      color = '#a3e635'; // Lime green
+      isFinal = true;
+    } else if (currentLap === maxLaps) {
+      mainText = 'FINAL LAP';
+      subText = '1 LAP REMAINING';
+      color = '#fbbf24'; // Amber / Gold
+      isFinal = true;
+    } else if (lapsRemaining <= 2) {
+      color = '#f472b6'; // Magenta
+    }
+
+    const stateKey = `${mainText}|${subText}|${color}|${isFinal}`;
+    if (stateKey !== this._lastLapPlateKey) {
+      this._lastLapPlateKey = stateKey;
+      this.updateLapPlateTexture(mainText, subText, color, isFinal);
+    }
   }
 
   createTarmacCheckeredTexture() {
@@ -2560,6 +2734,7 @@ export class Renderer3D {
       this.lastGen = sim.generation;
     }
     this.lastSimTime = sim.time;
+    this.updateLapPlate(sim, leader);
 
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
