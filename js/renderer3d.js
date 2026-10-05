@@ -3336,14 +3336,14 @@ export class Renderer3D {
       const cosA = Math.cos(focusCar.angle);
       const sinA = Math.sin(focusCar.angle);
 
-      // Positioned atop the airbox roll-hoop mount with clear forward sightline
-      const destCamX = focusCar.x - cosA * 1.6;
-      const destCamY = -focusCar.y + sinA * 1.6;
-      const destCamZ = 4.7;
+      // Positioned atop the airbox roll-hoop mount with elevated forward sightline
+      const destCamX = focusCar.x - cosA * 2.0;
+      const destCamY = -focusCar.y + sinA * 2.0;
+      const destCamZ = 5.8;
 
-      const destTargetX = focusCar.x + cosA * 48;
-      const destTargetY = -focusCar.y - sinA * 48;
-      const destTargetZ = 2.0;
+      const destTargetX = focusCar.x + cosA * 52;
+      const destTargetY = -focusCar.y - sinA * 52;
+      const destTargetZ = 2.6;
 
       const camGlide = 0.35;
       const targetGlide = 0.35;
