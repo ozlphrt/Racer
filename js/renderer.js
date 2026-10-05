@@ -248,22 +248,53 @@ export class Renderer {
           }
         }
         if (!tooClose) {
-          // Broad size distribution: bushes (8-13), medium (14-23), mature (24-34)
+          // Broad size distribution: bushes (8-13), medium (14-22), mature (22-32)
           const roll = rand();
           let r;
           if (roll < 0.25) r = 8 + rand() * 5;
-          else if (roll < 0.75) r = 14 + rand() * 9;
-          else r = 24 + rand() * 10;
+          else if (roll < 0.75) r = 14 + rand() * 8;
+          else r = 22 + rand() * 10;
 
-          const hue = 105 + rand() * 32;
-          const sat = 40 + rand() * 20;
-          const light = 18 + rand() * 12;
+          const species = Math.floor(rand() * 4); // 0: Pine, 1: Oak, 2: Cypress, 3: Birch
+          let color, light;
+
+          if (species === 0) {
+            // Pine: Dark Nordic forest emeralds
+            const hue = 135 + (rand() - 0.5) * 16;
+            const sat = 52 + rand() * 16;
+            const lit = 14 + rand() * 8;
+            color = `hsl(${hue.toFixed(0)}, ${sat.toFixed(0)}%, ${lit.toFixed(0)}%)`;
+            light = `hsl(${hue.toFixed(0)}, ${(sat + 6).toFixed(0)}%, ${(lit + 12).toFixed(0)}%)`;
+          } else if (species === 1) {
+            // Oak: Lush summer canopy
+            const hue = 108 + (rand() - 0.5) * 20;
+            const sat = 48 + rand() * 18;
+            const lit = 20 + rand() * 10;
+            color = `hsl(${hue.toFixed(0)}, ${sat.toFixed(0)}%, ${lit.toFixed(0)}%)`;
+            light = `hsl(${hue.toFixed(0)}, ${(sat + 8).toFixed(0)}%, ${(lit + 14).toFixed(0)}%)`;
+          } else if (species === 2) {
+            // Cypress: Dusty Mediterranean olive & sage
+            const hue = 95 + (rand() - 0.5) * 14;
+            const sat = 36 + rand() * 14;
+            const lit = 18 + rand() * 8;
+            color = `hsl(${hue.toFixed(0)}, ${sat.toFixed(0)}%, ${lit.toFixed(0)}%)`;
+            light = `hsl(${hue.toFixed(0)}, ${(sat + 6).toFixed(0)}%, ${(lit + 10).toFixed(0)}%)`;
+          } else {
+            // Birch / Blossom: Golden amber & autumn ochre
+            const hue = 38 + rand() * 24;
+            const sat = 70 + rand() * 18;
+            const lit = 34 + rand() * 10;
+            color = `hsl(${hue.toFixed(0)}, ${sat.toFixed(0)}%, ${lit.toFixed(0)}%)`;
+            light = `hsl(${hue.toFixed(0)}, ${(sat + 8).toFixed(0)}%, ${(lit + 14).toFixed(0)}%)`;
+          }
+
           this.trees.push({
             x,
             y,
             r,
-            color: `hsl(${hue.toFixed(0)}, ${sat.toFixed(0)}%, ${light.toFixed(0)}%)`,
-            light: `hsl(${hue.toFixed(0)}, ${(sat + 6).toFixed(0)}%, ${(light + 14).toFixed(0)}%)`,
+            species,
+            color,
+            light,
           });
         }
       }
@@ -503,23 +534,84 @@ export class Renderer {
     // 3. Natural Trees & foliage
     if (this.trees) {
       for (const tr of this.trees) {
+        const { x, y, r, species, color, light } = tr;
+
         // Tree shadow
-        ctx.fillStyle = 'rgba(10, 25, 10, 0.35)';
+        ctx.fillStyle = 'rgba(8, 20, 10, 0.38)';
         ctx.beginPath();
-        ctx.ellipse(tr.x + tr.r * 0.3, tr.y + tr.r * 0.35, tr.r, tr.r * 0.7, 0, 0, Math.PI * 2);
+        if (species === 2) {
+          // Cypress: Slender elongated shadow
+          ctx.ellipse(x + r * 0.35, y + r * 0.45, r * 0.55, r * 1.1, 0.25, 0, Math.PI * 2);
+        } else {
+          ctx.ellipse(x + r * 0.3, y + r * 0.35, r * 1.05, r * 0.72, 0, 0, Math.PI * 2);
+        }
         ctx.fill();
 
-        // Base canopy
-        ctx.fillStyle = tr.color;
-        ctx.beginPath();
-        ctx.arc(tr.x, tr.y, tr.r, 0, Math.PI * 2);
-        ctx.fill();
+        if (species === 0) {
+          // Alpine Pine: Layered 6-pointed needle star polygon
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          const pts = 6;
+          for (let p = 0; p < pts * 2; p++) {
+            const rad = p % 2 === 0 ? r : r * 0.65;
+            const a = (p * Math.PI) / pts - Math.PI / 2;
+            const px = x + Math.cos(a) * rad;
+            const py = y + Math.sin(a) * rad;
+            if (p === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
 
-        // Highlight canopy
-        ctx.fillStyle = tr.light;
-        ctx.beginPath();
-        ctx.arc(tr.x - tr.r * 0.25, tr.y - tr.r * 0.25, tr.r * 0.65, 0, Math.PI * 2);
-        ctx.fill();
+          // Inner highlight star
+          ctx.fillStyle = light;
+          ctx.beginPath();
+          for (let p = 0; p < pts * 2; p++) {
+            const rad = p % 2 === 0 ? r * 0.58 : r * 0.35;
+            const a = (p * Math.PI) / pts - Math.PI / 2;
+            const px = x - r * 0.12 + Math.cos(a) * rad;
+            const py = y - r * 0.12 + Math.sin(a) * rad;
+            if (p === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
+        } else if (species === 1) {
+          // Broadleaf Oak: 3 overlapping clustered organic lobes
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, r * 0.85, 0, Math.PI * 2);
+          ctx.arc(x - r * 0.35, y + r * 0.2, r * 0.55, 0, Math.PI * 2);
+          ctx.arc(x + r * 0.35, y - r * 0.2, r * 0.52, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = light;
+          ctx.beginPath();
+          ctx.arc(x - r * 0.2, y - r * 0.2, r * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (species === 2) {
+          // Columnar Cypress: Compact sleek vertical oval
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.ellipse(x, y, r * 0.55, r * 0.95, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = light;
+          ctx.beginPath();
+          ctx.ellipse(x - r * 0.12, y - r * 0.15, r * 0.35, r * 0.65, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Golden Birch / Autumn Tree: Bright golden circle with soft inner highlight
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = light;
+          ctx.beginPath();
+          ctx.arc(x - r * 0.22, y - r * 0.22, r * 0.62, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
   }

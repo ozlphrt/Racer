@@ -2267,15 +2267,18 @@ export class Renderer3D {
     const minY = b.minY - pad;
     const maxY = b.maxY + pad;
 
-    // 1. Organic cluster centers (groves)
-    const numClusters = 9 + Math.floor(rand() * 5);
+    // 1. Organic cluster centers (groves) with diverse species biomes
+    const numClusters = 10 + Math.floor(rand() * 6);
     const clusterCenters = [];
     for (let c = 0; c < numClusters; c++) {
+      // Each grove has a dominant tree species archetype (0: Pine, 1: Oak, 2: Cypress, 3: Birch)
+      const groveType = Math.floor(rand() * 4);
       clusterCenters.push({
         cx: minX + rand() * (maxX - minX),
         cy: minY + rand() * (maxY - minY),
-        radius: 40 + rand() * 80,
-        count: 2 + Math.floor(rand() * 4),
+        radius: 45 + rand() * 85,
+        count: 3 + Math.floor(rand() * 5),
+        groveType,
       });
     }
 
@@ -2285,27 +2288,42 @@ export class Renderer3D {
       for (let i = 0; i < cl.count; i++) {
         const angle = rand() * Math.PI * 2;
         const dist = Math.sqrt(rand()) * cl.radius;
-        candidates.push({ x: cl.cx + Math.cos(angle) * dist, y: cl.cy + Math.sin(angle) * dist });
+        // 80% grove dominant species, 20% natural mix
+        const species = rand() < 0.8 ? cl.groveType : Math.floor(rand() * 4);
+        candidates.push({
+          x: cl.cx + Math.cos(angle) * dist,
+          y: cl.cy + Math.sin(angle) * dist,
+          species,
+        });
       }
     }
 
     // Standalone trees for sparse natural meadow scattering
-    const standalone = 16 + Math.floor(rand() * 8);
+    const standalone = 22 + Math.floor(rand() * 10);
     for (let i = 0; i < standalone; i++) {
-      candidates.push({ x: minX + rand() * (maxX - minX), y: minY + rand() * (maxY - minY) });
+      candidates.push({
+        x: minX + rand() * (maxX - minX),
+        y: minY + rand() * (maxY - minY),
+        species: Math.floor(rand() * 4),
+      });
     }
 
-    const placedTrees = [];
+    const placedPines = [];
+    const placedOaks = [];
+    const placedCypresses = [];
+    const placedBirches = [];
+
+    const allPlaced = [];
     for (const cand of candidates) {
-      const { x, y } = cand;
+      const { x, y, species } = cand;
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
 
       const nearestIdx = t.nearestIndex(x, y, 0, t.N / 2, t.N / 2);
       if (t.lateralDistSq(x, y, nearestIdx) > minSafeDistSq) {
         let tooClose = false;
-        for (const ex of placedTrees) {
+        for (const ex of allPlaced) {
           const d2 = (x - ex.x) ** 2 + (y - ex.y) ** 2;
-          if (d2 < (ex.r * 0.75 + 12) ** 2) {
+          if (d2 < (ex.r * 0.75 + 11) ** 2) {
             tooClose = true;
             break;
           }
@@ -2314,85 +2332,333 @@ export class Renderer3D {
           const roll = rand();
           let r;
           if (roll < 0.25) r = 8 + rand() * 5;
-          else if (roll < 0.75) r = 14 + rand() * 9;
-          else r = 24 + rand() * 10;
-          const hue = 0.28 + (rand() - 0.5) * 0.08;
-          const sat = 0.55 + rand() * 0.15;
-          const lit = 0.22 + rand() * 0.1;
-          placedTrees.push({ x, y, r, hue, sat, lit });
+          else if (roll < 0.75) r = 14 + rand() * 8;
+          else r = 22 + rand() * 10;
+
+          const yaw = rand() * Math.PI * 2;
+          const leanX = (rand() - 0.5) * 0.08;
+          const leanY = (rand() - 0.5) * 0.08;
+          const heightMult = 0.85 + rand() * 0.35;
+
+          let hue, sat, lit;
+          if (species === 0) {
+            // Pine: Deep Nordic forest / Alpine emerald needle tones
+            hue = 0.36 + (rand() - 0.5) * 0.06;
+            sat = 0.58 + rand() * 0.18;
+            lit = 0.17 + rand() * 0.08;
+            const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit };
+            placedPines.push(treeData);
+            allPlaced.push(treeData);
+          } else if (species === 1) {
+            // Broadleaf Oak: Lush leafy summer canopy
+            hue = 0.28 + (rand() - 0.5) * 0.08;
+            sat = 0.52 + rand() * 0.18;
+            lit = 0.22 + rand() * 0.10;
+            const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit };
+            placedOaks.push(treeData);
+            allPlaced.push(treeData);
+          } else if (species === 2) {
+            // Columnar Cypress: Dusty Mediterranean olive & warm sage
+            hue = 0.32 + (rand() - 0.5) * 0.05;
+            sat = 0.42 + rand() * 0.15;
+            lit = 0.19 + rand() * 0.07;
+            const treeData = { x, y, r, yaw, leanX, leanY, heightMult: heightMult * 1.35, hue, sat, lit };
+            placedCypresses.push(treeData);
+            allPlaced.push(treeData);
+          } else {
+            // Birch / Blossom: Golden amber & autumn ochre leaves
+            hue = 0.09 + rand() * 0.08;
+            sat = 0.72 + rand() * 0.18;
+            lit = 0.36 + rand() * 0.12;
+            const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit };
+            placedBirches.push(treeData);
+            allPlaced.push(treeData);
+          }
         }
       }
     }
 
-    const numTrees = placedTrees.length;
-    if (numTrees === 0) return;
-
-    // Fast GPU InstancedMesh: 3 draw calls for all ~60 trees instead of 180 separate draw calls!
-    const trunkGeo = new THREE.CylinderGeometry(0.8, 1.2, 1.0, 6);
-    trunkGeo.rotateX(Math.PI / 2);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.9 });
-    const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, numTrees);
-
-    const coneGeo = new THREE.ConeGeometry(1.0, 1.0, 7);
-    coneGeo.rotateX(Math.PI / 2);
-    const leavesMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true });
-    const cone1Inst = new THREE.InstancedMesh(coneGeo, leavesMat, numTrees);
-    const cone2Inst = new THREE.InstancedMesh(coneGeo, leavesMat, numTrees);
-
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
+    const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.9, metalness: 0.05 });
+    const paleWoodMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.8, metalness: 0.1 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78, flatShading: true });
 
-    for (let i = 0; i < numTrees; i++) {
-      const { x, y, r, hue, sat, lit } = placedTrees[i];
-      const trunkH = r * 0.75 + 4;
-      const trunkR = Math.max(1.2, r * 0.14);
+    // === SPECIES 0: ALPINE PINE (3-Tier Layered Conifer) ===
+    if (placedPines.length > 0) {
+      const count = placedPines.length;
+      const trunkGeo = new THREE.CylinderGeometry(0.5, 0.9, 1.0, 6);
+      trunkGeo.rotateX(Math.PI / 2);
+      const pineTrunkInst = new THREE.InstancedMesh(trunkGeo, darkWoodMat, count);
 
-      // Trunk
-      dummy.position.set(x, -y, trunkH / 2);
-      dummy.scale.set(trunkR, trunkR, trunkH);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      trunkInst.setMatrixAt(i, dummy.matrix);
+      const coneGeo = new THREE.ConeGeometry(1.0, 1.0, 7);
+      coneGeo.rotateX(Math.PI / 2);
+      const cone1Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
+      const cone2Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
+      const cone3Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
 
-      // Lower Cone
-      const cone1H = r * 1.35;
-      const cone1Z = trunkH * 0.6 + cone1H / 2;
-      dummy.position.set(x, -y, cone1Z);
-      dummy.scale.set(r, r, cone1H);
-      dummy.updateMatrix();
-      cone1Inst.setMatrixAt(i, dummy.matrix);
+      for (let i = 0; i < count; i++) {
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedPines[i];
+        const trunkH = (r * 0.75 + 4) * heightMult;
+        const trunkR = Math.max(1.0, r * 0.12);
 
-      // Upper Cone
-      const cone2H = r * 1.05;
-      const cone2Z = cone1Z + cone1H * 0.45;
-      const cone2R = r * 0.65;
-      dummy.position.set(x, -y, cone2Z);
-      dummy.scale.set(cone2R, cone2R, cone2H);
-      dummy.updateMatrix();
-      cone2Inst.setMatrixAt(i, dummy.matrix);
+        // Trunk
+        dummy.position.set(x, -y, trunkH / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        pineTrunkInst.setMatrixAt(i, dummy.matrix);
 
-      // Varied natural leaf color
-      color.setHSL(hue, sat, lit);
-      cone1Inst.setColorAt(i, color);
-      cone2Inst.setColorAt(i, color);
+        // Tier 1 Cone (Base)
+        const cone1H = r * 1.25 * heightMult;
+        const cone1Z = trunkH * 0.5 + cone1H / 2;
+        dummy.position.set(x, -y, cone1Z);
+        dummy.scale.set(r * 1.05, r * 1.05, cone1H);
+        dummy.updateMatrix();
+        cone1Inst.setMatrixAt(i, dummy.matrix);
+
+        // Tier 2 Cone (Mid)
+        const cone2H = r * 1.05 * heightMult;
+        const cone2Z = cone1Z + cone1H * 0.38;
+        const cone2R = r * 0.75;
+        dummy.position.set(x, -y, cone2Z);
+        dummy.scale.set(cone2R, cone2R, cone2H);
+        dummy.updateMatrix();
+        cone2Inst.setMatrixAt(i, dummy.matrix);
+
+        // Tier 3 Cone (Top Crown)
+        const cone3H = r * 0.85 * heightMult;
+        const cone3Z = cone2Z + cone2H * 0.38;
+        const cone3R = r * 0.48;
+        dummy.position.set(x, -y, cone3Z);
+        dummy.scale.set(cone3R, cone3R, cone3H);
+        dummy.updateMatrix();
+        cone3Inst.setMatrixAt(i, dummy.matrix);
+
+        color.setHSL(hue, sat, lit);
+        cone1Inst.setColorAt(i, color);
+        color.setHSL(hue, sat, Math.min(0.9, lit * 1.12));
+        cone2Inst.setColorAt(i, color);
+        color.setHSL(hue, sat, Math.min(0.9, lit * 1.25));
+        cone3Inst.setColorAt(i, color);
+      }
+
+      pineTrunkInst.instanceMatrix.needsUpdate = true;
+      cone1Inst.instanceMatrix.needsUpdate = true;
+      cone2Inst.instanceMatrix.needsUpdate = true;
+      cone3Inst.instanceMatrix.needsUpdate = true;
+      if (cone1Inst.instanceColor) cone1Inst.instanceColor.needsUpdate = true;
+      if (cone2Inst.instanceColor) cone2Inst.instanceColor.needsUpdate = true;
+      if (cone3Inst.instanceColor) cone3Inst.instanceColor.needsUpdate = true;
+      pineTrunkInst.castShadow = true; pineTrunkInst.receiveShadow = true;
+      cone1Inst.castShadow = true; cone1Inst.receiveShadow = true;
+      cone2Inst.castShadow = true; cone2Inst.receiveShadow = true;
+      cone3Inst.castShadow = true; cone3Inst.receiveShadow = true;
+
+      this.treeGroup.add(pineTrunkInst, cone1Inst, cone2Inst, cone3Inst);
     }
 
-    trunkInst.instanceMatrix.needsUpdate = true;
-    cone1Inst.instanceMatrix.needsUpdate = true;
-    cone2Inst.instanceMatrix.needsUpdate = true;
-    if (cone1Inst.instanceColor) cone1Inst.instanceColor.needsUpdate = true;
-    if (cone2Inst.instanceColor) cone2Inst.instanceColor.needsUpdate = true;
+    // === SPECIES 1: BROADLEAF OAK (Multi-Cluster Rounded Crown) ===
+    if (placedOaks.length > 0) {
+      const count = placedOaks.length;
+      const trunkGeo = new THREE.CylinderGeometry(0.7, 1.3, 1.0, 7);
+      trunkGeo.rotateX(Math.PI / 2);
+      const oakTrunkInst = new THREE.InstancedMesh(trunkGeo, darkWoodMat, count);
 
-    trunkInst.castShadow = true;
-    trunkInst.receiveShadow = true;
-    cone1Inst.castShadow = true;
-    cone1Inst.receiveShadow = true;
-    cone2Inst.castShadow = true;
-    cone2Inst.receiveShadow = true;
+      const crownGeo = new THREE.DodecahedronGeometry(1.0, 1);
+      crownGeo.rotateX(Math.PI / 2);
+      const oakMainInst = new THREE.InstancedMesh(crownGeo, leafMat, count);
+      const oakLeftInst = new THREE.InstancedMesh(crownGeo, leafMat, count);
+      const oakRightInst = new THREE.InstancedMesh(crownGeo, leafMat, count);
 
-    this.treeGroup.add(trunkInst);
-    this.treeGroup.add(cone1Inst);
-    this.treeGroup.add(cone2Inst);
+      for (let i = 0; i < count; i++) {
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedOaks[i];
+        const trunkH = (r * 0.65 + 3.5) * heightMult;
+        const trunkR = Math.max(1.3, r * 0.16);
+
+        // Trunk
+        dummy.position.set(x, -y, trunkH / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        oakTrunkInst.setMatrixAt(i, dummy.matrix);
+
+        // Center Dominant Canopy Dome
+        const crownR = r * 0.95;
+        const crownZ = trunkH + crownR * 0.6;
+        dummy.position.set(x, -y, crownZ);
+        dummy.scale.set(crownR, crownR * 0.95, crownR * 0.85);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        oakMainInst.setMatrixAt(i, dummy.matrix);
+
+        // Asymmetric Left Cluster
+        const cLeftR = r * 0.68;
+        const offX = Math.cos(yaw) * (r * 0.45);
+        const offY = Math.sin(yaw) * (r * 0.45);
+        dummy.position.set(x + offX, -y - offY, crownZ - crownR * 0.15);
+        dummy.scale.set(cLeftR, cLeftR, cLeftR * 0.8);
+        dummy.rotation.set(leanX, leanY, yaw + 1.2);
+        dummy.updateMatrix();
+        oakLeftInst.setMatrixAt(i, dummy.matrix);
+
+        // Asymmetric Right Cluster
+        const cRightR = r * 0.62;
+        const offX2 = Math.cos(yaw + 2.2) * (r * 0.42);
+        const offY2 = Math.sin(yaw + 2.2) * (r * 0.42);
+        dummy.position.set(x + offX2, -y - offY2, crownZ - crownR * 0.10);
+        dummy.scale.set(cRightR, cRightR, cRightR * 0.82);
+        dummy.rotation.set(leanX, leanY, yaw - 1.4);
+        dummy.updateMatrix();
+        oakRightInst.setMatrixAt(i, dummy.matrix);
+
+        color.setHSL(hue, sat, lit);
+        oakMainInst.setColorAt(i, color);
+        color.setHSL(hue + 0.02, sat, Math.min(0.9, lit * 0.92));
+        oakLeftInst.setColorAt(i, color);
+        color.setHSL(hue - 0.02, sat, Math.min(0.9, lit * 1.15));
+        oakRightInst.setColorAt(i, color);
+      }
+
+      oakTrunkInst.instanceMatrix.needsUpdate = true;
+      oakMainInst.instanceMatrix.needsUpdate = true;
+      oakLeftInst.instanceMatrix.needsUpdate = true;
+      oakRightInst.instanceMatrix.needsUpdate = true;
+      if (oakMainInst.instanceColor) oakMainInst.instanceColor.needsUpdate = true;
+      if (oakLeftInst.instanceColor) oakLeftInst.instanceColor.needsUpdate = true;
+      if (oakRightInst.instanceColor) oakRightInst.instanceColor.needsUpdate = true;
+      oakTrunkInst.castShadow = true; oakTrunkInst.receiveShadow = true;
+      oakMainInst.castShadow = true; oakMainInst.receiveShadow = true;
+      oakLeftInst.castShadow = true; oakLeftInst.receiveShadow = true;
+      oakRightInst.castShadow = true; oakRightInst.receiveShadow = true;
+
+      this.treeGroup.add(oakTrunkInst, oakMainInst, oakLeftInst, oakRightInst);
+    }
+
+    // === SPECIES 2: MEDITERRANEAN CYPRESS (Tall Columnar Silhouette) ===
+    if (placedCypresses.length > 0) {
+      const count = placedCypresses.length;
+      const trunkGeo = new THREE.CylinderGeometry(0.45, 0.65, 1.0, 6);
+      trunkGeo.rotateX(Math.PI / 2);
+      const cypTrunkInst = new THREE.InstancedMesh(trunkGeo, darkWoodMat, count);
+
+      const colGeo = new THREE.CylinderGeometry(0.35, 0.95, 1.0, 8);
+      colGeo.rotateX(Math.PI / 2);
+      const cypBodyInst = new THREE.InstancedMesh(colGeo, leafMat, count);
+
+      const topGeo = new THREE.ConeGeometry(0.85, 1.0, 8);
+      topGeo.rotateX(Math.PI / 2);
+      const cypTopInst = new THREE.InstancedMesh(topGeo, leafMat, count);
+
+      for (let i = 0; i < count; i++) {
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedCypresses[i];
+        const trunkH = (r * 0.4 + 2.5) * heightMult;
+        const trunkR = Math.max(0.9, r * 0.08);
+
+        // Trunk
+        dummy.position.set(x, -y, trunkH / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        cypTrunkInst.setMatrixAt(i, dummy.matrix);
+
+        // Columnar Foliage Body
+        const cypR = r * 0.55;
+        const bodyH = r * 2.2 * heightMult;
+        const bodyZ = trunkH + bodyH / 2;
+        dummy.position.set(x, -y, bodyZ);
+        dummy.scale.set(cypR, cypR, bodyH);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        cypBodyInst.setMatrixAt(i, dummy.matrix);
+
+        // Pointed Crown Tip
+        const topH = r * 1.0 * heightMult;
+        const topZ = trunkH + bodyH + topH / 2;
+        dummy.position.set(x, -y, topZ);
+        dummy.scale.set(cypR * 0.85, cypR * 0.85, topH);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        cypTopInst.setMatrixAt(i, dummy.matrix);
+
+        color.setHSL(hue, sat, lit);
+        cypBodyInst.setColorAt(i, color);
+        color.setHSL(hue, sat, Math.min(0.9, lit * 1.2));
+        cypTopInst.setColorAt(i, color);
+      }
+
+      cypTrunkInst.instanceMatrix.needsUpdate = true;
+      cypBodyInst.instanceMatrix.needsUpdate = true;
+      cypTopInst.instanceMatrix.needsUpdate = true;
+      if (cypBodyInst.instanceColor) cypBodyInst.instanceColor.needsUpdate = true;
+      if (cypTopInst.instanceColor) cypTopInst.instanceColor.needsUpdate = true;
+      cypTrunkInst.castShadow = true; cypTrunkInst.receiveShadow = true;
+      cypBodyInst.castShadow = true; cypBodyInst.receiveShadow = true;
+      cypTopInst.castShadow = true; cypTopInst.receiveShadow = true;
+
+      this.treeGroup.add(cypTrunkInst, cypBodyInst, cypTopInst);
+    }
+
+    // === SPECIES 3: GOLDEN AUTUMN BIRCH (Pale Trunk + Fluffy Amber Canopy) ===
+    if (placedBirches.length > 0) {
+      const count = placedBirches.length;
+      const trunkGeo = new THREE.CylinderGeometry(0.45, 0.75, 1.0, 6);
+      trunkGeo.rotateX(Math.PI / 2);
+      const birchTrunkInst = new THREE.InstancedMesh(trunkGeo, paleWoodMat, count);
+
+      const crownGeo = new THREE.DodecahedronGeometry(1.0, 1);
+      crownGeo.rotateX(Math.PI / 2);
+      const birchCrown1Inst = new THREE.InstancedMesh(crownGeo, leafMat, count);
+      const birchCrown2Inst = new THREE.InstancedMesh(crownGeo, leafMat, count);
+
+      for (let i = 0; i < count; i++) {
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedBirches[i];
+        const trunkH = (r * 0.85 + 4) * heightMult;
+        const trunkR = Math.max(0.9, r * 0.11);
+
+        // Trunk
+        dummy.position.set(x, -y, trunkH / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        birchTrunkInst.setMatrixAt(i, dummy.matrix);
+
+        // Lower Fluffy Amber Crown
+        const c1R = r * 0.85;
+        const c1Z = trunkH * 0.75 + c1R * 0.6;
+        dummy.position.set(x, -y, c1Z);
+        dummy.scale.set(c1R, c1R, c1R * 0.9);
+        dummy.rotation.set(leanX, leanY, yaw);
+        dummy.updateMatrix();
+        birchCrown1Inst.setMatrixAt(i, dummy.matrix);
+
+        // Upper Golden Crown
+        const c2R = r * 0.62;
+        const c2Z = c1Z + c1R * 0.55;
+        dummy.position.set(x, -y, c2Z);
+        dummy.scale.set(c2R, c2R, c2R * 0.95);
+        dummy.rotation.set(leanX, leanY, yaw + 0.8);
+        dummy.updateMatrix();
+        birchCrown2Inst.setMatrixAt(i, dummy.matrix);
+
+        color.setHSL(hue, sat, lit);
+        birchCrown1Inst.setColorAt(i, color);
+        color.setHSL(hue + 0.02, sat, Math.min(0.9, lit * 1.15));
+        birchCrown2Inst.setColorAt(i, color);
+      }
+
+      birchTrunkInst.instanceMatrix.needsUpdate = true;
+      birchCrown1Inst.instanceMatrix.needsUpdate = true;
+      birchCrown2Inst.instanceMatrix.needsUpdate = true;
+      if (birchCrown1Inst.instanceColor) birchCrown1Inst.instanceColor.needsUpdate = true;
+      if (birchCrown2Inst.instanceColor) birchCrown2Inst.instanceColor.needsUpdate = true;
+      birchTrunkInst.castShadow = true; birchTrunkInst.receiveShadow = true;
+      birchCrown1Inst.castShadow = true; birchCrown1Inst.receiveShadow = true;
+      birchCrown2Inst.castShadow = true; birchCrown2Inst.receiveShadow = true;
+
+      this.treeGroup.add(birchTrunkInst, birchCrown1Inst, birchCrown2Inst);
+    }
+
     this.scene.add(this.treeGroup);
   }
 
