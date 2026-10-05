@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CONFIG } from './config.js';
 import { RAY_ANGLES } from './car.js';
 import { audio } from './audio.js';
+import { TireBarrierSystem } from './tireBarriers.js';
 
 export const TEAM_PALETTE = [
   // --- MULTI-COLOR LIVERIES (2 to 4 Vivid Contrasting Colors) ---
@@ -3211,63 +3212,8 @@ export class Renderer3D {
 
   generateTiresForTrack(track) {
     if (!track) return [];
-    const t = track;
-    const N = t.N;
-    const minCurv = 1 / 250;
-    const rawCorner = new Array(N).fill(false);
-    for (let k = 0; k < N; k++) {
-      rawCorner[k] = Math.abs(t.curvature[k]) >= minCurv;
-    }
-    const isCorner = new Array(N).fill(false);
-    for (let k = 0; k < N; k++) {
-      if (rawCorner[k]) {
-        for (let d = -2; d <= 2; d++) {
-          isCorner[(k + d + N) % N] = true;
-        }
-      }
-    }
-    const colors = [
-      { r: 0.88, g: 0.12, b: 0.28 }, // Crimson Red
-      { r: 0.95, g: 0.96, b: 0.98 }, // Pure White
-      { r: 0.12, g: 0.16, b: 0.22 }, // Dark Graphite
-    ];
-    const tires = [];
-    let id = 0;
-    for (let k = 0; k < N; k += 2) {
-      if (!isCorner[k]) continue;
-      const curv = t.curvature[k];
-      const isLeftTurn = curv >= 0;
-      const edgeX = isLeftTurn ? t.ox[k] : t.ix[k];
-      const edgeY = isLeftTurn ? t.oy[k] : t.iy[k];
-      const cdx = edgeX - t.cx[k];
-      const cdy = edgeY - t.cy[k];
-      const cLen = Math.hypot(cdx, cdy) || 1;
-      const outNx = cdx / cLen;
-      const outNy = cdy / cLen;
-      const colorGroup = Math.floor(k / 4) % 2;
-      const baseColor = colors[colorGroup];
-
-      for (let row = 0; row < 2; row++) {
-        const margin = 4.8 + row * 1.7;
-        const stackX = edgeX + outNx * margin;
-        const stackY = edgeY + outNy * margin;
-        for (let tier = 0; tier < 2; tier++) {
-          const z = 0.42 + tier * 0.84;
-          const tireColor = tier === 1 && Math.random() < 0.3 ? colors[2] : baseColor;
-          tires.push({
-            id: id++,
-            x: stackX,
-            y: stackY,
-            z: z,
-            yaw: Math.atan2(outNy, outNx) + Math.PI / 2,
-            pitch: 0,
-            roll: 0,
-            color: tireColor,
-          });
-        }
-      }
-    }
-    return tires;
+    const system = new TireBarrierSystem(track);
+    return system.tires;
   }
 
   updateTireBarriers(sim) {
