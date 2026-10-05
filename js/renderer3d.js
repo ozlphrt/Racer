@@ -296,9 +296,9 @@ export class Renderer3D {
 
     // 1. Three.js Scene, Camera, Renderer
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x182c18);
+    this.scene.background = new THREE.Color(0x38bdf8);
 
-    this.camera = new THREE.PerspectiveCamera(42, this.w / this.h, 5, 16000);
+    this.camera = new THREE.PerspectiveCamera(42, this.w / this.h, 5, 24000);
     this.camera.filmGauge = 35;
     this.camera.setFocalLength(32);
     this.camera.up.set(0, 0, 1); // Z is the vertical altitude axis in our world
@@ -318,6 +318,7 @@ export class Renderer3D {
     this.controls.maxDistance = 5000;
 
     this.setupLighting();
+    this.setupSky();
     this.setupTerrain();
     this.setupTrack();
     this.setupCars();
@@ -333,8 +334,75 @@ export class Renderer3D {
     this.resetCamera();
   }
 
+  setupSky() {
+    // 1. Procedural atmospheric daytime sky canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+
+    // Vertical atmospheric gradient from Zenith (y=0) to Horizon & Terrain (y=1024)
+    const grad = ctx.createLinearGradient(0, 0, 0, 1024);
+    grad.addColorStop(0.00, '#0c2340'); // Deep Space/Zenith navy
+    grad.addColorStop(0.20, '#1d4ed8'); // Cobalt blue
+    grad.addColorStop(0.45, '#38bdf8'); // Bright azure sky
+    grad.addColorStop(0.68, '#7dd3fc'); // Sky horizon transition
+    grad.addColorStop(0.82, '#e0f2fe'); // Sunlit golden-white horizon haze
+    grad.addColorStop(0.90, '#bae6fd'); // Atmospheric fog layer
+    grad.addColorStop(1.00, '#244222'); // Ground terrain fade
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 1024);
+
+    // Soft procedural cirrus cloud bands
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
+    for (let i = 0; i < 16; i++) {
+      const cy = 180 + i * 32 + Math.sin(i * 1.8) * 14;
+      const ch = 12 + (i % 4) * 8;
+      ctx.beginPath();
+      ctx.ellipse(256 + Math.cos(i) * 90, cy, 260, ch, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Distant soft mountain silhouette along the horizon
+    ctx.fillStyle = 'rgba(24, 48, 32, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(0, 930);
+    for (let x = 0; x <= 512; x += 16) {
+      const my = 890 + Math.sin(x * 0.038) * 16 + Math.cos(x * 0.082) * 9;
+      ctx.lineTo(x, my);
+    }
+    ctx.lineTo(512, 1024);
+    ctx.lineTo(0, 1024);
+    ctx.closePath();
+    ctx.fill();
+
+    const skyTex = new THREE.CanvasTexture(canvas);
+    skyTex.wrapS = THREE.RepeatWrapping;
+    skyTex.wrapT = THREE.ClampToEdgeWrapping;
+
+    // Dome hemisphere/sphere inverted mesh
+    const skyGeo = new THREE.SphereGeometry(14000, 48, 32);
+    // Rotate sphere so top pole points along +Z (our vertical world axis)
+    skyGeo.rotateX(Math.PI / 2);
+
+    const skyMat = new THREE.MeshBasicMaterial({
+      map: skyTex,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+    });
+
+    this.skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    this.skyMesh.renderOrder = -100;
+    this.scene.add(this.skyMesh);
+
+    // Atmospheric Depth Fog for distant trees and terrain blending
+    this.scene.fog = new THREE.Fog(0x93c5fd, 1800, 8500);
+  }
+
   setupLighting() {
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x244222, 0.95);
+    const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x244222, 1.15);
     this.scene.add(hemiLight);
 
     this.dirLight = new THREE.DirectionalLight(0xfff8ee, 1.45);
@@ -2266,6 +2334,9 @@ export class Renderer3D {
     }
 
     this.controls.update();
+    if (this.skyMesh) {
+      this.skyMesh.position.copy(this.camera.position);
+    }
 
     // Compute Dynamic Race Positions (P.1, P.2, ...) for all active cars
     if (!this._rankedCars) this._rankedCars = [];
