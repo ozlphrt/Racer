@@ -4465,7 +4465,6 @@ export class Renderer3D {
       // Check if P1 is approaching the Start/Finish line (2-3 seconds prior to crossing index 0)
       const t = this.track;
       let p1ApproachingGantry = false;
-      let gantryHoldDuration = 3500;
 
       // Don't trigger gantry during race start launch phase (when sim.time < 5.0s) so helicopter cam keeps priority
       const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 5.0);
@@ -4483,8 +4482,6 @@ export class Renderer3D {
           // Trigger window: 2 to 3 seconds prior to crossing line (0.1s - 2.8s)
           if (timeToLine >= 0.1 && timeToLine <= 2.8) {
             p1ApproachingGantry = true;
-            // Hold camera on TV Gantry until car crosses line and travels ~1.2s past
-            gantryHoldDuration = Math.max(2600, Math.min(5200, (timeToLine + 1.2) * 1000));
           }
         }
       }
@@ -4494,8 +4491,51 @@ export class Renderer3D {
       if (p1ApproachingGantry && gantryCooldownPassed && this._autoPreset !== 'broadcast') {
         this._autoPreset = 'broadcast';
         this._lastGantryCutTime = now;
-        this._autoNextSwitch = now + gantryHoldDuration;
-      } else if (!this._autoPreset || !this._autoNextSwitch || (now >= this._autoNextSwitch && this._autoPreset !== 'broadcast')) {
+        this._gantryEntryLap = p1 ? (p1.laps || 0) : 0;
+        this._gantryCrossedLineTime = null;
+        this._autoNextSwitch = now + 10000; // Safety guard timeout
+      }
+
+      // When TV Gantry camera is active: WAIT until P1 actually passes by the start line!
+      if (this._autoPreset === 'broadcast') {
+        const p1Lap = p1 ? (p1.laps || 0) : 0;
+        const p1Idx = p1 && t && t.N ? (((p1.idx % t.N) + t.N) % t.N) : 0;
+        const crossedLap = typeof this._gantryEntryLap === 'number' && p1Lap > this._gantryEntryLap;
+        const pastStartLine = p1Idx >= 0 && p1Idx <= 45 && (now - (this._lastGantryCutTime || 0) > 600);
+        const p1Finished = p1 ? p1.finished : false;
+
+        // Detect the exact moment P1 crosses start/finish line
+        if ((crossedLap || pastStartLine || p1Finished) && !this._gantryCrossedLineTime) {
+          this._gantryCrossedLineTime = now;
+        }
+
+        // Wait until P1 has passed the line and ~1.2s has elapsed so we see the car flash under the gantry
+        const postCrossElapsed = this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 1200);
+        const safetyTimeout = now >= (this._lastGantryCutTime || 0) + 8000;
+
+        if (postCrossElapsed || safetyTimeout) {
+          // Switch to pursuit/action camera
+          const postGantryPool = [
+            { preset: 'heli', weight: 40 },
+            { preset: 'action_rear', weight: 35 },
+            { preset: 'orbit', weight: 15 },
+            { preset: 'chase', weight: 10 },
+          ];
+          let rnd = Math.random() * 100;
+          let chosen = postGantryPool[0].preset;
+          for (const item of postGantryPool) {
+            if (rnd < item.weight) {
+              chosen = item.preset;
+              break;
+            }
+            rnd -= item.weight;
+          }
+          this._autoPreset = chosen;
+          this._autoNextSwitch = now + 5500 + Math.random() * 2500;
+          this._gantryCrossedLineTime = null;
+          this._gantryEntryLap = null;
+        }
+      } else if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
         // If at the start of race / session, ensure helicopter is selected
         if (!this._autoPreset || isStartPhase) {
           this._autoPreset = 'heli';
@@ -4538,25 +4578,6 @@ export class Renderer3D {
           }
           this._autoNextSwitch = now + duration;
         }
-      } else if (now >= this._autoNextSwitch && this._autoPreset === 'broadcast') {
-        // Gantry shot just finished! Switch immediately to another action/pursuit camera
-        const postGantryPool = [
-          { preset: 'heli', weight: 40 },
-          { preset: 'action_rear', weight: 35 },
-          { preset: 'orbit', weight: 15 },
-          { preset: 'chase', weight: 10 },
-        ];
-        let rnd = Math.random() * 100;
-        let chosen = postGantryPool[0].preset;
-        for (const item of postGantryPool) {
-          if (rnd < item.weight) {
-            chosen = item.preset;
-            break;
-          }
-          rnd -= item.weight;
-        }
-        this._autoPreset = chosen;
-        this._autoNextSwitch = now + 5500 + Math.random() * 2500;
       }
       cameraPreset = this._autoPreset;
     }
