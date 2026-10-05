@@ -41,7 +41,7 @@
         <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
       </div>
 
-      <!-- AI Generation Presets Scale Ribbon (Top Center) -->
+      <!-- AI Generation Presets Scale Ribbon (Vertical Left Dock) -->
       <nav class="gen-presets-ribbon glass" id="gen-presets-ribbon" aria-label="AI Generation Presets">
         <div class="gen-presets-label">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,6 +51,16 @@
           <span>AI GEN</span>
         </div>
         <div class="gen-presets-track" id="gen-presets-track"></div>
+        <div class="gen-compare-divider"></div>
+        <button class="btn-compare-gens" id="btn-compare-gens" type="button" title="Compare AI generations in a head-to-head showdown race">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 3h5v5"></path>
+            <path d="M8 21H3v-5"></path>
+            <path d="M21 3l-7.5 7.5"></path>
+            <path d="M3 21l7.5-7.5"></path>
+          </svg>
+          <span>COMPARE</span>
+        </button>
       </nav>
 
       <!-- Ghost Mode 30s Countdown Timer Pill (Top Center) -->
@@ -887,6 +897,98 @@
             <div class="stat"><span class="stat-label">Record Lap</span><span class="stat-value" id="hub-stat-lap">–</span></div>
             <div class="stat"><span class="stat-label">Clean Rate</span><span class="stat-value" id="hub-stat-clean">100%</span></div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= AI GENERATION COMPARISON & SHOWDOWN MODAL ================= -->
+  <div class="gen-compare-backdrop" id="gen-compare-backdrop" hidden>
+    <div class="gen-compare-modal glass" id="gen-compare-modal" role="dialog" aria-modal="true" aria-labelledby="compare-modal-title">
+      <!-- Modal Header -->
+      <div class="gen-compare-header">
+        <div class="gen-compare-title-wrap">
+          <div class="gen-compare-title" id="compare-modal-title">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 3h5v5"></path>
+              <path d="M8 21H3v-5"></path>
+              <path d="M21 3l-7.5 7.5"></path>
+              <path d="M3 21l7.5-7.5"></path>
+            </svg>
+            <span>AI GENERATIONS COMPARISON &amp; SHOWDOWN</span>
+          </div>
+          <span class="gen-compare-subtitle">Select multiple evolutionary eras to race head-to-head on the circuit or compare performance metrics.</span>
+        </div>
+        <button class="gen-compare-close" id="btn-close-compare" type="button" aria-label="Close comparison modal">&times;</button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="gen-compare-body">
+        <!-- Quick Matchup Showdowns -->
+        <div>
+          <div class="compare-grid-section-title">⚡ Quick Matchup Battles</div>
+          <div class="compare-quick-presets">
+            <button class="btn-quick-matchup" id="btn-matchup-all" type="button">
+              <span class="btn-quick-matchup-name">⚔️ All-Era Grand Prix</span>
+              <span class="btn-quick-matchup-gens">Gen 1 · 10 · 100 · 500 · 1k · 5k</span>
+            </button>
+            <button class="btn-quick-matchup" id="btn-matchup-rookie" type="button">
+              <span class="btn-quick-matchup-name">🔥 Rookie vs Legend</span>
+              <span class="btn-quick-matchup-gens">Gen 1 vs Gen 5000</span>
+            </button>
+            <button class="btn-quick-matchup" id="btn-matchup-champs" type="button">
+              <span class="btn-quick-matchup-name">🏆 Champions League</span>
+              <span class="btn-quick-matchup-gens">Gen 250 · 500 · 1k · 2k · 5k</span>
+            </button>
+            <button class="btn-quick-matchup" id="btn-matchup-live" type="button">
+              <span class="btn-quick-matchup-name">🧬 Live vs Titans</span>
+              <span class="btn-quick-matchup-gens">Your Live Gen vs Gen 1k · 5k</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom Generation Selector Grid -->
+        <div>
+          <div class="compare-grid-section-title">🎯 Custom Generation Selection (Choose 2 or more)</div>
+          <div class="compare-gen-chips-grid" id="compare-gen-selection-grid">
+            <!-- Dynamically populated chips -->
+          </div>
+        </div>
+
+        <!-- Comparative Telemetry Benchmark Matrix Table -->
+        <div>
+          <div class="compare-grid-section-title">📊 Side-by-Side Performance Matrix</div>
+          <div class="compare-table-wrapper">
+            <table class="compare-matrix-table" id="compare-matrix-table">
+              <thead>
+                <tr>
+                  <th>Generation</th>
+                  <th>Tier &amp; Behavior</th>
+                  <th>Record Lap</th>
+                  <th>Peak Speed</th>
+                  <th>Lap Completion</th>
+                  <th>Cornering Rating</th>
+                </tr>
+              </thead>
+              <tbody id="compare-matrix-tbody">
+                <!-- Dynamically populated rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="compare-footer">
+        <div class="compare-selected-count" id="compare-selected-summary">Selected: 4 Generations (40 Cars)</div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-hub-action" id="btn-cancel-compare" type="button">Cancel</button>
+          <button class="btn-start-showdown" id="btn-start-showdown" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>START SHOWDOWN RACE</span>
+          </button>
         </div>
       </div>
     </div>

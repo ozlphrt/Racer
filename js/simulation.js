@@ -190,12 +190,18 @@ export class Simulation {
     this.startGeneration(seedPopulation(genome, this.gaOptions));
   }
 
-  startGeneration(genomes) {
+  startGeneration(genomes, metaList = null) {
     this.cars = genomes.map((g, idx) => {
       const c = new Car(this.track, new NeuralNetwork(this.layers, g), idx);
       c.collisionAlwaysOn = false;
       c.launchDelay = 0;
       c.driverBias = 0;
+      if (metaList && metaList[idx]) {
+        const m = metaList[idx];
+        if (m.genTag !== undefined) c.genTag = m.genTag;
+        if (m.genLabel !== undefined) c.genLabel = m.genLabel;
+        if (m.teamIdx !== undefined) c.teamIdx = m.teamIdx;
+      }
       return c;
     });
     this.time = 0;

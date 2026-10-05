@@ -131,6 +131,11 @@ export class LeaderboardTower {
     }
   }
 
+  reset() {
+    this.carMetaMap.clear();
+    if (this.listEl) this.listEl.innerHTML = '';
+  }
+
   toggleCollapse(forcedState = null) {
     this.isCollapsed = forcedState !== null ? forcedState : !this.isCollapsed;
     this.container.classList.toggle('is-collapsed', this.isCollapsed);
@@ -142,10 +147,10 @@ export class LeaderboardTower {
     if (!meta) {
       const isPlayer = car === sim.player || car.manual;
       const carIdx = sim.cars ? sim.cars.indexOf(car) : 0;
-      const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
+      const teamIdx = isPlayer ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (carIdx % TEAM_PALETTE.length));
 
       const carNum = isPlayer ? 7 : (carIdx + 1);
-      const displayName = isPlayer ? 'YOU' : `#${carNum}`;
+      const displayName = isPlayer ? 'YOU' : (car.genLabel ? `${car.genLabel} · #${carNum}` : `#${carNum}`);
       const svgHtml = generateCarSideviewSvg(teamIdx, isPlayer);
 
       // Create row DOM: [Rank] [Sideview SVG] [Name] [Status/Gap]

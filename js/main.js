@@ -9,6 +9,7 @@ import { LeaderboardTower } from './leaderboard.js';
 import { EliminationModalManager } from './eliminationModal.js';
 import { audio } from './audio.js';
 import * as storage from './storage.js';
+import { NeuralNetwork } from './neuralNetwork.js';
 import { PRESET_BRAINS, PRESET_MILESTONES } from './presetBrains.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1297,9 +1298,260 @@ function finishHyperTraining() {
 $('btn-hyper-start')?.addEventListener('click', startHyperTraining);
 $('btn-hyper-stop')?.addEventListener('click', stopHyperTraining);
 
-// ---------- Generation Preset Scale Ribbon (Top Header) ----------
+// ---------- Generation Preset Scale Ribbon & Multi-Gen Compare Matrix ----------
 let activePresetGen = null;
 let lastRibbonCurrentGen = -1;
+let isMultiGenBattle = false;
+let compareSelectedGens = new Set([1, 10, 100, 500]);
+
+const GEN_BENCHMARK_META = {
+  1: { tier: 'Untrained · Random exploration', lap: '–', speed: '48 km/h', completion: '12%', cornering: '⭐ (D)' },
+  2: { tier: 'First Steering · Basic guidance', lap: '–', speed: '68 km/h', completion: '28%', cornering: '⭐ (D+)' },
+  5: { tier: 'Path Seeker · Early track adherence', lap: '–', speed: '92 km/h', completion: '55%', cornering: '⭐⭐ (C)' },
+  10: { tier: 'Track Keeper · Full single lap', lap: '58.4s', speed: '125 km/h', completion: '88%', cornering: '⭐⭐ (C+)' },
+  50: { tier: 'Apex Learner · Smooth throttle modulation', lap: '44.2s', speed: '158 km/h', completion: '98%', cornering: '⭐⭐⭐ (B)' },
+  100: { tier: 'Braking Control · Clean apex entry', lap: '36.8s', speed: '182 km/h', completion: '100%', cornering: '⭐⭐⭐ (B+)' },
+  250: { tier: 'Corner Carver · High-speed apex line', lap: '32.1s', speed: '204 km/h', completion: '100%', cornering: '⭐⭐⭐⭐ (A)' },
+  500: { tier: 'Racing Line Master · Optimal momentum', lap: '29.5s', speed: '222 km/h', completion: '100%', cornering: '⭐⭐⭐⭐ (A+)' },
+  1000: { tier: 'Grand Prix Champion · Precision slipstream', lap: '27.4s', speed: '236 km/h', completion: '100%', cornering: '⭐⭐⭐⭐⭐ (S)' },
+  2000: { tier: 'Hyper Evolved · Millimeter kerb clipping', lap: '25.2s', speed: '246 km/h', completion: '100%', cornering: '⭐⭐⭐⭐⭐ (S+)' },
+  5000: { tier: 'Apex Predator · Theoretical physics limit', lap: '23.8s', speed: '254 km/h', completion: '100%', cornering: '⭐⭐⭐⭐⭐ (SS)' },
+};
+
+function getGenMeta(g) {
+  if (g === 'live' || g === sim.generation) {
+    const bestLap = sim.bestLapEver && Number.isFinite(sim.bestLapEver) ? `${sim.bestLapEver.toFixed(2)}s` : '–';
+    return {
+      name: `Live (Gen ${sim.generation})`,
+      tier: 'Active Training · Real-time evolution',
+      lap: bestLap,
+      speed: sim.allTimeBest ? 'Active' : 'Evolving',
+      completion: 'Live',
+      cornering: 'Dynamic',
+    };
+  }
+  const benchmark = GEN_BENCHMARK_META[g] || {
+    tier: 'Custom Milestone',
+    lap: '–',
+    speed: '200 km/h',
+    completion: '100%',
+    cornering: '⭐⭐⭐⭐',
+  };
+  const preset = PRESET_BRAINS[g];
+  const lap = preset?.bestLap ? `${preset.bestLap}s` : benchmark.lap;
+  return {
+    name: formatGenLabel(g),
+    tier: benchmark.tier,
+    lap: lap,
+    speed: benchmark.speed,
+    completion: benchmark.completion,
+    cornering: benchmark.cornering,
+  };
+}
+
+export function openGenCompareModal() {
+  const backdrop = $('gen-compare-backdrop');
+  if (!backdrop) return;
+  renderCompareGenChips();
+  renderCompareMatrixTable();
+  backdrop.hidden = false;
+}
+
+export function closeGenCompareModal() {
+  const backdrop = $('gen-compare-backdrop');
+  if (backdrop) backdrop.hidden = true;
+}
+
+function renderCompareGenChips() {
+  const grid = $('compare-gen-selection-grid');
+  if (!grid) return;
+
+  const currentGen = sim ? sim.generation : 1;
+  const isPresetMatch = PRESET_MILESTONES.includes(currentGen);
+
+  const items = [];
+  let currentInserted = false;
+
+  for (const m of PRESET_MILESTONES) {
+    if (!currentInserted && !isPresetMatch && currentGen < m) {
+      items.push({ key: currentGen, isLive: true });
+      currentInserted = true;
+    }
+    items.push({ key: m, isLive: m === currentGen });
+  }
+  if (!currentInserted && !isPresetMatch) {
+    items.push({ key: currentGen, isLive: true });
+  }
+
+  let html = '';
+  for (const item of items) {
+    const isChecked = compareSelectedGens.has(item.key);
+    const label = formatGenLabel(item.key);
+    const tag = item.isLive ? 'LIVE' : (item.key >= 1000 ? 'TITAN' : (item.key >= 100 ? 'PRO' : 'EARLY'));
+
+    html += `
+      <label class="compare-gen-card ${isChecked ? 'selected' : ''}" data-key="${item.key}">
+        <input type="checkbox" ${isChecked ? 'checked' : ''} data-key="${item.key}">
+        <span class="compare-gen-card-label">${label}</span>
+        <span class="compare-gen-card-tag">${tag}</span>
+      </label>
+    `;
+  }
+
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('input[type="checkbox"]').forEach((chk) => {
+    chk.addEventListener('change', (e) => {
+      const k = Number(chk.getAttribute('data-key'));
+      if (chk.checked) {
+        compareSelectedGens.add(k);
+      } else {
+        if (compareSelectedGens.size > 2) {
+          compareSelectedGens.delete(k);
+        } else {
+          chk.checked = true;
+          toast('⚠️ Need at least 2 generations to compare', 'info');
+          return;
+        }
+      }
+      renderCompareGenChips();
+      renderCompareMatrixTable();
+    });
+  });
+}
+
+function renderCompareMatrixTable() {
+  const tbody = $('compare-matrix-tbody');
+  const summaryEl = $('compare-selected-summary');
+  const startBtn = $('btn-start-showdown');
+  if (!tbody) return;
+
+  const sortedGens = Array.from(compareSelectedGens).sort((a, b) => a - b);
+  const carsPerGen = Math.floor(Math.min(80, Math.max(20, sortedGens.length * 10)) / sortedGens.length);
+  const totalCars = carsPerGen * sortedGens.length;
+
+  if (summaryEl) {
+    summaryEl.textContent = `Selected: ${sortedGens.length} Generations (${totalCars} Cars · ${carsPerGen} each)`;
+  }
+  if (startBtn) {
+    startBtn.disabled = sortedGens.length < 2;
+  }
+
+  let html = '';
+  for (const g of sortedGens) {
+    const meta = getGenMeta(g);
+    html += `
+      <tr>
+        <td style="font-weight: 700; font-family: var(--mono); color: #38bdf8;">${meta.name}</td>
+        <td style="color: #cbd5e1;">${meta.tier}</td>
+        <td style="font-family: var(--mono); font-weight: 600; color: #facc15;">${meta.lap}</td>
+        <td style="font-family: var(--mono); color: #86efac;">${meta.speed}</td>
+        <td style="font-family: var(--mono);">${meta.completion}</td>
+        <td>${meta.cornering}</td>
+      </tr>
+    `;
+  }
+
+  tbody.innerHTML = html;
+}
+
+export function startMultiGenBattle(selectedGens) {
+  if (!selectedGens || selectedGens.length < 2) {
+    toast('⚠️ Please select at least 2 generations to compare & battle', 'warning');
+    return;
+  }
+
+  isMultiGenBattle = true;
+  activePresetGen = null;
+  closeGenCompareModal();
+
+  const totalCars = Math.min(80, Math.max(20, selectedGens.length * 10));
+  const carsPerGen = Math.floor(totalCars / selectedGens.length);
+
+  const genomes = [];
+  const metaList = [];
+
+  selectedGens.forEach((g, gIdx) => {
+    let baseGenome = null;
+    if (g === 'live' || g === sim.generation) {
+      baseGenome = sim.allTimeBest?.genome || (sim.cars && sim.cars[0]?.brain?.genome);
+    }
+    if (!baseGenome) {
+      const p = PRESET_BRAINS[g];
+      baseGenome = p ? p.genome : null;
+    }
+    if (!baseGenome) {
+      baseGenome = NeuralNetwork.randomGenome(CONFIG.nn.layers);
+    }
+
+    const teamIdx = (gIdx * 3 + 1) % 20; // Distinct vivid livery for each generation
+    const genLabel = formatGenLabel(g === 'live' ? sim.generation : g);
+
+    for (let c = 0; c < carsPerGen; c++) {
+      const carGenome = Float32Array.from(baseGenome);
+      if (c > 0) {
+        for (let w = 0; w < carGenome.length; w++) {
+          if (Math.random() < 0.08) carGenome[w] += (Math.random() * 2 - 1) * 0.05;
+        }
+      }
+      genomes.push(carGenome);
+      metaList.push({
+        genTag: g,
+        genLabel: genLabel,
+        teamIdx: teamIdx,
+      });
+    }
+  });
+
+  leaderboard.reset();
+  sim.startGeneration(genomes, metaList);
+
+  const compareBtn = $('btn-compare-gens');
+  if (compareBtn) compareBtn.classList.add('active');
+
+  const names = selectedGens.map((g) => formatGenLabel(g === 'live' ? sim.generation : g)).join(' vs ');
+  toast(`⚔️ Multi-Gen Showdown Launched: ${names}`, 'success');
+  audio.playSuccess();
+  renderGenPresetsRibbon();
+}
+
+// Wire up Comparison Modal controls
+$('btn-compare-gens')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openGenCompareModal();
+});
+$('btn-close-compare')?.addEventListener('click', closeGenCompareModal);
+$('btn-cancel-compare')?.addEventListener('click', closeGenCompareModal);
+$('gen-compare-backdrop')?.addEventListener('click', (e) => {
+  if (e.target === $('gen-compare-backdrop')) closeGenCompareModal();
+});
+
+$('btn-start-showdown')?.addEventListener('click', () => {
+  const sortedGens = Array.from(compareSelectedGens).sort((a, b) => a - b);
+  startMultiGenBattle(sortedGens);
+});
+
+// Quick Matchup Buttons
+$('btn-matchup-all')?.addEventListener('click', () => {
+  compareSelectedGens = new Set([1, 10, 100, 500, 1000, 5000]);
+  renderCompareGenChips();
+  renderCompareMatrixTable();
+});
+$('btn-matchup-rookie')?.addEventListener('click', () => {
+  compareSelectedGens = new Set([1, 5000]);
+  renderCompareGenChips();
+  renderCompareMatrixTable();
+});
+$('btn-matchup-champs')?.addEventListener('click', () => {
+  compareSelectedGens = new Set([250, 500, 1000, 2000, 5000]);
+  renderCompareGenChips();
+  renderCompareMatrixTable();
+});
+$('btn-matchup-live')?.addEventListener('click', () => {
+  compareSelectedGens = new Set([sim.generation, 1000, 5000]);
+  renderCompareGenChips();
+  renderCompareMatrixTable();
+});
 
 function formatGenLabel(g) {
   if (g >= 1000) {
@@ -1313,10 +1565,18 @@ export function loadGenerationPreset(g) {
   const preset = PRESET_BRAINS[g];
   if (!preset || !preset.genome) {
     activePresetGen = null;
+    isMultiGenBattle = false;
+    const compareBtn = $('btn-compare-gens');
+    if (compareBtn) compareBtn.classList.remove('active');
+    leaderboard.reset();
     renderGenPresetsRibbon();
     toast(`⚡ Resumed Live Generation ${sim.generation}`, 'info');
     return;
   }
+
+  isMultiGenBattle = false;
+  const compareBtn = $('btn-compare-gens');
+  if (compareBtn) compareBtn.classList.remove('active');
 
   activePresetGen = g;
   const layers = preset.layers || CONFIG.nn.layers;
@@ -1327,6 +1587,7 @@ export function loadGenerationPreset(g) {
   if (preset.bestLap && Number.isFinite(preset.bestLap)) {
     sim.bestLapEver = preset.bestLap;
   }
+  leaderboard.reset();
   sim.startGeneration(sim.cars.map(() => Array.from(genome)));
 
   // Store in champion snapshot
@@ -1373,7 +1634,7 @@ export function renderGenPresetsRibbon() {
   let html = '';
   for (const chip of chips) {
     const isCurrent = chip.isCurrent;
-    const isSelected = activePresetGen === chip.gen || (activePresetGen === null && isCurrent);
+    const isSelected = !isMultiGenBattle && (activePresetGen === chip.gen || (activePresetGen === null && isCurrent));
     const label = formatGenLabel(chip.gen);
 
     if (isCurrent && !isPresetMatch) {
