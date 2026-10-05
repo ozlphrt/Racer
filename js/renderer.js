@@ -969,7 +969,7 @@ export class Renderer {
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
     const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
-    const maxSkidSegments = 30000;
+    const maxSkidSegments = 60000;
 
     for (let i = 0; i < allCars.length; i++) {
       const car = allCars[i];
@@ -978,15 +978,17 @@ export class Renderer {
         continue;
       }
 
-      const isHeavyBraking = car.throttle < -0.32 && car.speed > 60;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.12 && car.speed > 55;
-      const isCrashSlide = car.crashed && car.speed > 20;
+      const isBraking = car.throttle < -0.16 && car.speed > 25;
+      const isSlip = Math.abs(car.slipAngle || 0) > 0.065 && car.speed > 28;
+      const isWheelspin = car.throttle > 0.85 && car.speed < 75 && !car.crashed;
+      const isCrashSlide = car.crashed && car.speed > 10;
 
-      if (isHeavyBraking || isSlip || isCrashSlide) {
-        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.10) * 2.5);
-        const brakeInt = isHeavyBraking ? Math.min(0.75, (-car.throttle - 0.30) * 1.5) : 0;
-        const crashInt = isCrashSlide ? 0.70 : 0;
-        const intensity = Math.min(0.75, Math.max(slipInt, brakeInt, crashInt));
+      if (isBraking || isSlip || isWheelspin || isCrashSlide) {
+        const brakeInt = isBraking ? Math.min(0.85, (-car.throttle - 0.14) * 1.6) : 0;
+        const slipInt = isSlip ? Math.min(0.90, (Math.abs(car.slipAngle || 0) - 0.055) * 3.5) : 0;
+        const spinInt = isWheelspin ? Math.min(0.75, (1.0 - car.speed / 75) * 0.85) : 0;
+        const crashInt = isCrashSlide ? 0.85 : 0;
+        const intensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
         const cos = Math.cos(car.angle);
         const sin = Math.sin(car.angle);
@@ -999,16 +1001,16 @@ export class Renderer {
         const prev = this.carPrevTires.get(car);
         if (prev) {
           const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.45 && dL < 30) {
+          if (dL > 0.35 && dL < 35) {
             this.skidmarks.push({
               x0: prev.lx, y0: prev.ly,
               x1: lx, y1: ly,
-              alpha: intensity * 0.75
+              alpha: intensity * 0.85
             });
             this.skidmarks.push({
               x0: prev.rx, y0: prev.ry,
               x1: rx, y1: ry,
-              alpha: intensity * 0.75
+              alpha: intensity * 0.85
             });
             if (this.skidmarks.length > maxSkidSegments) {
               this.skidmarks.splice(0, this.skidmarks.length - maxSkidSegments);

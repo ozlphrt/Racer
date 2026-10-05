@@ -3986,12 +3986,13 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 40000;
+    this.maxSkidQuads = 120000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
     this.skidPosArr = new Float32Array(maxVerts * 3);
     this.skidAlphaArr = new Float32Array(maxVerts);
+    this.skidUvArr = new Float32Array(maxVerts * 2);
     const indices = new Uint32Array(maxIndices);
 
     for (let i = 0; i < this.maxSkidQuads; i++) {
@@ -4008,22 +4009,30 @@ export class Renderer3D {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.skidPosArr, 3));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.skidAlphaArr, 1));
+    geo.setAttribute('uv', new THREE.BufferAttribute(this.skidUvArr, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.setDrawRange(0, 0);
 
     const vertShader = `
       attribute float alpha;
       varying float vAlpha;
+      varying vec2 vUv;
       void main() {
         vAlpha = alpha;
+        vUv = uv;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `;
     const fragShader = `
       varying float vAlpha;
+      varying vec2 vUv;
       void main() {
-        vec3 rubber = vec3(0.06, 0.07, 0.09);
-        gl_FragColor = vec4(rubber, vAlpha * 0.72);
+        // Authentic deep asphalt rubber compound mark
+        vec3 rubber = vec3(0.04, 0.04, 0.05);
+        // Soft lateral tire edge gradient
+        float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
+        float alpha = vAlpha * (0.60 + edge * 0.40) * 0.88;
+        gl_FragColor = vec4(rubber, alpha);
       }
     `;
 
@@ -4032,9 +4041,11 @@ export class Renderer3D {
       fragmentShader: fragShader,
       transparent: true,
       depthWrite: false,
+      depthTest: true,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -1.5,
+      polygonOffsetFactor: -4.0,
+      polygonOffsetUnits: -4.0,
     });
 
     this.skidMesh = new THREE.Mesh(geo, mat);
@@ -4057,31 +4068,40 @@ export class Renderer3D {
   addSkidQuad(v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y, alpha) {
     const quadIdx = this.skidHead;
     const vOffset = quadIdx * 4;
-    const z = 0.02;
+    // Elevated above asphalt slab (0.05) and white lines (0.12) to stay clearly visible
+    const z = 0.145;
 
-    // v0
+    // v0 (prev outer edge)
     this.skidPosArr[vOffset * 3] = v0x;
     this.skidPosArr[vOffset * 3 + 1] = v0y;
     this.skidPosArr[vOffset * 3 + 2] = z;
     this.skidAlphaArr[vOffset] = alpha;
+    this.skidUvArr[vOffset * 2] = 0.0;
+    this.skidUvArr[vOffset * 2 + 1] = 0.0;
 
-    // v1
+    // v1 (prev inner edge)
     this.skidPosArr[(vOffset + 1) * 3] = v1x;
     this.skidPosArr[(vOffset + 1) * 3 + 1] = v1y;
     this.skidPosArr[(vOffset + 1) * 3 + 2] = z;
     this.skidAlphaArr[vOffset + 1] = alpha;
+    this.skidUvArr[(vOffset + 1) * 2] = 1.0;
+    this.skidUvArr[(vOffset + 1) * 2 + 1] = 0.0;
 
-    // v2
+    // v2 (current outer edge)
     this.skidPosArr[(vOffset + 2) * 3] = v2x;
     this.skidPosArr[(vOffset + 2) * 3 + 1] = v2y;
     this.skidPosArr[(vOffset + 2) * 3 + 2] = z;
     this.skidAlphaArr[vOffset + 2] = alpha;
+    this.skidUvArr[(vOffset + 2) * 2] = 0.0;
+    this.skidUvArr[(vOffset + 2) * 2 + 1] = 1.0;
 
-    // v3
+    // v3 (current inner edge)
     this.skidPosArr[(vOffset + 3) * 3] = v3x;
     this.skidPosArr[(vOffset + 3) * 3 + 1] = v3y;
     this.skidPosArr[(vOffset + 3) * 3 + 2] = z;
     this.skidAlphaArr[vOffset + 3] = alpha;
+    this.skidUvArr[(vOffset + 3) * 2] = 1.0;
+    this.skidUvArr[(vOffset + 3) * 2 + 1] = 1.0;
 
     this.skidHead = (this.skidHead + 1) % this.maxSkidQuads;
     if (this.skidCount < this.maxSkidQuads) this.skidCount++;
@@ -4099,16 +4119,18 @@ export class Renderer3D {
         continue;
       }
 
-      // Detect skid conditions: heavy braking, understeer, oversteer, or crashing slide
-      const isHeavyBraking = car.throttle < -0.32 && car.speed > 60;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.12 && car.speed > 55;
-      const isCrashSlide = car.crashed && car.speed > 20;
+      // Detect skid conditions: heavy/trail braking, cornering slip/drift, burnout launch, or crash slide
+      const isBraking = car.throttle < -0.16 && car.speed > 25;
+      const isSlip = Math.abs(car.slipAngle || 0) > 0.065 && car.speed > 28;
+      const isWheelspin = car.throttle > 0.85 && car.speed < 75 && !car.crashed;
+      const isCrashSlide = car.crashed && car.speed > 10;
 
-      if (isHeavyBraking || isSlip || isCrashSlide) {
-        const slipInt = Math.max(0, (Math.abs(car.slipAngle || 0) - 0.10) * 2.5);
-        const brakeInt = isHeavyBraking ? Math.min(0.75, (-car.throttle - 0.30) * 1.5) : 0;
-        const crashInt = isCrashSlide ? 0.70 : 0;
-        const intensity = Math.min(0.75, Math.max(slipInt, brakeInt, crashInt));
+      if (isBraking || isSlip || isWheelspin || isCrashSlide) {
+        const brakeInt = isBraking ? Math.min(0.85, (-car.throttle - 0.14) * 1.6) : 0;
+        const slipInt = isSlip ? Math.min(0.90, (Math.abs(car.slipAngle || 0) - 0.055) * 3.5) : 0;
+        const spinInt = isWheelspin ? Math.min(0.75, (1.0 - car.speed / 75) * 0.85) : 0;
+        const crashInt = isCrashSlide ? 0.85 : 0;
+        const intensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
         const cos = Math.cos(car.angle);
         const sin = Math.sin(car.angle);
@@ -4121,8 +4143,8 @@ export class Renderer3D {
         const prev = this.carPrevTires.get(car);
         if (prev) {
           const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.45 && dL < 30) {
-            const hw = 0.8; // half width of tire skid mark
+          if (dL > 0.35 && dL < 35) {
+            const hw = 1.05; // half width of tire skid mark (~2.1m wide contact patch)
             const nx = -sin * hw;
             const ny = -cos * hw;
 
@@ -4160,6 +4182,9 @@ export class Renderer3D {
     if (added && this.skidMesh) {
       this.skidMesh.geometry.attributes.position.needsUpdate = true;
       this.skidMesh.geometry.attributes.alpha.needsUpdate = true;
+      if (this.skidMesh.geometry.attributes.uv) {
+        this.skidMesh.geometry.attributes.uv.needsUpdate = true;
+      }
       this.skidMesh.geometry.setDrawRange(0, this.skidCount * 6);
     }
   }
