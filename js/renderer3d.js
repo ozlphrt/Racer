@@ -328,6 +328,7 @@ export class Renderer3D {
     this.setupCars();
     this.setupRays();
     this.setupTrees();
+    this.setupRocks();
     this.setupTireBarriers();
     this.setupBursts();
     this.setupSkidmarks();
@@ -766,42 +767,84 @@ export class Renderer3D {
         }
       }
 
-      // Organic world-space color variation for macro natural mottling
-      const macroVar = Math.sin(vx * 0.0035 + vy * 0.0028) * 0.06 + Math.cos(vx * 0.007 - vy * 0.006) * 0.04;
+      // Multi-frequency 2D procedural biome & patch noise to break altitude banding
+      const bNoise1 = Math.sin(vx * 0.0022 + vy * 0.0017) * 0.6 + Math.cos(vx * 0.0019 - vy * 0.0025) * 0.4;
+      const bNoise2 = Math.sin(vx * 0.0063 - vy * 0.0051 + 1.2) * 0.35 + Math.cos(vx * 0.0048 + vy * 0.0071) * 0.25;
+      const biomeVal = bNoise1 * 0.65 + bNoise2 * 0.35; // Macro biome distribution (-1 to +1)
+
+      // Micro/medium soil & ground mottling
+      const patchVal = Math.sin(vx * 0.015 + vy * 0.012) * 0.05 + Math.cos(vx * 0.028 - vy * 0.024) * 0.035;
 
       let r, g, b;
       if (nearShore) {
-        // Wet golden sand & riverstone pebble shoreline
-        r = 0.58; g = 0.50; b = 0.36;
-      } else if (nz < 0.76) {
-        // Steep granite & slate cliff rock face
-        const rockTone = 0.32 + (1.0 - nz) * 0.18 + macroVar * 0.5;
-        r = rockTone * 1.08;
-        g = rockTone * 1.04;
-        b = rockTone * 1.12;
-      } else if (nz < 0.88) {
-        // Upland hillside pasture with warm terracotta loam
-        r = 0.32 + macroVar;
-        g = 0.38 + macroVar;
-        b = 0.20 + macroVar * 0.5;
+        // Wet golden sand & riverstone pebble shoreline with local variations
+        const sandVar = patchVal * 1.5;
+        r = 0.58 + sandVar;
+        g = 0.50 + sandVar * 0.8;
+        b = 0.36 + sandVar * 0.5;
+      } else if (nz < 0.74) {
+        // Steep granite & slate cliff rock face (faceted with local mineral grain)
+        const rockTone = 0.30 + (1.0 - nz) * 0.20 + biomeVal * 0.06 + patchVal * 0.8;
+        r = rockTone * 1.06;
+        g = rockTone * 1.02;
+        b = rockTone * 1.10;
+      } else if (nz < 0.86) {
+        // Transitional rocky hillsides and upland slopes
+        if (biomeVal > 0.15) {
+          // Lush mossy rock hillside
+          r = 0.25 + biomeVal * 0.06 + patchVal;
+          g = 0.36 + biomeVal * 0.08 + patchVal;
+          b = 0.18 + patchVal * 0.6;
+        } else {
+          // Terracotta clay & weathered scree slope
+          r = 0.35 - biomeVal * 0.08 + patchVal * 1.2;
+          g = 0.33 - biomeVal * 0.06 + patchVal;
+          b = 0.22 - biomeVal * 0.04 + patchVal * 0.5;
+        }
       } else if (h > 240.0) {
         // High mountain frost & snow-dusted ridges
         const sNorm = Math.min(1.0, (h - 240.0) / 100.0);
-        r = 0.55 + sNorm * 0.40;
-        g = 0.58 + sNorm * 0.38;
-        b = 0.62 + sNorm * 0.35;
-      } else if (h > 110.0) {
-        // Alpine scree & weathered rock
-        const aNorm = Math.min(1.0, (h - 110.0) / 130.0);
-        r = 0.26 + aNorm * 0.20 + macroVar;
-        g = 0.38 + aNorm * 0.12 + macroVar;
-        b = 0.22 + aNorm * 0.22 + macroVar;
+        r = 0.55 + sNorm * 0.40 + biomeVal * 0.04;
+        g = 0.58 + sNorm * 0.38 + biomeVal * 0.04;
+        b = 0.62 + sNorm * 0.35 + biomeVal * 0.03;
+      } else if (h > 120.0) {
+        // Alpine scree & highland vegetation with biome variety
+        const aNorm = Math.min(1.0, (h - 120.0) / 120.0);
+        if (biomeVal > 0.2) {
+          // Highland moorland / heather
+          r = 0.28 + aNorm * 0.16 + patchVal;
+          g = 0.36 + aNorm * 0.10 + patchVal;
+          b = 0.24 + aNorm * 0.18 + patchVal;
+        } else {
+          // Highland weathered rock & dry steppe
+          r = 0.32 + aNorm * 0.18 + patchVal;
+          g = 0.34 + aNorm * 0.12 + patchVal;
+          b = 0.26 + aNorm * 0.14 + patchVal;
+        }
       } else {
-        // Lush lowland grass & meadows
-        const hLow = Math.min(1.0, h / 110.0);
-        r = 0.18 + hLow * 0.08 + macroVar;
-        g = 0.36 + hLow * 0.06 + macroVar * 1.2;
-        b = 0.14 + hLow * 0.06 + macroVar * 0.8;
+        // Lowland & rolling hills: Diverse Biomes across the landscape
+        const hLow = Math.min(1.0, h / 120.0);
+        if (biomeVal > 0.18) {
+          // Biome A: Deep Lush Emerald & Clover field
+          r = 0.13 + hLow * 0.06 + patchVal * 0.8;
+          g = 0.38 + hLow * 0.06 + patchVal * 1.1;
+          b = 0.13 + hLow * 0.05 + patchVal * 0.6;
+        } else if (biomeVal < -0.18) {
+          // Biome B: Golden Prairie / Amber Savanna Meadow
+          r = 0.31 + hLow * 0.07 + patchVal * 1.2;
+          g = 0.36 + hLow * 0.05 + patchVal * 0.9;
+          b = 0.16 + hLow * 0.04 + patchVal * 0.5;
+        } else if (patchVal > 0.022) {
+          // Biome C: Rich Terracotta Loam / Earthy clearing
+          r = 0.28 + hLow * 0.06 + patchVal * 1.4;
+          g = 0.32 + hLow * 0.05 + patchVal * 1.0;
+          b = 0.17 + hLow * 0.04 + patchVal * 0.6;
+        } else {
+          // Biome D: Temperate Pasture & Green Valley
+          r = 0.19 + hLow * 0.07 + patchVal;
+          g = 0.35 + hLow * 0.06 + patchVal * 1.2;
+          b = 0.16 + hLow * 0.05 + patchVal * 0.7;
+        }
       }
 
       colors[i * 3] = Math.max(0, Math.min(1, r));
@@ -3180,6 +3223,233 @@ export class Renderer3D {
     this.scene.add(this.treeGroup);
   }
 
+  setupRocks() {
+    if (this.rockGroup) {
+      this.scene.remove(this.rockGroup);
+      this.rockGroup.traverse((child) => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else if (child.material) {
+            child.material.dispose();
+          }
+        }
+      });
+    }
+
+    this.rockGroup = new THREE.Group();
+    const t = this.track;
+    const b = t.bounds;
+
+    // Deterministic PRNG seeded with track bounds
+    let s = (Math.round(b.minX * 7 + b.minY * 11 + b.w * 31 + b.h * 47) & 0x7fffffff) || 849201;
+    const rand = () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+
+    const pad = Math.max(1200, Math.max(b.w, b.h) * 0.75);
+    const minX = b.minX - pad;
+    const maxX = b.maxX + pad;
+    const minY = b.minY - pad;
+    const maxY = b.maxY + pad;
+
+    // 1. Rock outcrops & craggy clusters
+    const numClusters = 22 + Math.floor(rand() * 10);
+    const clusterCenters = [];
+    for (let c = 0; c < numClusters; c++) {
+      const rockType = Math.floor(rand() * 3); // 0: Slate/Granite, 1: Sandstone/Limestone, 2: Mossy Basalt
+      clusterCenters.push({
+        cx: minX + rand() * (maxX - minX),
+        cy: minY + rand() * (maxY - minY),
+        radius: 40 + rand() * 90,
+        count: 5 + Math.floor(rand() * 8),
+        rockType,
+      });
+    }
+
+    const candidates = [];
+    for (const cl of clusterCenters) {
+      for (let i = 0; i < cl.count; i++) {
+        const angle = rand() * Math.PI * 2;
+        const dist = Math.sqrt(rand()) * cl.radius;
+        const rockType = rand() < 0.85 ? cl.rockType : Math.floor(rand() * 3);
+        candidates.push({
+          x: cl.cx + Math.cos(angle) * dist,
+          y: cl.cy + Math.sin(angle) * dist,
+          rockType,
+        });
+      }
+    }
+
+    // Standalone boulders scattered across hillsides & ridge meadows
+    const standalone = 110 + Math.floor(rand() * 40);
+    for (let i = 0; i < standalone; i++) {
+      candidates.push({
+        x: minX + rand() * (maxX - minX),
+        y: minY + rand() * (maxY - minY),
+        rockType: Math.floor(rand() * 3),
+      });
+    }
+
+    const placedType0 = [];
+    const placedType1 = [];
+    const placedType2 = [];
+
+    const { lakes: wLakes, river: wRiver } = this.getWaterBodies();
+    const trackPts = t.points || [];
+
+    for (const cand of candidates) {
+      const { x, y, rockType } = cand;
+      if (x < minX || x > maxX || y < minY || y > maxY) continue;
+
+      // In Three.js world space, the point is at (x, -y)
+      const groundZ = this.getTerrainHeight(x, -y);
+
+      // Rocks must be placed where terrain is elevated (exclude flat area near track or ground zero)
+      if (groundZ <= 0.2) continue;
+
+      // Ensure safe clearance from track spline (at least 24m)
+      let nearTrack = false;
+      for (let i = 0; i < trackPts.length; i += 3) {
+        const pt = trackPts[i];
+        if (Math.hypot(x - pt.x, y - pt.y) < 24.0) {
+          nearTrack = true;
+          break;
+        }
+      }
+      if (nearTrack) continue;
+
+      // Exclude water bodies
+      let inWater = false;
+      for (const l of wLakes) {
+        const dx = (x - l.cx) / l.rx;
+        const dy = (-y - l.cy) / l.ry;
+        if (Math.hypot(dx, dy) < 1.05) {
+          inWater = true;
+          break;
+        }
+      }
+      if (!inWater) {
+        for (let i = 0; i < wRiver.length; i += 2) {
+          const rp = wRiver[i];
+          if (Math.hypot(x - rp.x, -y - rp.y) < rp.width * 0.70) {
+            inWater = true;
+            break;
+          }
+        }
+      }
+      if (inWater) continue;
+
+      // Boulder scale distribution:
+      // 60% small/medium (1.6m - 3.4m), 30% large (3.6m - 6.5m), 10% massive mountain monoliths (7.0m - 13.0m)
+      const roll = rand();
+      let baseR;
+      if (roll < 0.60) {
+        baseR = 1.6 + rand() * 1.8;
+      } else if (roll < 0.90) {
+        baseR = 3.6 + rand() * 2.9;
+      } else {
+        baseR = 7.0 + rand() * 6.0;
+      }
+
+      const rockData = {
+        x,
+        y,
+        r: baseR,
+        scaleX: baseR * (0.75 + rand() * 0.50),
+        scaleY: baseR * (0.75 + rand() * 0.50),
+        scaleZ: baseR * (0.55 + rand() * 0.50),
+        rotX: rand() * Math.PI * 2,
+        rotY: rand() * Math.PI * 2,
+        rotZ: rand() * Math.PI * 2,
+        groundZ,
+        tint: 0.92 + rand() * 0.16,
+      };
+
+      if (rockType === 0) placedType0.push(rockData);
+      else if (rockType === 1) placedType1.push(rockData);
+      else placedType2.push(rockData);
+    }
+
+    const rockGroups = [
+      {
+        list: placedType0,
+        mat: new THREE.MeshStandardMaterial({
+          color: 0x484b50, // Dark Slate Granite
+          roughness: 0.94,
+          metalness: 0.08,
+          flatShading: true,
+        }),
+      },
+      {
+        list: placedType1,
+        mat: new THREE.MeshStandardMaterial({
+          color: 0x625b50, // Weathered Limestone / Sandstone
+          roughness: 0.96,
+          metalness: 0.04,
+          flatShading: true,
+        }),
+      },
+      {
+        list: placedType2,
+        mat: new THREE.MeshStandardMaterial({
+          color: 0x363a32, // Mossy Basalt / Shale
+          roughness: 0.90,
+          metalness: 0.05,
+          flatShading: true,
+        }),
+      },
+    ];
+
+    const dummy = new THREE.Object3D();
+    const instColor = new THREE.Color();
+
+    for (const rg of rockGroups) {
+      if (rg.list.length === 0) continue;
+      const count = rg.list.length;
+
+      // Base geometry: Dodecahedron with perturbed vertices for craggy faceted boulders
+      const geo = new THREE.DodecahedronGeometry(1.0, 1);
+      const vPos = geo.attributes.position.array;
+      for (let i = 0; i < vPos.length; i += 3) {
+        const px = vPos[i];
+        const py = vPos[i + 1];
+        const pz = vPos[i + 2];
+        const disp = 1.0 + (Math.sin(px * 3.5 + py * 2.8) * 0.18 + Math.cos(py * 3.2 - pz * 2.9) * 0.14);
+        vPos[i] = px * disp;
+        vPos[i + 1] = py * disp;
+        vPos[i + 2] = pz * (disp * 0.92);
+      }
+      geo.computeVertexNormals();
+
+      const instMesh = new THREE.InstancedMesh(geo, rg.mat, count);
+
+      for (let i = 0; i < count; i++) {
+        const item = rg.list[i];
+        // Embed the boulder partially into the ground for natural slope resting
+        dummy.position.set(item.x, -item.y, item.groundZ + item.scaleZ * 0.28);
+        dummy.rotation.set(item.rotX, item.rotY, item.rotZ);
+        dummy.scale.set(item.scaleX, item.scaleY, item.scaleZ);
+        dummy.updateMatrix();
+        instMesh.setMatrixAt(i, dummy.matrix);
+
+        instColor.copy(rg.mat.color).multiplyScalar(item.tint);
+        instMesh.setColorAt(i, instColor);
+      }
+
+      instMesh.instanceMatrix.needsUpdate = true;
+      if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+      instMesh.castShadow = true;
+      instMesh.receiveShadow = true;
+
+      this.rockGroup.add(instMesh);
+    }
+
+    this.scene.add(this.rockGroup);
+  }
+
   setupTireBarriers(sim = null) {
     if (this.tireGroup) {
       this.scene.remove(this.tireGroup);
@@ -3306,6 +3576,7 @@ export class Renderer3D {
     this.setupWater();
     this.setupTrack();
     this.setupTrees();
+    this.setupRocks();
     this.setupTireBarriers();
     this.resetCamera();
   }
