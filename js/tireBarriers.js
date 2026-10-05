@@ -237,6 +237,25 @@ export class TireBarrierSystem {
         }
       }
     }
+
+    this.buildSpatialGrid();
+  }
+
+  buildSpatialGrid() {
+    this.cellSize = 24.0;
+    this.grid = new Map();
+    for (let i = 0; i < this.tires.length; i++) {
+      const tire = this.tires[i];
+      const gx = Math.floor(tire.x / this.cellSize);
+      const gy = Math.floor(tire.y / this.cellSize);
+      const key = `${gx},${gy}`;
+      let cell = this.grid.get(key);
+      if (!cell) {
+        cell = [];
+        this.grid.set(key, cell);
+      }
+      cell.push(tire);
+    }
   }
 
   reset() {
@@ -257,16 +276,20 @@ export class TireBarrierSystem {
       tire.needsRenderUpdate = true;
     }
     this.hasActiveTires = false;
+    this.buildSpatialGrid();
   }
 
   update(dt, cars, onImpact = null) {
     if (!this.tires || this.tires.length === 0) return;
+    if (!this.grid) this.buildSpatialGrid();
+
     const clampedDt = Math.min(dt, 0.05);
 
-    // 1. Car vs Tire collision detection & impulse transfer
+    // 1. Spatial Grid Car vs Tire collision detection & impulse transfer
     if (cars && cars.length > 0) {
       const carRadius = 3.8;
       const carRadSq = (carRadius + 1.15) * (carRadius + 1.15);
+      const cellSize = this.cellSize;
 
       for (let c = 0; c < cars.length; c++) {
         const car = cars[c];
@@ -276,39 +299,51 @@ export class TireBarrierSystem {
         const carY = car.y;
         const carSpeed = car.speed || Math.hypot(car.vx, car.vy) || 0;
 
-        for (let i = 0; i < this.tires.length; i++) {
-          const tire = this.tires[i];
-          const dx = tire.x - carX;
-          const dy = tire.y - carY;
-          const distSq = dx * dx + dy * dy;
+        const minGX = Math.floor((carX - 6.0) / cellSize);
+        const maxGX = Math.floor((carX + 6.0) / cellSize);
+        const minGY = Math.floor((carY - 6.0) / cellSize);
+        const maxGY = Math.floor((carY + 6.0) / cellSize);
 
-          if (distSq < carRadSq) {
-            const dist = Math.sqrt(distSq) || 1;
-            const nx = dx / dist;
-            const ny = dy / dist;
+        for (let gx = minGX; gx <= maxGX; gx++) {
+          for (let gy = minGY; gy <= maxGY; gy++) {
+            const cell = this.grid.get(`${gx},${gy}`);
+            if (!cell) continue;
 
-            // Momentum transfer into tire
-            const impactSpeed = Math.max(18, carSpeed);
-            const force = impactSpeed * 0.72 + 12;
+            for (let i = 0; i < cell.length; i++) {
+              const tire = cell[i];
+              const dx = tire.x - carX;
+              const dy = tire.y - carY;
+              const distSq = dx * dx + dy * dy;
 
-            tire.vx += nx * force + (Math.random() - 0.5) * 6;
-            tire.vy += ny * force + (Math.random() - 0.5) * 6;
-            // Vertical launch: Tires pop and fly upwards upon violent impact!
-            tire.vz += Math.min(32, impactSpeed * 0.28 + 5.0 + Math.random() * 6);
+              if (distSq < carRadSq) {
+                const dist = Math.sqrt(distSq) || 1;
+                const nx = dx / dist;
+                const ny = dy / dist;
 
-            tire.vyaw += (Math.random() - 0.5) * 16;
-            tire.vpitch += (Math.random() - 0.5) * 12;
-            tire.vroll += (Math.random() - 0.5) * 12;
-            tire.sleeping = false;
-            tire.needsRenderUpdate = true;
-            this.hasActiveTires = true;
+                // Momentum transfer into tire
+                const impactSpeed = Math.max(18, carSpeed);
+                const force = impactSpeed * 0.72 + 12;
 
-            // Car impact cushioning: absorbs energy and pushes car back slightly
-            car.vx *= 0.82;
-            car.vy *= 0.82;
-            car.speed *= 0.82;
+                tire.vx += nx * force + (Math.random() - 0.5) * 6;
+                tire.vy += ny * force + (Math.random() - 0.5) * 6;
+                // Vertical launch: Tires pop and fly upwards upon violent impact!
+                tire.vz += Math.min(32, impactSpeed * 0.28 + 5.0 + Math.random() * 6);
 
-            onImpact?.(car, impactSpeed);
+                tire.vyaw += (Math.random() - 0.5) * 16;
+                tire.vpitch += (Math.random() - 0.5) * 12;
+                tire.vroll += (Math.random() - 0.5) * 12;
+                tire.sleeping = false;
+                tire.needsRenderUpdate = true;
+                this.hasActiveTires = true;
+
+                // Car impact cushioning: absorbs energy and pushes car back slightly
+                car.vx *= 0.82;
+                car.vy *= 0.82;
+                car.speed *= 0.82;
+
+                onImpact?.(car, impactSpeed);
+              }
+            }
           }
         }
       }

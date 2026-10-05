@@ -3672,22 +3672,50 @@ export class Renderer3D {
     const innerRadius = 0.65;
     const tyreHeight = 0.88;
 
-    const shape = new THREE.Shape();
-    shape.absarc(0, 0, outerRadius, 0, Math.PI * 2, false);
-    const hole = new THREE.Path();
-    hole.absarc(0, 0, innerRadius, 0, Math.PI * 2, true);
-    shape.holes.push(hole);
+    // Fast, lightweight hollow tire geometry (40 vertices instead of 1,728)
+    const segments = 10;
+    const halfH = tyreHeight * 0.5;
+    const vertices = [];
+    const indices = [];
 
-    const tireGeo = new THREE.ExtrudeGeometry(shape, {
-      depth: tyreHeight - 0.16,
-      bevelEnabled: true,
-      bevelSegments: 2,
-      steps: 1,
-      bevelSize: 0.08,
-      bevelThickness: 0.08,
-      curveSegments: 12,
-    });
-    tireGeo.center();
+    for (let ring = 0; ring < 4; ring++) {
+      const isInner = ring >= 2;
+      const isTop = ring === 0 || ring === 2;
+      const r = isInner ? innerRadius : outerRadius;
+      const z = isTop ? halfH : -halfH;
+
+      for (let i = 0; i < segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        vertices.push(Math.cos(angle) * r, Math.sin(angle) * r, z);
+      }
+    }
+
+    const idx = (ring, i) => ring * segments + (i % segments);
+
+    for (let i = 0; i < segments; i++) {
+      const nxt = (i + 1) % segments;
+
+      // 1. Outer Tread Wall (Ring 0 -> Ring 1)
+      indices.push(idx(0, i), idx(1, i), idx(0, nxt));
+      indices.push(idx(0, nxt), idx(1, i), idx(1, nxt));
+
+      // 2. Inner Void Wall (Ring 3 -> Ring 2)
+      indices.push(idx(2, i), idx(2, nxt), idx(3, i));
+      indices.push(idx(2, nxt), idx(3, nxt), idx(3, i));
+
+      // 3. Top Annulus Ring (Ring 2 -> Ring 0)
+      indices.push(idx(0, i), idx(0, nxt), idx(2, i));
+      indices.push(idx(0, nxt), idx(2, nxt), idx(2, i));
+
+      // 4. Bottom Annulus Ring (Ring 1 -> Ring 3)
+      indices.push(idx(1, i), idx(3, i), idx(1, nxt));
+      indices.push(idx(1, nxt), idx(3, i), idx(3, nxt));
+    }
+
+    const tireGeo = new THREE.BufferGeometry();
+    tireGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    tireGeo.setIndex(indices);
+    tireGeo.computeVertexNormals();
 
     const tireMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
