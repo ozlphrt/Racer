@@ -657,11 +657,24 @@ export class Renderer3D {
     const whiteVerts = [];
     const maxKerbWidth = Math.max(4.5, (t.width || 80) * 0.075); // Standard ~7.5% track width
 
-    // 1. Identify contiguous corner/apex zones along the track loop
-    const isKerb = new Array(N);
+    // 1. Identify corner/apex zones along the track loop
+    const rawKerb = new Array(N).fill(false);
+    for (let k = 0; k < N; k++) {
+      rawKerb[k] = Math.abs(t.curvature[k]) >= 1 / 200;
+    }
+
+    // Dilate corner zones by 2 samples on each side for smooth corner coverage
+    const isKerb = new Array(N).fill(false);
+    for (let k = 0; k < N; k++) {
+      if (rawKerb[k]) {
+        for (let d = -2; d <= 2; d++) {
+          isKerb[(k + d + N) % N] = true;
+        }
+      }
+    }
+
     let kerbCount = 0;
     for (let k = 0; k < N; k++) {
-      isKerb[k] = Math.abs(t.curvature[k]) >= 1 / 165;
       if (isKerb[k]) kerbCount++;
     }
 
@@ -683,17 +696,16 @@ export class Renderer3D {
             curr = (curr + 1) % N;
           }
           const L = runIndices.length;
-          // Transition taper length at entry and exit (3 to 6 sample points)
-          const taperLen = Math.min(6, Math.max(2, Math.floor(L * 0.28)));
+          if (L < 3) continue;
+
+          // Taper ONLY at the very start (s = 0) and very end (s = L - 1)
+          // All middle blocks are strictly 1.0 (constant full width and parallel)
           for (let s = 0; s < L; s++) {
-            let factor = 1.0;
-            if (s < taperLen) {
-              factor = s / taperLen;
-            } else if (s >= L - taperLen) {
-              factor = (L - 1 - s) / taperLen;
+            if (s === 0 || s === L - 1) {
+              taperWeight[runIndices[s]] = 0.0;
+            } else {
+              taperWeight[runIndices[s]] = 1.0;
             }
-            // Smooth cosine (Hann window) S-curve taper from 0 to 1 and back to 0
-            taperWeight[runIndices[s]] = 0.5 - 0.5 * Math.cos(factor * Math.PI);
           }
         }
       }
