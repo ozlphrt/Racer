@@ -296,7 +296,7 @@ export class Renderer3D {
 
     // 1. Three.js Scene, Camera, Renderer
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x38bdf8);
+    this.scene.background = new THREE.Color(0x1a3b5c);
 
     this.camera = new THREE.PerspectiveCamera(42, this.w / this.h, 5, 24000);
     this.camera.filmGauge = 35;
@@ -305,7 +305,8 @@ export class Renderer3D {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.w, this.h, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // 2. OrbitControls with smooth auto spin
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -335,37 +336,38 @@ export class Renderer3D {
   }
 
   setupSky() {
-    // 1. Procedural atmospheric daytime sky canvas
+    // 1. Procedural atmospheric daytime sky canvas (balanced, non-glaring)
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 1024;
     const ctx = canvas.getContext('2d');
 
-    // Vertical atmospheric gradient from Zenith (y=0) to Horizon & Terrain (y=1024)
+    // Natural, realistic sky gradient from deep space zenith to rich horizon
     const grad = ctx.createLinearGradient(0, 0, 0, 1024);
-    grad.addColorStop(0.00, '#0c2340'); // Deep Space/Zenith navy
-    grad.addColorStop(0.20, '#1d4ed8'); // Cobalt blue
-    grad.addColorStop(0.45, '#38bdf8'); // Bright azure sky
-    grad.addColorStop(0.68, '#7dd3fc'); // Sky horizon transition
-    grad.addColorStop(0.82, '#e0f2fe'); // Sunlit golden-white horizon haze
-    grad.addColorStop(0.90, '#bae6fd'); // Atmospheric fog layer
-    grad.addColorStop(1.00, '#244222'); // Ground terrain fade
+    grad.addColorStop(0.00, '#0a1628'); // Deep space zenith
+    grad.addColorStop(0.18, '#102d54'); // Dark royal blue
+    grad.addColorStop(0.40, '#1a497b'); // Deep azure
+    grad.addColorStop(0.62, '#2d659e'); // Natural sky blue
+    grad.addColorStop(0.78, '#4f85ba'); // Soft horizon transition
+    grad.addColorStop(0.88, '#6a97c4'); // Atmospheric horizon mist
+    grad.addColorStop(0.94, '#3b5f48'); // Soft mountain/meadow horizon blend
+    grad.addColorStop(1.00, '#1c361a'); // Terrain fade
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 1024);
 
     // Soft procedural cirrus cloud bands
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
-    for (let i = 0; i < 16; i++) {
-      const cy = 180 + i * 32 + Math.sin(i * 1.8) * 14;
-      const ch = 12 + (i % 4) * 8;
+    ctx.fillStyle = 'rgba(215, 230, 245, 0.16)';
+    for (let i = 0; i < 14; i++) {
+      const cy = 200 + i * 36 + Math.sin(i * 1.8) * 14;
+      const ch = 10 + (i % 4) * 7;
       ctx.beginPath();
       ctx.ellipse(256 + Math.cos(i) * 90, cy, 260, ch, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Distant soft mountain silhouette along the horizon
-    ctx.fillStyle = 'rgba(24, 48, 32, 0.45)';
+    ctx.fillStyle = 'rgba(16, 32, 22, 0.55)';
     ctx.beginPath();
     ctx.moveTo(0, 930);
     for (let x = 0; x <= 512; x += 16) {
@@ -398,29 +400,25 @@ export class Renderer3D {
     this.scene.add(this.skyMesh);
 
     // Atmospheric Depth Fog for distant trees and terrain blending
-    this.scene.fog = new THREE.Fog(0x93c5fd, 1800, 8500);
+    this.scene.fog = new THREE.Fog(0x3a6080, 2400, 9500);
   }
 
   setupLighting() {
-    const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x244222, 1.15);
+    const hemiLight = new THREE.HemisphereLight(0x7ea8cf, 0x1e361c, 0.85);
     this.scene.add(hemiLight);
 
-    this.dirLight = new THREE.DirectionalLight(0xfff8ee, 1.45);
-    this.dirLight.castShadow = false;
-    this.dirLight.shadow.mapSize.width = 1024;
-    this.dirLight.shadow.mapSize.height = 1024;
-    this.dirLight.shadow.camera.near = 100;
-    this.dirLight.shadow.camera.far = 5000;
-    const d = 1600;
-    this.dirLight.shadow.camera.left = -d;
-    this.dirLight.shadow.camera.right = d;
-    this.dirLight.shadow.camera.top = d;
-    this.dirLight.shadow.camera.bottom = -d;
-    this.dirLight.shadow.bias = -0.0005;
+    this.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.25);
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 2048;
+    this.dirLight.shadow.mapSize.height = 2048;
+    this.dirLight.shadow.camera.near = 50;
+    this.dirLight.shadow.camera.far = 4500;
+    this.dirLight.shadow.bias = -0.0004;
+    this.dirLight.shadow.normalBias = 0.04;
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
-    const ambLight = new THREE.AmbientLight(0x354835, 0.45);
+    const ambLight = new THREE.AmbientLight(0x1a261a, 0.35);
     this.scene.add(ambLight);
 
     this.updateLightPosition();
@@ -431,8 +429,19 @@ export class Renderer3D {
     const b = this.track.bounds;
     const cx = b.cx;
     const cy = -b.cy;
-    this.dirLight.position.set(cx + 400, cy - 800, 1400);
+    const spanX = (b.maxX - b.minX) * 0.6;
+    const spanY = (b.maxY - b.minY) * 0.6;
+    const span = Math.max(spanX, spanY) + 300;
+
+    this.dirLight.position.set(cx + span * 0.5, cy - span * 0.7, 1200);
     this.dirLight.target.position.set(cx, cy, 0);
+
+    const d = span * 1.15;
+    this.dirLight.shadow.camera.left = -d;
+    this.dirLight.shadow.camera.right = d;
+    this.dirLight.shadow.camera.top = d;
+    this.dirLight.shadow.camera.bottom = -d;
+    this.dirLight.shadow.camera.updateProjectionMatrix();
   }
 
   setupTerrain() {
@@ -1143,6 +1152,13 @@ export class Renderer3D {
     hoodNum.rotation.z = -Math.PI / 2;
     group.add(hoodNum);
 
+    group.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
     return group;
   }
 
@@ -1385,8 +1401,8 @@ export class Renderer3D {
       }
 
       if (child.isMesh) {
-        child.castShadow = isPlayer || carIdx < 3;
-        child.receiveShadow = false;
+        child.castShadow = true;
+        child.receiveShadow = true;
 
         const isFrontWingMesh = child.name === 'Object_8';
         const isRearWingMesh = child.name === 'Object_10';
@@ -1745,6 +1761,13 @@ export class Renderer3D {
     cone2Inst.instanceMatrix.needsUpdate = true;
     if (cone1Inst.instanceColor) cone1Inst.instanceColor.needsUpdate = true;
     if (cone2Inst.instanceColor) cone2Inst.instanceColor.needsUpdate = true;
+
+    trunkInst.castShadow = true;
+    trunkInst.receiveShadow = true;
+    cone1Inst.castShadow = true;
+    cone1Inst.receiveShadow = true;
+    cone2Inst.castShadow = true;
+    cone2Inst.receiveShadow = true;
 
     this.treeGroup.add(trunkInst);
     this.treeGroup.add(cone1Inst);
