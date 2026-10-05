@@ -261,6 +261,7 @@ sim.onGeneration = () => {
   if (renderer) {
     renderer.cam = null;
   }
+  updateHighestGenAndLiveSnapshot();
   persistState();
 };
 
@@ -1299,10 +1300,28 @@ $('btn-hyper-start')?.addEventListener('click', startHyperTraining);
 $('btn-hyper-stop')?.addEventListener('click', stopHyperTraining);
 
 // ---------- Generation Preset Scale Ribbon & Multi-Gen Compare Matrix ----------
+const storedAnchor = parseInt(localStorage.getItem('ai-racer:generation-anchor') || '0', 10);
+let userHighestGen = Math.max(storedAnchor, savedState?.generation || 1, sim?.generation || 1);
+let userLiveStateSnapshot = null;
 let activePresetGen = null;
 let lastRibbonCurrentGen = -1;
 let isMultiGenBattle = false;
 let compareSelectedGens = new Set([1, 10, 100, 500]);
+
+function updateHighestGenAndLiveSnapshot() {
+  if (!activePresetGen && !isMultiGenBattle && sim) {
+    if (sim.generation >= userHighestGen) {
+      userHighestGen = sim.generation;
+    }
+    userLiveStateSnapshot = {
+      generation: sim.generation,
+      bestLapEver: sim.bestLapEver,
+      history: [...(sim.history || [])],
+      genomes: sim.cars.map((c) => Array.from(c.brain.genome)),
+      allTimeBest: sim.allTimeBest ? { ...sim.allTimeBest, genome: Array.from(sim.allTimeBest.genome) } : null,
+    };
+  }
+}
 
 const GEN_BENCHMARK_META = {
   1: { tier: 'Untrained · Random exploration', lap: '–', speed: '48 km/h', completion: '12%', cornering: '⭐ (D)' },
@@ -1319,11 +1338,11 @@ const GEN_BENCHMARK_META = {
 };
 
 function getGenMeta(g) {
-  if (g === 'live' || g === sim.generation) {
+  if (g === 'live' || g === userHighestGen || (activePresetGen === null && g === sim.generation)) {
     const bestLap = sim.bestLapEver && Number.isFinite(sim.bestLapEver) ? `${sim.bestLapEver.toFixed(2)}s` : '–';
     return {
-      name: `Live (Gen ${sim.generation})`,
-      tier: 'Active Training · Real-time evolution',
+      name: `Live (Gen ${userHighestGen})`,
+      tier: 'Highest Tested · Real-time evolution',
       lap: bestLap,
       speed: sim.allTimeBest ? 'Active' : 'Evolving',
       completion: 'Live',
@@ -1366,21 +1385,21 @@ function renderCompareGenChips() {
   const grid = $('compare-gen-selection-grid');
   if (!grid) return;
 
-  const currentGen = sim ? sim.generation : 1;
-  const isPresetMatch = PRESET_MILESTONES.includes(currentGen);
+  const highestGen = Math.max(userHighestGen, 1);
+  const isPresetMatch = PRESET_MILESTONES.includes(highestGen);
 
   const items = [];
   let currentInserted = false;
 
   for (const m of PRESET_MILESTONES) {
-    if (!currentInserted && !isPresetMatch && currentGen < m) {
-      items.push({ key: currentGen, isLive: true });
+    if (!currentInserted && !isPresetMatch && highestGen < m) {
+      items.push({ key: highestGen, isLive: true });
       currentInserted = true;
     }
-    items.push({ key: m, isLive: m === currentGen });
+    items.push({ key: m, isLive: isPresetMatch && m === highestGen });
   }
   if (!currentInserted && !isPresetMatch) {
-    items.push({ key: currentGen, isLive: true });
+    items.push({ key: highestGen, isLive: true });
   }
 
   let html = '';
@@ -1473,8 +1492,8 @@ export function startMultiGenBattle(selectedGens) {
 
   selectedGens.forEach((g, gIdx) => {
     let baseGenome = null;
-    if (g === 'live' || g === sim.generation) {
-      baseGenome = sim.allTimeBest?.genome || (sim.cars && sim.cars[0]?.brain?.genome);
+    if (g === 'live' || g === userHighestGen || g === sim.generation) {
+      baseGenome = userLiveStateSnapshot?.allTimeBest?.genome || sim.allTimeBest?.genome || (sim.cars && sim.cars[0]?.brain?.genome);
     }
     if (!baseGenome) {
       const p = PRESET_BRAINS[g];
@@ -1485,7 +1504,7 @@ export function startMultiGenBattle(selectedGens) {
     }
 
     const teamIdx = (gIdx * 3 + 1) % 20; // Distinct vivid livery for each generation
-    const genLabel = formatGenLabel(g === 'live' ? sim.generation : g);
+    const genLabel = formatGenLabel(g === 'live' ? userHighestGen : g);
 
     for (let c = 0; c < carsPerGen; c++) {
       const carGenome = Float32Array.from(baseGenome);
@@ -1509,7 +1528,7 @@ export function startMultiGenBattle(selectedGens) {
   const compareBtn = $('btn-compare-gens');
   if (compareBtn) compareBtn.classList.add('active');
 
-  const names = selectedGens.map((g) => formatGenLabel(g === 'live' ? sim.generation : g)).join(' vs ');
+  const names = selectedGens.map((g) => formatGenLabel(g === 'live' ? userHighestGen : g)).join(' vs ');
   toast(`⚔️ Multi-Gen Showdown Launched: ${names}`, 'success');
   audio.playSuccess();
   renderGenPresetsRibbon();
@@ -1548,7 +1567,7 @@ $('btn-matchup-champs')?.addEventListener('click', () => {
   renderCompareMatrixTable();
 });
 $('btn-matchup-live')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([sim.generation, 1000, 5000]);
+  compareSelectedGens = new Set([userHighestGen, 1000, 5000]);
   renderCompareGenChips();
   renderCompareMatrixTable();
 });
@@ -1601,18 +1620,48 @@ document.addEventListener('click', (e) => {
 });
 
 export function loadGenerationPreset(g) {
-  const preset = PRESET_BRAINS[g];
-  if (!preset || !preset.genome) {
+  // If user was in live mode before selecting another preset, capture their live state
+  if (!activePresetGen && !isMultiGenBattle && sim) {
+    updateHighestGenAndLiveSnapshot();
+  }
+
+  // If user chooses their highest tested generation or an unrecognized preset -> Resume Live Training!
+  if (g === userHighestGen || !PRESET_BRAINS[g]) {
     activePresetGen = null;
     isMultiGenBattle = false;
     const compareBtn = $('btn-compare-gens');
     if (compareBtn) compareBtn.classList.remove('active');
+
+    sim.generation = userHighestGen;
+    if (userLiveStateSnapshot) {
+      if (userLiveStateSnapshot.bestLapEver) sim.bestLapEver = userLiveStateSnapshot.bestLapEver;
+      if (userLiveStateSnapshot.history) sim.history = [...userLiveStateSnapshot.history];
+      if (userLiveStateSnapshot.allTimeBest) sim.allTimeBest = userLiveStateSnapshot.allTimeBest;
+      if (userLiveStateSnapshot.genomes && userLiveStateSnapshot.genomes.length) {
+        sim.startGeneration(userLiveStateSnapshot.genomes);
+      } else {
+        sim.startGeneration();
+      }
+    } else {
+      const bestBrain = storage.loadBrain(LAYERS);
+      if (bestBrain?.genome) {
+        sim.startGeneration(sim.cars.map(() => Array.from(bestBrain.genome)));
+      } else {
+        sim.startGeneration();
+      }
+    }
+
     leaderboard.reset();
+    refreshSavedInfo();
+    updateHubAnalytics();
+    audio.playSuccess();
     renderGenPresetsRibbon();
-    toast(`⚡ Resumed Live Generation ${sim.generation}`, 'info');
+    toast(`⚡ Resumed Highest Tested Gen ${formatGenLabel(userHighestGen)}`, 'success');
     return;
   }
 
+  // Load selected milestone preset
+  const preset = PRESET_BRAINS[g];
   isMultiGenBattle = false;
   const compareBtn = $('btn-compare-gens');
   if (compareBtn) compareBtn.classList.remove('active');
@@ -1629,14 +1678,6 @@ export function loadGenerationPreset(g) {
   leaderboard.reset();
   sim.startGeneration(sim.cars.map(() => Array.from(genome)));
 
-  // Store in champion snapshot
-  storage.saveBrain({
-    generation: g,
-    fitness: preset.fitness || 0,
-    bestLap: preset.bestLap || Infinity,
-    genome: Array.from(genome),
-  }, layers);
-
   refreshSavedInfo();
   updateHubAnalytics();
   audio.playSuccess();
@@ -1652,22 +1693,22 @@ export function renderGenPresetsRibbon() {
   const container = $('gen-presets-track');
   const activeLabelEl = $('gen-dial-active-label');
 
-  const currentGen = sim ? sim.generation : 1;
-  const isPresetMatch = PRESET_MILESTONES.includes(currentGen);
+  const highestGen = Math.max(userHighestGen, 1);
+  const isPresetMatch = PRESET_MILESTONES.includes(highestGen);
 
-  // Build the list of chips: milestone presets + user's current Gen placed in between
+  // Build the list of chips: milestone presets + user's highest tested Gen placed in between
   const chips = [];
   let currentInserted = false;
 
   for (const m of PRESET_MILESTONES) {
-    if (!currentInserted && !isPresetMatch && currentGen < m) {
-      chips.push({ gen: currentGen, isCurrent: true });
+    if (!currentInserted && !isPresetMatch && highestGen < m) {
+      chips.push({ gen: highestGen, isHighestLive: true });
       currentInserted = true;
     }
-    chips.push({ gen: m, isCurrent: m === currentGen });
+    chips.push({ gen: m, isHighestLive: isPresetMatch && m === highestGen });
   }
   if (!currentInserted && !isPresetMatch) {
-    chips.push({ gen: currentGen, isCurrent: true });
+    chips.push({ gen: highestGen, isHighestLive: true });
   }
 
   // Update active label on Dial Menu Trigger Button
@@ -1677,7 +1718,7 @@ export function renderGenPresetsRibbon() {
     } else if (activePresetGen !== null) {
       activeLabelEl.textContent = formatGenLabel(activePresetGen);
     } else {
-      const liveNum = currentGen >= 1000 ? `${(currentGen / 1000) % 1 === 0 ? currentGen / 1000 : (currentGen / 1000).toFixed(1)}k` : `${currentGen}`;
+      const liveNum = highestGen >= 1000 ? `${(highestGen / 1000) % 1 === 0 ? highestGen / 1000 : (highestGen / 1000).toFixed(1)}k` : `${highestGen}`;
       activeLabelEl.innerHTML = `<span class="chip-dot"></span>${liveNum} <span class="chip-badge">LIVE</span>`;
     }
   }
@@ -1686,20 +1727,20 @@ export function renderGenPresetsRibbon() {
 
   let html = '';
   for (const chip of chips) {
-    const isCurrent = chip.isCurrent;
-    const isSelected = !isMultiGenBattle && (activePresetGen === chip.gen || (activePresetGen === null && isCurrent));
+    const isHighest = chip.isHighestLive;
+    const isSelected = !isMultiGenBattle && (activePresetGen === chip.gen || (activePresetGen === null && isHighest));
     const label = formatGenLabel(chip.gen);
     const preset = PRESET_BRAINS[chip.gen];
-    const bestLap = preset?.bestLap ? `${preset.bestLap}s` : (isCurrent && sim?.bestLapEver ? `${sim.bestLapEver.toFixed(1)}s` : null);
-    const tier = isCurrent ? 'Live Trained Model' : getPresetTier(chip.gen);
+    const bestLap = (isHighest && sim?.bestLapEver) ? `${sim.bestLapEver.toFixed(1)}s` : (preset?.bestLap ? `${preset.bestLap}s` : null);
+    const tier = isHighest ? 'Highest Tested Model' : getPresetTier(chip.gen);
 
     html += `
-      <button class="gen-dial-item ${isSelected ? 'active' : ''} ${isCurrent ? 'is-live' : ''}" data-gen="${chip.gen}" type="button" title="${isCurrent ? 'Active live trained generation' : `Load Gen ${chip.gen} preset`}">
+      <button class="gen-dial-item ${isSelected ? 'active' : ''} ${isHighest ? 'is-live' : ''}" data-gen="${chip.gen}" type="button" title="${isHighest ? `Your highest tested generation (${chip.gen})` : `Load Gen ${chip.gen} preset`}">
         <div class="gen-dial-item-main">
           <div class="gen-dial-item-head">
-            ${isCurrent ? '<span class="chip-dot"></span>' : ''}
+            ${isHighest ? '<span class="chip-dot"></span>' : ''}
             <span class="gen-dial-item-title">${label}</span>
-            ${isCurrent ? '<span class="gen-dial-item-live-badge">LIVE</span>' : ''}
+            ${isHighest ? '<span class="gen-dial-item-live-badge">LIVE</span>' : ''}
           </div>
           <span class="gen-dial-item-tier">${tier}</span>
         </div>
