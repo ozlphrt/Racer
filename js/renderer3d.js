@@ -2587,12 +2587,12 @@ export class Renderer3D {
   }
 
   updateSkidmarks(sim) {
-    if (!sim.cars) return;
-    const count = Math.min(sim.cars.length, 8);
+    if (!sim || !sim.cars) return;
+    const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars.slice(0, 10)] : sim.cars.slice(0, 10);
     let added = false;
 
-    for (let i = 0; i < count; i++) {
-      const car = sim.cars[i];
+    for (let i = 0; i < candidateCars.length; i++) {
+      const car = candidateCars[i];
       if (!car || !car.alive || car.finished) {
         if (this.carPrevTires.has(car)) this.carPrevTires.delete(car);
         continue;
