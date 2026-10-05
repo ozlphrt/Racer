@@ -2705,7 +2705,7 @@ export class Renderer3D {
       varying vec3 vColor;
       varying vec2 vUv;
       void main() {
-        // Subtle twin vortex filaments at u=0.25 and u=0.75
+        // Delicate aerodynamic vortex filaments at u=0.25 and u=0.75
         float dLeft = abs(vUv.x - 0.25);
         float dRight = abs(vUv.x - 0.75);
         float twinFilaments = max(exp(-dLeft * dLeft * 70.0), exp(-dRight * dRight * 70.0));
@@ -2713,10 +2713,11 @@ export class Renderer3D {
         // Soft central aerodynamic air wake
         float centerWake = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 1.8);
         
-        // Gentle soft color blending
-        vec3 col = mix(vColor, vec3(1.0, 1.0, 1.0), twinFilaments * 0.30 + centerWake * 0.12);
+        // Soft team tint blending with subtle vapor highlight
+        vec3 col = mix(vColor, vec3(1.0, 1.0, 1.0), twinFilaments * 0.15 + centerWake * 0.05);
         
-        float intensity = centerWake * 0.30 + twinFilaments * 0.50;
+        // Ultra-translucent intensity to ensure skidmarks & track remain completely clear
+        float intensity = centerWake * 0.15 + twinFilaments * 0.25;
         float alpha = vAlpha * intensity;
         
         gl_FragColor = vec4(col, alpha);
@@ -2784,13 +2785,13 @@ export class Renderer3D {
     const colorArr = this.trailMesh.geometry.attributes.color.array;
     const uvArr = this.trailMesh.geometry.attributes.uv.array;
 
-    const halfW = 2.6; // Sleek, refined aerodynamic ribbon width
+    const halfW = 2.4; // Sleek, refined aerodynamic ribbon width
 
     for (let i = 0; i < count; i++) {
       const pt = this.trailHistory[i];
-      // Subtle smooth quadratic fade with lower max opacity (0.35)
+      // Ultra-transparent smooth quadratic fade (max 0.14) so skidmarks & tarmac details stay clearly visible
       const progress = i / (count - 1);
-      const a = Math.pow(progress, 2.2) * 0.35;
+      const a = Math.pow(progress, 2.0) * 0.14;
 
       // Left vertex (u = 0)
       const v0 = i * 2;
