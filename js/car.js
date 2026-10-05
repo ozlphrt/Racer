@@ -153,7 +153,6 @@ export class Car {
       this.finished = true;
       this.finishTime = this.time;
       this.deathReason = 'finished';
-      this.finishTimer = 2.8; // Cruise forward past the checkered line for 2.8s
       return;
     }
     this.crashed = true;
@@ -163,7 +162,7 @@ export class Car {
   }
 
   update(dt, controls = null) {
-    if (!this.alive) return;
+    if (!this.alive && !this.finished) return;
     const c = CONFIG.car;
     const g = CONFIG.generation;
     const t = this.track;
@@ -179,10 +178,9 @@ export class Car {
     // A car is heading in the wrong way if angled > 72° (0.40π rad) away from forward track tangent
     const isWrongWay = Math.abs(headingDiff) > Math.PI * 0.40;
 
-    // If car has crossed finish line: smooth celebration cooldown cruise along track (NO explosion)
+    // If car has crossed finish line: smooth celebration cooldown cruise along track (NEVER removed)
     if (this.finished) {
-      this.finishTimer -= dt;
-      this.speed = Math.max(70, this.speed - (this.speed * 0.7 + 35) * dt);
+      this.speed = Math.max(35, this.speed - (this.speed * 0.45 + 25) * dt);
       let diff = targetHeading - this.angle;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
@@ -192,9 +190,6 @@ export class Car {
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       this.idx = t.nearestIndex(this.x, this.y, this.idx);
-      if (this.finishTimer <= 0) {
-        this.alive = false; // Clean retirement without explosion
-      }
       return;
     }
 

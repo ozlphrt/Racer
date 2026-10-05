@@ -3529,7 +3529,7 @@ export class Renderer3D {
     for (let i = 0; i < this.carPool.length; i++) {
       const mesh = this.carPool[i];
       const car = sim.cars[i];
-      const shouldShow = car && car.alive && (opts.ghosts || car === leader || car.crashed || car.finished);
+      const shouldShow = car && (car.alive || car.finished) && (opts.ghosts || car === leader || car.crashed || car.finished);
       if (shouldShow) {
         mesh.visible = true;
 

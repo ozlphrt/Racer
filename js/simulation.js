@@ -194,6 +194,7 @@ export class Simulation {
       return c;
     });
     this.time = 0;
+    this.postRaceTimer = null;
     this.aliveCount = this.cars.length;
     this.deathEvents = [];
   }
@@ -429,8 +430,25 @@ export class Simulation {
     this.time += dt;
     this.aliveCount = aliveRacing;
 
-    // End generation when no cars are actively racing AND all sliding crashes have finished
-    if (aliveTotal === 0 || this.time >= this.config.generation.timeLimit) {
+    // Check if race has concluded: no cars actively racing, and no cars actively in a crash slide
+    const isCrashingSliding = this.cars.some((c) => c.crashed && c.alive);
+    const isRaceComplete = aliveRacing === 0 && !isCrashingSliding;
+
+    if (isRaceComplete) {
+      if (this.postRaceTimer === null || this.postRaceTimer === undefined) {
+        this.postRaceTimer = 4.0; // 4-second victory cooldown with all cars remaining on track
+      } else {
+        this.postRaceTimer -= dt;
+        if (this.postRaceTimer <= 0) {
+          this.postRaceTimer = null;
+          this.endGeneration();
+        }
+      }
+    } else {
+      this.postRaceTimer = null;
+    }
+
+    if (this.time >= this.config.generation.timeLimit) {
       this.endGeneration();
     }
   }

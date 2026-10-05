@@ -598,10 +598,10 @@ export class Renderer {
   drawGhosts(cars, leader, carRankMap = null, visibleBadgeSet = null) {
     for (let i = 0; i < cars.length; i++) {
       const car = cars[i];
-      if (!car.alive || car === leader) continue;
+      if ((!car.alive && !car.finished) || car === leader) continue;
       const team = TEAM_PALETTE[i % TEAM_PALETTE.length];
       const carNum = i + 2;
-      const showBadge = (visibleBadgeSet && visibleBadgeSet.has(car)) || car.crashed;
+      const showBadge = (visibleBadgeSet && visibleBadgeSet.has(car)) || car.crashed || car.finished;
       const rank = (showBadge && carRankMap) ? carRankMap.get(car) : null;
       this.drawCar(car, team, false, false, carNum, rank);
     }
