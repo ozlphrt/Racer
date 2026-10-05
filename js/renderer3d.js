@@ -650,31 +650,39 @@ export class Renderer3D {
     centerDashMesh.renderOrder = 3;
     this.decorGroup.add(centerDashMesh);
 
-    // Red & White 3D Apex Kerbs
+    // Red & White 3D Apex Kerbs (Wider FIA-style rumble strips)
     const kerbRedGeo = new THREE.BufferGeometry();
     const kerbWhiteGeo = new THREE.BufferGeometry();
     const redVerts = [];
     const whiteVerts = [];
-    const inset = 0.09;
+    const kerbInset = 0.16;   // Extends inward into the tarmac
+    const kerbOutset = 0.08;  // Extends outward onto the track verge
 
     for (let k = 0; k < N; k++) {
-      if (Math.abs(t.curvature[k]) < 1 / 160) continue;
+      if (Math.abs(t.curvature[k]) < 1 / 170) continue;
       const j = (k + 1) % N;
       const isRed = k % 2 === 0;
       const target = isRed ? redVerts : whiteVerts;
 
       for (const [xs, ys] of [[t.ix, t.iy], [t.ox, t.oy]]) {
-        const ax = xs[k] + (t.cx[k] - xs[k]) * inset;
-        const ay = ys[k] + (t.cy[k] - ys[k]) * inset;
-        const bx = xs[j] + (t.cx[j] - xs[j]) * inset;
-        const by = ys[j] + (t.cy[j] - ys[j]) * inset;
+        // Outward edge (verge side)
+        const oxK = xs[k] + (xs[k] - t.cx[k]) * kerbOutset;
+        const oyK = ys[k] + (ys[k] - t.cy[k]) * kerbOutset;
+        const oxJ = xs[j] + (xs[j] - t.cx[j]) * kerbOutset;
+        const oyJ = ys[j] + (ys[j] - t.cy[j]) * kerbOutset;
+
+        // Inward edge (tarmac side)
+        const ixK = xs[k] + (t.cx[k] - xs[k]) * kerbInset;
+        const iyK = ys[k] + (t.cy[k] - ys[k]) * kerbInset;
+        const ixJ = xs[j] + (t.cx[j] - xs[j]) * kerbInset;
+        const iyJ = ys[j] + (t.cy[j] - ys[j]) * kerbInset;
 
         const zOuter = 0.045;
         const zInner = 0.035;
 
         // Quad triangles with double-sided robust winding
-        target.push(xs[k], -ys[k], zOuter, ax, -ay, zInner, bx, -by, zInner);
-        target.push(xs[k], -ys[k], zOuter, bx, -by, zInner, xs[j], -ys[j], zOuter);
+        target.push(oxK, -oyK, zOuter, ixK, -iyK, zInner, ixJ, -iyJ, zInner);
+        target.push(oxK, -oyK, zOuter, ixJ, -iyJ, zInner, oxJ, -oyJ, zOuter);
       }
     }
 
