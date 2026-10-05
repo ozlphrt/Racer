@@ -322,6 +322,7 @@ export class Renderer3D {
     this.setupLighting();
     this.setupSky();
     this.setupTerrain();
+    this.setupWater();
     this.setupTrack();
     this.setupCars();
     this.setupRays();
@@ -471,6 +472,165 @@ export class Renderer3D {
     return Math.hypot(dx, dy);
   }
 
+  createTerrainDetailMaps() {
+    if (this._terrainNormalMap && this._terrainRoughnessMap) {
+      return { normalMap: this._terrainNormalMap, roughnessMap: this._terrainRoughnessMap };
+    }
+
+    const size = 512;
+    const nCanvas = document.createElement('canvas');
+    nCanvas.width = size;
+    nCanvas.height = size;
+    const nCtx = nCanvas.getContext('2d');
+    const nImg = nCtx.createImageData(size, size);
+    const nData = nImg.data;
+
+    const rCanvas = document.createElement('canvas');
+    rCanvas.width = size;
+    rCanvas.height = size;
+    const rCtx = rCanvas.getContext('2d');
+    const rImg = rCtx.createImageData(size, size);
+    const rData = rImg.data;
+
+    const heights = new Float32Array(size * size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const nx1 = Math.sin(x * 0.08) * Math.cos(y * 0.08);
+        const nx2 = Math.sin(x * 0.22 + y * 0.15) * 0.5;
+        const nx3 = Math.cos(x * 0.65 - y * 0.45) * 0.25;
+        const nx4 = Math.sin(x * 1.4 + y * 1.2) * 0.12;
+        heights[y * size + x] = nx1 + nx2 + nx3 + nx4;
+      }
+    }
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const x0 = (x - 1 + size) % size;
+        const x1 = (x + 1) % size;
+        const y0 = (y - 1 + size) % size;
+        const y1 = (y + 1) % size;
+
+        const hL = heights[y * size + x0];
+        const hR = heights[y * size + x1];
+        const hU = heights[y0 * size + x];
+        const hD = heights[y1 * size + x];
+
+        const dx = (hR - hL) * 2.8;
+        const dy = (hD - hU) * 2.8;
+        const dz = 1.0;
+        const len = Math.hypot(dx, dy, dz);
+
+        const nx = ((-dx / len) * 0.5 + 0.5) * 255;
+        const ny = ((-dy / len) * 0.5 + 0.5) * 255;
+        const nz = ((dz / len) * 0.5 + 0.5) * 255;
+
+        const idx = (y * size + x) * 4;
+        nData[idx] = nx;
+        nData[idx + 1] = ny;
+        nData[idx + 2] = nz;
+        nData[idx + 3] = 255;
+
+        const rough = Math.min(255, Math.max(160, Math.floor(210 + (heights[y * size + x]) * 35)));
+        rData[idx] = rough;
+        rData[idx + 1] = rough;
+        rData[idx + 2] = rough;
+        rData[idx + 3] = 255;
+      }
+    }
+
+    nCtx.putImageData(nImg, 0, 0);
+    rCtx.putImageData(rImg, 0, 0);
+
+    const normalMap = new THREE.CanvasTexture(nCanvas);
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+    normalMap.repeat.set(160, 160);
+
+    const roughnessMap = new THREE.CanvasTexture(rCanvas);
+    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
+    roughnessMap.repeat.set(160, 160);
+
+    this._terrainNormalMap = normalMap;
+    this._terrainRoughnessMap = roughnessMap;
+
+    return { normalMap, roughnessMap };
+  }
+
+  createWaterNormalMap() {
+    if (this._waterNormalMap) return this._waterNormalMap;
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const data = img.data;
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const x0 = (x - 1 + size) % size;
+        const x1 = (x + 1) % size;
+        const y0 = (y - 1 + size) % size;
+        const y1 = (y + 1) % size;
+
+        const dx = (Math.sin(x1 * 0.14) - Math.sin(x0 * 0.14)) * 1.5;
+        const dy = (Math.cos(y1 * 0.16) - Math.cos(y0 * 0.16)) * 1.5;
+        const dz = 1.0;
+        const len = Math.hypot(dx, dy, dz);
+
+        const idx = (y * size + x) * 4;
+        data[idx] = ((-dx / len) * 0.5 + 0.5) * 255;
+        data[idx + 1] = ((-dy / len) * 0.5 + 0.5) * 255;
+        data[idx + 2] = ((dz / len) * 0.5 + 0.5) * 255;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(12, 12);
+    this._waterNormalMap = texture;
+    return texture;
+  }
+
+  getWaterBodies() {
+    if (!this.track) return { lakes: [], river: [] };
+    const b = this.track.bounds;
+    const span = Math.max(b.w, b.h);
+    const cx = b.cx;
+    const cy = -b.cy;
+
+    const lakes = [
+      {
+        cx: cx + span * 0.72,
+        cy: cy + span * 0.55,
+        rx: 380,
+        ry: 290,
+        waterZ: 8.5,
+      },
+      {
+        cx: cx - span * 0.68,
+        cy: cy - span * 0.60,
+        rx: 440,
+        ry: 320,
+        waterZ: 11.0,
+      },
+    ];
+
+    const river = [];
+    const numPts = 60;
+    const startX = cx - span * 1.6;
+    const endX = cx + span * 1.6;
+    for (let i = 0; i <= numPts; i++) {
+      const u = i / numPts;
+      const px = startX + (endX - startX) * u;
+      const py = cy + span * 0.95 + Math.sin(u * Math.PI * 3.2 + 0.8) * 320.0 + Math.cos(u * Math.PI * 6.0) * 90.0;
+      const waterZ = 5.5 + Math.sin(u * 3) * 2.5;
+      river.push({ x: px, y: py, waterZ, width: 46.0 + Math.sin(u * 5) * 10 });
+    }
+
+    return { lakes, river };
+  }
+
   getTerrainHeight(x, y) {
     if (!this.track) return 0;
     const t = this.track;
@@ -501,7 +661,7 @@ export class Renderer3D {
     const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
     const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
     const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
-    const localHills = Math.max(0, h1 + h2 + h3 + 18.0) * smoothBlend;
+    let localHills = Math.max(0, h1 + h2 + h3 + 18.0) * smoothBlend;
 
     // Majestic perimeter mountain ranges on the outer horizon
     const distFromCenter = Math.hypot(x - cx, y - cy);
@@ -511,7 +671,32 @@ export class Renderer3D {
       const mBlend = mRatio * mRatio * (3 - 2 * mRatio);
       const mRidge = (Math.sin(x * 0.00050 + 1.8) * Math.cos(y * 0.00050 - 0.9) * 0.5 + 0.5) * 650.0
                    + Math.sin(x * 0.0012 - 0.6) * 180.0;
-      return localHills + Math.max(0, mRidge) * mBlend;
+      localHills += Math.max(0, mRidge) * mBlend;
+    }
+
+    // Carve lake basins smoothly into valley floor
+    const { lakes, river } = this.getWaterBodies();
+    for (const lake of lakes) {
+      const dx = (x - lake.cx) / lake.rx;
+      const dy = (y - lake.cy) / lake.ry;
+      const lakeDist = Math.hypot(dx, dy);
+      if (lakeDist < 1.35) {
+        const dRatio = Math.max(0, 1.0 - lakeDist / 1.35);
+        const basinDepth = 14.0 * dRatio * dRatio;
+        localHills = Math.max(lake.waterZ - basinDepth, localHills - basinDepth * 1.5);
+      }
+    }
+
+    // Carve riverbed trench
+    for (let i = 0; i < river.length; i += 2) {
+      const rp = river[i];
+      const rDist = Math.hypot(x - rp.x, y - rp.y);
+      const rRadius = rp.width * 1.6;
+      if (rDist < rRadius) {
+        const rRatio = Math.max(0, 1.0 - rDist / rRadius);
+        const trench = 6.5 * rRatio * rRatio;
+        localHills = Math.max(rp.waterZ - trench, localHills - trench * 1.4);
+      }
     }
 
     return localHills;
@@ -521,6 +706,7 @@ export class Renderer3D {
     if (this.terrainMesh) {
       this.scene.remove(this.terrainMesh);
       if (this.terrainMesh.geometry) this.terrainMesh.geometry.dispose();
+      if (this.terrainMesh.material) this.terrainMesh.material.dispose();
       this.terrainMesh = null;
     }
 
@@ -534,15 +720,63 @@ export class Renderer3D {
     for (let i = 0; i < count; i++) {
       const vx = pos[i * 3];
       const vy = pos[i * 3 + 1];
-      const h = this.getTerrainHeight(vx, vy);
-      pos[i * 3 + 2] = h;
+      pos[i * 3 + 2] = this.getTerrainHeight(vx, vy);
+    }
 
-      // Realistic bi-color gradient from lush grass valley to highland/slate peaks
-      const heightNorm = Math.min(1.0, Math.max(0, h / 320.0));
-      // Base grass: RGB(0.14, 0.28, 0.13) -> Mid hill: RGB(0.24, 0.40, 0.20) -> Mountain ridge: RGB(0.32, 0.38, 0.30)
-      const r = 0.14 + heightNorm * 0.18;
-      const g = 0.28 + heightNorm * 0.10;
-      const b = 0.13 + heightNorm * 0.16;
+    geo.computeVertexNormals();
+    const normals = geo.attributes.normal.array;
+
+    const { lakes } = this.getWaterBodies();
+
+    for (let i = 0; i < count; i++) {
+      const vx = pos[i * 3];
+      const vy = pos[i * 3 + 1];
+      const h = pos[i * 3 + 2];
+      const nz = normals[i * 3 + 2];
+
+      let nearShore = false;
+      for (const l of lakes) {
+        const dx = (vx - l.cx) / l.rx;
+        const dy = (vy - l.cy) / l.ry;
+        const d = Math.hypot(dx, dy);
+        if (d >= 0.90 && d <= 1.25 && Math.abs(h - l.waterZ) < 4.5) {
+          nearShore = true;
+          break;
+        }
+      }
+
+      let r, g, b;
+      if (nearShore) {
+        // Wet golden sand & riverstone pebble shoreline
+        r = 0.52; g = 0.46; b = 0.35;
+      } else if (nz < 0.76) {
+        // Steep granite & slate cliff rock face
+        const rockTone = 0.28 + (1.0 - nz) * 0.15;
+        r = rockTone * 1.05;
+        g = rockTone * 1.02;
+        b = rockTone * 1.08;
+      } else if (nz < 0.88) {
+        // Upland hillside pasture with terracotta loam
+        r = 0.28; g = 0.34; b = 0.18;
+      } else if (h > 240.0) {
+        // High mountain frost & snow-dusted ridges
+        const sNorm = Math.min(1.0, (h - 240.0) / 100.0);
+        r = 0.45 + sNorm * 0.40;
+        g = 0.48 + sNorm * 0.42;
+        b = 0.52 + sNorm * 0.42;
+      } else if (h > 110.0) {
+        // Alpine scree & weathered rock
+        const aNorm = Math.min(1.0, (h - 110.0) / 130.0);
+        r = 0.22 + aNorm * 0.22;
+        g = 0.34 + aNorm * 0.12;
+        b = 0.18 + aNorm * 0.24;
+      } else {
+        // Lush lowland grass & meadows
+        const hLow = Math.min(1.0, h / 110.0);
+        r = 0.15 + hLow * 0.08;
+        g = 0.30 + hLow * 0.06;
+        b = 0.13 + hLow * 0.06;
+      }
 
       colors[i * 3] = r;
       colors[i * 3 + 1] = g;
@@ -550,12 +784,16 @@ export class Renderer3D {
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.computeVertexNormals();
+
+    const { normalMap, roughnessMap } = this.createTerrainDetailMaps();
 
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.88,
       metalness: 0.03,
+      normalMap: normalMap,
+      normalScale: new THREE.Vector2(0.55, 0.55),
+      roughnessMap: roughnessMap,
       flatShading: false,
     });
 
@@ -565,22 +803,98 @@ export class Renderer3D {
     this.scene.add(this.terrainMesh);
   }
 
-  setTrack(track) {
-    this.track = track;
-    if (this.trackMesh) this.scene.remove(this.trackMesh);
-    if (this.decorGroup) this.scene.remove(this.decorGroup);
-    if (this.treeGroup) this.scene.remove(this.treeGroup);
-    this.clearBursts();
-    this.clearSkidmarks();
-    this.clearTireSmoke();
-    if (this.trailMesh) this.trailMesh.geometry.setDrawRange(0, 0);
-    if (this.trailHistory) this.trailHistory.length = 0;
-    this.trailOwner = null;
-    this.updateLightPosition();
-    this.setupTerrain();
-    this.setupTrack();
-    this.setupTrees();
-    this.resetCamera();
+  setupWater() {
+    if (this.waterGroup) {
+      this.scene.remove(this.waterGroup);
+    }
+    this.waterGroup = new THREE.Group();
+
+    if (!this.track) return;
+    const { lakes, river } = this.getWaterBodies();
+
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x0a5870,
+      roughness: 0.06,
+      metalness: 0.85,
+      transparent: true,
+      opacity: 0.88,
+      normalMap: this.createWaterNormalMap(),
+      normalScale: new THREE.Vector2(0.4, 0.4),
+      side: THREE.DoubleSide,
+    });
+
+    const shoreMat = new THREE.MeshStandardMaterial({
+      color: 0x988d72,
+      roughness: 0.94,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+    });
+
+    // 1. Pristine Alpine & Valley Lakes
+    for (const lake of lakes) {
+      const lakeGeo = new THREE.CircleGeometry(lake.rx, 64);
+      lakeGeo.scale(1.0, lake.ry / lake.rx, 1.0);
+      const lakeMesh = new THREE.Mesh(lakeGeo, waterMat);
+      lakeMesh.position.set(lake.cx, lake.cy, lake.waterZ);
+      lakeMesh.receiveShadow = true;
+      this.waterGroup.add(lakeMesh);
+
+      // Sandy gravel shoreline ring
+      const shoreGeo = new THREE.RingGeometry(lake.rx * 0.96, lake.rx * 1.14, 64);
+      shoreGeo.scale(1.0, lake.ry / lake.rx, 1.0);
+      const shoreMesh = new THREE.Mesh(shoreGeo, shoreMat);
+      shoreMesh.position.set(lake.cx, lake.cy, lake.waterZ - 0.12);
+      shoreMesh.receiveShadow = true;
+      this.waterGroup.add(shoreMesh);
+    }
+
+    // 2. Winding Valley River
+    if (river.length > 2) {
+      const riverPts = river.map((p) => new THREE.Vector3(p.x, p.y, p.waterZ));
+      const riverCurve = new THREE.CatmullRomCurve3(riverPts);
+      const riverCurvePts = riverCurve.getPoints(120);
+
+      const riverGeo = new THREE.BufferGeometry();
+      const rPos = [];
+      const rUvs = [];
+      const rIndices = [];
+
+      for (let i = 0; i < riverCurvePts.length; i++) {
+        const p = riverCurvePts[i];
+        const nextP = riverCurvePts[Math.min(riverCurvePts.length - 1, i + 1)];
+        const prevP = riverCurvePts[Math.max(0, i - 1)];
+        const dir = new THREE.Vector3().subVectors(nextP, prevP).normalize();
+        const normal = new THREE.Vector3(-dir.y, dir.x, 0).normalize();
+        const rWidth = 48.0;
+
+        const pLeft = p.clone().addScaledVector(normal, rWidth * 0.5);
+        const pRight = p.clone().addScaledVector(normal, -rWidth * 0.5);
+
+        rPos.push(pLeft.x, pLeft.y, pLeft.z);
+        rPos.push(pRight.x, pRight.y, pRight.z);
+
+        const v = i / (riverCurvePts.length - 1);
+        rUvs.push(0, v * 16);
+        rUvs.push(1, v * 16);
+
+        if (i < riverCurvePts.length - 1) {
+          const base = i * 2;
+          rIndices.push(base, base + 1, base + 2);
+          rIndices.push(base + 1, base + 3, base + 2);
+        }
+      }
+
+      riverGeo.setAttribute('position', new THREE.Float32BufferAttribute(rPos, 3));
+      riverGeo.setAttribute('uv', new THREE.Float32BufferAttribute(rUvs, 2));
+      riverGeo.setIndex(rIndices);
+      riverGeo.computeVertexNormals();
+
+      const riverMesh = new THREE.Mesh(riverGeo, waterMat);
+      riverMesh.receiveShadow = true;
+      this.waterGroup.add(riverMesh);
+    }
+
+    this.scene.add(this.waterGroup);
   }
 
   setupTrack() {
@@ -2476,6 +2790,28 @@ export class Renderer3D {
       // Trees should ONLY grow where the terrain starts (above ground zero, Z > 0.2m)
       if (groundZ <= 0.2) continue;
 
+      // Exclude water bodies (lakes & riverbed)
+      const { lakes: wLakes, river: wRiver } = this.getWaterBodies();
+      let inWater = false;
+      for (const l of wLakes) {
+        const dx = (x - l.cx) / l.rx;
+        const dy = (-y - l.cy) / l.ry;
+        if (Math.hypot(dx, dy) < 1.08) {
+          inWater = true;
+          break;
+        }
+      }
+      if (!inWater) {
+        for (let i = 0; i < wRiver.length; i += 2) {
+          const rp = wRiver[i];
+          if (Math.hypot(x - rp.x, -y - rp.y) < rp.width * 0.75) {
+            inWater = true;
+            break;
+          }
+        }
+      }
+      if (inWater) continue;
+
       let tooClose = false;
       for (const ex of allPlaced) {
         const d2 = (x - ex.x) ** 2 + (y - ex.y) ** 2;
@@ -2968,6 +3304,9 @@ export class Renderer3D {
       this.terrainMesh.geometry.dispose();
       this.terrainMesh.material.dispose();
     }
+    if (this.waterGroup) {
+      this.scene.remove(this.waterGroup);
+    }
     if (this.trackMesh) {
       this.scene.remove(this.trackMesh);
       this.trackMesh.geometry.dispose();
@@ -2983,7 +3322,16 @@ export class Renderer3D {
       this.scene.remove(this.tireGroup);
     }
 
+    this.clearBursts();
+    this.clearSkidmarks();
+    this.clearTireSmoke();
+    if (this.trailMesh) this.trailMesh.geometry.setDrawRange(0, 0);
+    if (this.trailHistory) this.trailHistory.length = 0;
+    this.trailOwner = null;
+    this.updateLightPosition();
+
     this.setupTerrain();
+    this.setupWater();
     this.setupTrack();
     this.setupTrees();
     this.setupTireBarriers();
@@ -4290,6 +4638,13 @@ export class Renderer3D {
 
     // Update Tire Smoke Particles
     this.updateTireSmoke();
+
+    // Animate shimmering water ripples
+    if (this._waterNormalMap) {
+      const tSec = performance.now() * 0.001;
+      this._waterNormalMap.offset.x = (tSec * 0.022) % 1;
+      this._waterNormalMap.offset.y = (tSec * 0.015) % 1;
+    }
 
     this.renderer.render(this.scene, this.camera);
   }
