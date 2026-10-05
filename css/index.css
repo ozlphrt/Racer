@@ -849,20 +849,11 @@ h1 {
   z-index: 20;
 }
 
-.leader-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .leader-badge-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 .pos-badge {
@@ -892,26 +883,6 @@ h1 {
 .leader-dot.player {
   background: var(--lime);
   box-shadow: 0 0 10px var(--lime);
-}
-
-.leader-head-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.lap-badge {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 5px;
-  color: #38bdf8;
-  background: rgba(14, 165, 233, 0.16);
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
-  letter-spacing: 0.05em;
-  white-space: nowrap;
 }
 
 /* Speed & Lap Progress Row */

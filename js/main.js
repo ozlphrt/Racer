@@ -994,13 +994,8 @@ function updateHud(leader) {
   }
 
   const car = state.manual && sim.player ? sim.player : leader;
-  setTxt('leader-title', state.manual ? 'You' : 'Leader');
   $('leader-dot')?.classList.toggle('player', state.manual);
   if (car) {
-    const maxLaps = CONFIG.generation.maxLaps;
-    setTxt('leader-lap', state.manual
-      ? `LAP ${car.laps + 1} · ${fmtTime(car.time - car.lapStart)}`
-      : `LAP ${Math.min(car.laps + 1, maxLaps)}/${maxLaps}`);
     setTxt('leader-speed', car.speed.toFixed(0));
 
     const contacts = car.contacts || 0;
