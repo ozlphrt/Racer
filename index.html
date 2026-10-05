@@ -103,12 +103,16 @@
 
         <!-- Circular Action Buttons -->
         <div class="dock-buttons">
-          <!-- Camera Presets Menu Button & Popover -->
+          <!-- Camera Presets Menu Button (Pill Shape with Active Camera Label) & Popover -->
           <div class="camera-widget" id="camera-widget">
-            <button class="circle-btn glass" id="btn-camera-menu" type="button" aria-expanded="false" aria-controls="camera-popover" aria-label="Camera Presets" title="Camera Angles (V)">
-              <svg class="circle-btn-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <button class="cam-pill-btn glass" id="btn-camera-menu" type="button" aria-expanded="false" aria-controls="camera-popover" aria-label="Camera Presets" title="Camera Angles (V)">
+              <svg class="cam-pill-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                 <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+              <span class="cam-pill-label" id="cam-pill-label">Auto Director</span>
+              <svg class="cam-pill-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </button>
             <div class="camera-popover glass" id="camera-popover" role="region" aria-label="Camera Presets" hidden>

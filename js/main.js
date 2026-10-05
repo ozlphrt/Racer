@@ -654,7 +654,7 @@ function setCameraPopoverOpen(open) {
   btnCameraMenu?.classList.toggle('is-active', open);
 }
 
-function setCameraPreset(preset) {
+function setCameraPreset(preset, showToast = true) {
   state.cameraPreset = preset;
   if (!state.view3d) {
     set3DView(true);
@@ -673,6 +673,23 @@ function setCameraPreset(preset) {
     btn.classList.toggle('active', btn.getAttribute('data-preset') === preset);
   });
 
+  const shortNames = {
+    auto: 'Auto Director',
+    chase: 'Chase Cam',
+    action: 'Action Front',
+    action_rear: 'Action Rear',
+    onboard: 'Onboard T-Cam',
+    follow: 'Broadcast Follow',
+    heli: 'Helicopter',
+    broadcast: 'TV Gantry',
+    orbit: 'Free Orbit',
+  };
+
+  const labelEl = $('cam-pill-label');
+  if (labelEl) {
+    labelEl.textContent = shortNames[preset] || preset;
+  }
+
   const names = {
     auto: 'Auto Director (Dynamic Broadcast Cycling)',
     chase: 'Chase Cam (Dynamic Follow)',
@@ -684,7 +701,9 @@ function setCameraPreset(preset) {
     broadcast: 'TV Gantry (Start / Finish Cam)',
     orbit: 'Free Orbit (Cinematic Rotate)',
   };
-  toast(`🎥 ${names[preset] || preset}`, 'info');
+  if (showToast) {
+    toast(`🎥 ${names[preset] || preset}`, 'info');
+  }
 }
 
 if (btnCameraMenu) {
@@ -1499,6 +1518,7 @@ setSliderFill(speedSlider);
 setSliderFill(mutSlider);
 refreshSavedInfo();
 updateStatus();
+setCameraPreset(state.cameraPreset, false);
 updateHud(sim.leader);
 chart.draw(sim.history);
 requestAnimationFrame(frame);
