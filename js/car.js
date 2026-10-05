@@ -221,7 +221,7 @@ export class Car {
       this.steer = 0;
       this.targetThrottle = 0;
       this.targetSteer = 0;
-      this.sense(otherCars);
+      this.sense();
       return;
     }
 
