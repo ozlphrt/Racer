@@ -1836,9 +1836,10 @@ function frame(now) {
         stepCounter += 10;
       } while (performance.now() - t0 < CONFIG.budgetMs);
     } else {
-      const simSpeed = state.manual ? 1.0 : state.speed;
+      const PLAYBACK_SPEED_FACTOR = 0.70; // Calibrated playback speed: keeps simulation physics equations intact while giving readable, comfortable race pacing
+      const simSpeed = (state.manual ? 1.0 : state.speed) * PLAYBACK_SPEED_FACTOR;
       if (simSpeed <= 1.0) {
-        // Continuous, frame-synced 60Hz physics (guarantees exactly 1 smooth step per display frame)
+        // Continuous, frame-synced physics (smooth per-frame step)
         sim.step(CONFIG.dt * simSpeed);
         stepCounter++;
       } else {
