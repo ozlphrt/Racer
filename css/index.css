@@ -1442,6 +1442,14 @@ kbd {
   color: var(--amber);
 }
 
+.stat.accent-violet .stat-value {
+  color: #a78bfa;
+}
+
+.stat.accent-green .stat-value {
+  color: #34d399;
+}
+
 .stat.pulse {
   animation: stat-pulse 1.2s var(--ease);
 }
@@ -1983,8 +1991,25 @@ input[type='range']:disabled {
 
 .hyper-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.hyper-stats-grid .stat {
+  padding: 8px 10px;
+}
+
+.hyper-stats-grid .stat-label {
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hyper-stats-grid .stat-value {
+  font-size: 14.5px;
+  margin-top: 2px;
 }
 
 /* ===== F1 Broadcast Elimination Notification ===== */

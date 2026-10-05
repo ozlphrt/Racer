@@ -307,6 +307,7 @@
         <div class="legend">
           <span><i class="sw cyan"></i>best</span>
           <span><i class="sw violet dashed"></i>average</span>
+          <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>min-max band</span>
         </div>
       </section>
 
@@ -420,9 +421,23 @@
           <div class="stat"><span class="stat-label">Gens Added</span><span class="stat-value" id="hyper-stat-added">+0</span></div>
           <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hyper-stat-fitness">–</span></div>
           <div class="stat accent-amber"><span class="stat-label">Best Lap</span><span class="stat-value" id="hyper-stat-lap">–</span></div>
+          <div class="stat accent-violet"><span class="stat-label">Pop Avg Fitness</span><span class="stat-value" id="hyper-stat-pop-avg">–</span></div>
+          <div class="stat accent-violet"><span class="stat-label">Pop Range (Min–Max)</span><span class="stat-value" id="hyper-stat-pop-range">–</span></div>
+          <div class="stat accent-green"><span class="stat-label">Survival (Fin / Crash)</span><span class="stat-value" id="hyper-stat-pop-survival">–</span></div>
+          <div class="stat accent-cyan"><span class="stat-label">Pace vs Avg Lap</span><span class="stat-value" id="hyper-stat-pop-pace">–</span></div>
         </div>
 
-        <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; margin-top: 14px; border-radius: 8px;"></canvas>
+        <div class="hyper-chart-container" style="position: relative; margin-top: 14px;">
+          <div class="hyper-chart-legend" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px; color: var(--text-dim);">
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span><i class="sw cyan" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22d3ee; margin-right:3px; vertical-align:middle;"></i>Best (Cyan)</span>
+              <span><i class="sw violet" style="display:inline-block; width:10px; height:2px; background:#a78bfa; margin-right:3px; vertical-align:middle;"></i>Pop Avg (Purple)</span>
+              <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>Min-Max Band</span>
+            </div>
+            <span style="font-family: var(--mono); color: rgba(255,255,255,0.6); font-size: 10.5px;">Hover points for telemetry</span>
+          </div>
+          <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; border-radius: 8px; width: 100%;"></canvas>
+        </div>
 
         <div class="btn-row" style="margin-top: 18px;">
           <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 1; padding: 12px; font-size: 14px;">

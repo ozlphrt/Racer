@@ -794,6 +794,8 @@ function runHyperBatch() {
   const barFill = $('hyper-bar-fill');
   if (barFill) barFill.style.width = `${pct}%`;
 
+  const lastRecord = sim.history.length ? sim.history[sim.history.length - 1] : null;
+
   const statTime = $('hyper-stat-time');
   if (statTime) statTime.textContent = fmtDuration(elapsedSec);
   const statRem = $('hyper-stat-rem');
@@ -806,6 +808,42 @@ function runHyperBatch() {
   if (statFit) statFit.textContent = compact(sim.allTimeBest?.fitness);
   const statLap = $('hyper-stat-lap');
   if (statLap) statLap.textContent = fmtTime(sim.bestLapEver);
+
+  // Purple line population dynamics
+  const statPopAvg = $('hyper-stat-pop-avg');
+  if (statPopAvg) statPopAvg.textContent = lastRecord ? compact(lastRecord.avg) : '–';
+
+  const statPopRange = $('hyper-stat-pop-range');
+  if (statPopRange) {
+    if (lastRecord && lastRecord.min !== undefined && lastRecord.max !== undefined) {
+      statPopRange.textContent = `${compact(lastRecord.min)} – ${compact(lastRecord.max)}`;
+    } else {
+      statPopRange.textContent = '–';
+    }
+  }
+
+  const statPopSurvival = $('hyper-stat-pop-survival');
+  if (statPopSurvival) {
+    if (lastRecord) {
+      const pop = lastRecord.population || 20;
+      const fin = lastRecord.finishers || 0;
+      const pct = Math.round((fin / pop) * 100);
+      statPopSurvival.textContent = `${fin}/${pop} (${pct}%)`;
+    } else {
+      statPopSurvival.textContent = '–';
+    }
+  }
+
+  const statPopPace = $('hyper-stat-pop-pace');
+  if (statPopPace) {
+    if (lastRecord && lastRecord.lapImprovementPct > 0) {
+      statPopPace.textContent = `+${lastRecord.lapImprovementPct.toFixed(1)}% faster`;
+    } else if (lastRecord && lastRecord.avgLap && Number.isFinite(lastRecord.avgLap) && lastRecord.avgLap < 999) {
+      statPopPace.textContent = `${lastRecord.avgLap.toFixed(2)}s avg`;
+    } else {
+      statPopPace.textContent = '–';
+    }
+  }
 
   hyperChart?.draw(sim.history);
 

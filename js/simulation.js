@@ -423,21 +423,48 @@ export class Simulation {
 
     let best = scored[0];
     let sum = 0;
+    let minFitness = Infinity;
+    let maxFitness = -Infinity;
     let finishers = 0;
+    let eliminated = 0;
     let genBestLap = Infinity;
+    let lapSum = 0;
+    let lapCount = 0;
+
     for (const s of scored) {
       sum += s.fitness;
       if (s.fitness > best.fitness) best = s;
+      if (s.fitness < minFitness) minFitness = s.fitness;
+      if (s.fitness > maxFitness) maxFitness = s.fitness;
       if (s.finished) finishers++;
+      else eliminated++;
       if (s.bestLap < genBestLap) genBestLap = s.bestLap;
+      if (s.bestLap && Number.isFinite(s.bestLap) && s.bestLap < 100) {
+        lapSum += s.bestLap;
+        lapCount++;
+      }
     }
+
+    const avgFitness = sum / scored.length;
+    const avgLap = lapCount > 0 ? lapSum / lapCount : Infinity;
+    const fitnessDeltaPct = avgFitness > 0 ? ((best.fitness - avgFitness) / avgFitness) * 100 : 0;
+    const lapImprovementPct = Number.isFinite(genBestLap) && Number.isFinite(avgLap) && avgLap > 0
+      ? ((avgLap - genBestLap) / avgLap) * 100
+      : 0;
 
     const record = {
       generation: this.generation,
       best: best.fitness,
-      avg: sum / scored.length,
+      avg: avgFitness,
+      min: Number.isFinite(minFitness) ? minFitness : 0,
+      max: Number.isFinite(maxFitness) ? maxFitness : best.fitness,
       bestLap: genBestLap,
+      avgLap,
       finishers,
+      eliminated,
+      population: scored.length,
+      fitnessDeltaPct,
+      lapImprovementPct,
     };
     this.history.push(record);
 
