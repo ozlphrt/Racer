@@ -2083,7 +2083,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 16px 6px 14px;
+  padding: 6px 14px;
   background: rgba(10, 16, 28, 0.45); /* Semi-transparent */
   border: 1px solid rgba(0, 229, 255, 0.22);
   border-radius: 9999px;
@@ -2109,18 +2109,6 @@ input[type='range']:disabled {
 .ghost-timer-pill.hidden {
   opacity: 0;
   transform: translateX(-50%) translateY(-10px);
-}
-
-.ghost-timer-icon {
-  font-size: 14px;
-  line-height: 1;
-  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.6));
-  animation: ghost-float 2.4s ease-in-out infinite alternate;
-}
-
-@keyframes ghost-float {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-2px); }
 }
 
 .ghost-timer-title {
