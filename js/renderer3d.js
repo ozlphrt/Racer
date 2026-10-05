@@ -650,16 +650,16 @@ export class Renderer3D {
     centerDashMesh.renderOrder = 3;
     this.decorGroup.add(centerDashMesh);
 
-    // Red & White 3D Apex Kerbs (Wider FIA-style rumble strips)
+    // Red & White 3D Apex Kerbs (Balanced circuit rumble strips)
     const kerbRedGeo = new THREE.BufferGeometry();
     const kerbWhiteGeo = new THREE.BufferGeometry();
     const redVerts = [];
     const whiteVerts = [];
-    const kerbInset = 0.16;   // Extends inward into the tarmac
-    const kerbOutset = 0.08;  // Extends outward onto the track verge
+    const kerbInset = 0.08;   // Extends slightly inward onto the tarmac edge
+    const kerbOutset = 0.04;  // Extends slightly outward onto the track verge
 
     for (let k = 0; k < N; k++) {
-      if (Math.abs(t.curvature[k]) < 1 / 170) continue;
+      if (Math.abs(t.curvature[k]) < 1 / 165) continue;
       const j = (k + 1) % N;
       const isRed = k % 2 === 0;
       const target = isRed ? redVerts : whiteVerts;
