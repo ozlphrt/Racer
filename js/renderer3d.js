@@ -4019,8 +4019,8 @@ export class Renderer3D {
         vAlpha = alpha;
         vRot = rotation;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        // Realistic car-proportional point size (crisp near tyres, expands moderately)
-        gl_PointSize = clamp(size * (600.0 / -mvPosition.z), 1.0, 95.0);
+        // Balanced perspective sprite scaling
+        gl_PointSize = clamp(size * (1050.0 / -mvPosition.z), 2.0, 180.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -4039,7 +4039,7 @@ export class Renderer3D {
         );
         
         vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * vAlpha * 0.55;
+        float alpha = texColor.a * vAlpha * 0.65;
         if (alpha < 0.005) discard;
 
         // Rich motorsport white-grey tire friction vapor
@@ -4076,19 +4076,19 @@ export class Renderer3D {
     }
     // Eject smoke puff directly at the tyre contact patch with backward drift and vertical billow
     this.smokeParticles.push({
-      x: x + (Math.random() - 0.5) * 0.4,
-      y: y + (Math.random() - 0.5) * 0.4,
-      z: z + Math.random() * 0.15,
-      vx: (carVx * 0.10) + (Math.random() - 0.5) * 1.5,
-      vy: (carVy * 0.10) + (Math.random() - 0.5) * 1.5,
-      vz: 1.8 + Math.random() * 2.2, // Billows upwards into the air
-      size: 3.2 + Math.random() * 1.6, // Realistic tyre-proportional initial size
-      growthRate: 6.0 + Math.random() * 3.0, // Billows out into natural wisps
+      x: x + (Math.random() - 0.5) * 0.5,
+      y: y + (Math.random() - 0.5) * 0.5,
+      z: z + Math.random() * 0.20,
+      vx: (carVx * 0.12) + (Math.random() - 0.5) * 2.2,
+      vy: (carVy * 0.12) + (Math.random() - 0.5) * 2.2,
+      vz: 2.2 + Math.random() * 2.6, // Billows upwards into the air
+      size: 6.5 + Math.random() * 2.5, // Well-proportioned tyre vapor size
+      growthRate: 12.0 + Math.random() * 5.0, // Billows out into continuous clouds
       rotation: Math.random() * Math.PI * 2,
-      vRot: (Math.random() - 0.5) * 2.0,
-      alpha: Math.min(0.45, intensity * 0.45),
+      vRot: (Math.random() - 0.5) * 2.2,
+      alpha: Math.min(0.55, intensity * 0.55),
       life: 1.0,
-      decay: 1.35 + Math.random() * 0.30,
+      decay: 1.30 + Math.random() * 0.30,
     });
   }
 
