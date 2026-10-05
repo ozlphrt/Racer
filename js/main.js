@@ -123,7 +123,7 @@ const state = {
   manual: false,
   autosave: true,
   audio: true,
-  cameraPreset: 'chase',
+  cameraPreset: 'auto',
 };
 const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
 

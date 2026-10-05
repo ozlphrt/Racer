@@ -3144,7 +3144,7 @@ export class Renderer3D {
 
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
-    let cameraPreset = opts.cameraPreset || 'chase';
+    let cameraPreset = opts.cameraPreset || 'auto';
 
     if (cameraPreset === 'auto') {
       const now = performance.now();
