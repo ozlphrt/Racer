@@ -48,6 +48,7 @@ export const CONFIG = {
 
   generation: {
     timeLimit: 85, // sim seconds (ample time to complete full 5-lap races)
+    startDelay: 2.0, // seconds for F1 starting lights sequence (red -> green launch)
     maxLaps: 5, // a car "finishes" after this many laps
     stallTime: 7.0, // seconds without new progress → eliminated (ample time to overtake traffic)
     backwardsTolerance: 80, // track samples a car may fall behind before elimination (allows 180° turnaround recovery)

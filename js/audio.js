@@ -547,6 +547,30 @@ export class SpatialAudioEngine {
       }
     }
   }
+
+  playStartBeep(isGreen = false) {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const now = this.ctx.currentTime;
+
+      osc.type = isGreen ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(isGreen ? 880 : 440, now);
+      if (isGreen) {
+        osc.frequency.exponentialRampToValueAtTime(1320, now + 0.35);
+      }
+
+      gain.gain.setValueAtTime(isGreen ? 0.28 : 0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + (isGreen ? 0.45 : 0.22));
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now);
+      osc.stop(now + (isGreen ? 0.45 : 0.22));
+    } catch {}
+  }
 }
 
 export const audio = new SpatialAudioEngine();

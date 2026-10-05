@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CONFIG } from './config.js';
 import { RAY_ANGLES } from './car.js';
+import { audio } from './audio.js';
 
 export const TEAM_PALETTE = [
   // --- MULTI-COLOR LIVERIES (2 to 4 Vivid Contrasting Colors) ---
@@ -988,7 +989,10 @@ export class Renderer3D {
     beam.castShadow = true;
     gantryGroup.add(beam);
 
-    // 5 F1 Starting Light Pods on Gantry
+    // 5 F1 Starting Light Pods on Gantry (Red -> Green Launch sequence)
+    this.gantryLedMats = [];
+    this.gantryLeds = [];
+    this._lastStartLightStep = -1;
     for (let i = -2; i <= 2; i++) {
       const housingGeo = new THREE.BoxGeometry(2.4, 1.8, 3.2);
       const housing = new THREE.Mesh(housingGeo, beamMat);
@@ -1001,17 +1005,19 @@ export class Renderer3D {
       housing.rotation.z = beamAngle;
       gantryGroup.add(housing);
 
-      // Red LED bulb facing incoming cars
+      // LED bulb facing incoming cars
       const ledGeo = new THREE.SphereGeometry(0.85, 12, 12);
       const ledMat = new THREE.MeshStandardMaterial({
         color: 0xef4444,
         emissive: 0xef4444,
-        emissiveIntensity: 2.0,
+        emissiveIntensity: 3.0,
         roughness: 0.1,
       });
       const led = new THREE.Mesh(ledGeo, ledMat);
       led.position.addVectors(housing.position, new THREE.Vector3(-tx * 1.0, -ty * 1.0, 0));
       gantryGroup.add(led);
+      this.gantryLedMats.push(ledMat);
+      this.gantryLeds.push(led);
     }
 
     // 4. Digital Remaining Laps Plate on top of Gantry Arch
@@ -1092,6 +1098,64 @@ export class Renderer3D {
     this.decorGroup.add(gantryGroup);
   }
 
+  updateGantryLights(sim) {
+    if (!this.gantryLedMats || this.gantryLedMats.length === 0) return;
+
+    const startDelay = CONFIG.generation?.startDelay || 2.0;
+    const t = sim ? sim.time : startDelay;
+
+    if (t < startDelay) {
+      // Red lights countdown phase (0s to 2.0s)
+      let activeRedCount = 0;
+      for (let i = 0; i < 5; i++) {
+        const lightTrigger = 0.3 + i * 0.3; // 0.3s, 0.6s, 0.9s, 1.2s, 1.5s
+        const mat = this.gantryLedMats[i];
+        if (!mat) continue;
+        if (t >= lightTrigger) {
+          activeRedCount++;
+          mat.color.setHex(0xef4444);
+          mat.emissive.setHex(0xef4444);
+          mat.emissiveIntensity = 3.5;
+        } else {
+          mat.color.setHex(0x221111);
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0.0;
+        }
+      }
+      if (activeRedCount > this._lastStartLightStep && activeRedCount > 0) {
+        this._lastStartLightStep = activeRedCount;
+        audio.playStartBeep(false);
+      }
+    } else if (t >= startDelay && t < startDelay + 4.0) {
+      // GREEN LIGHTS! CARS LAUNCH AND RACE!
+      if (this._lastStartLightStep !== 99) {
+        this._lastStartLightStep = 99;
+        audio.playStartBeep(true);
+      }
+      for (let i = 0; i < 5; i++) {
+        const mat = this.gantryLedMats[i];
+        if (mat) {
+          mat.color.setHex(0x22c55e);
+          mat.emissive.setHex(0x22c55e);
+          mat.emissiveIntensity = 4.5;
+        }
+      }
+    } else {
+      // Post-start ambient running green
+      if (this._lastStartLightStep !== 100) {
+        this._lastStartLightStep = 100;
+      }
+      for (let i = 0; i < 5; i++) {
+        const mat = this.gantryLedMats[i];
+        if (mat) {
+          mat.color.setHex(0x14532d);
+          mat.emissive.setHex(0x16a34a);
+          mat.emissiveIntensity = 0.6;
+        }
+      }
+    }
+  }
+
   updateLapPlateTexture(mainText, subText, accentColor = '#38bdf8', isFinal = false) {
     if (!this.lapPlateCtx) return;
     const ctx = this.lapPlateCtx;
@@ -1158,6 +1222,8 @@ export class Renderer3D {
   updateLapPlate(sim, leader) {
     if (!this.lapPlateCtx) return;
 
+    const startDelay = CONFIG.generation?.startDelay || 2.0;
+    const simTime = sim ? sim.time : startDelay;
     const maxLaps = CONFIG.generation?.maxLaps || 5;
     const currentLeader = sim?.leader || leader;
     const lapsDone = currentLeader ? currentLeader.laps : 0;
@@ -1170,7 +1236,17 @@ export class Renderer3D {
     let color = '#38bdf8'; // Cyan
     let isFinal = false;
 
-    if (isFinished) {
+    if (simTime < startDelay) {
+      mainText = 'READY';
+      subText = 'RED LIGHTS ON · HOLD GRID';
+      color = '#ef4444'; // Red
+      isFinal = false;
+    } else if (simTime < startDelay + 2.5) {
+      mainText = 'GO GO GO!';
+      subText = 'GREEN LIGHTS · RACE ON';
+      color = '#22c55e'; // Bright Green
+      isFinal = true;
+    } else if (isFinished) {
       mainText = 'FINISH';
       subText = 'CHEQUERED FLAG';
       color = '#a3e635'; // Lime green
@@ -2734,6 +2810,7 @@ export class Renderer3D {
       this.lastGen = sim.generation;
     }
     this.lastSimTime = sim.time;
+    this.updateGantryLights(sim);
     this.updateLapPlate(sim, leader);
 
     const focusCar = opts.manual && sim.player ? sim.player : leader;

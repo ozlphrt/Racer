@@ -211,6 +211,20 @@ export class Car {
       return;
     }
 
+    // Start grid countdown delay: hold cars stationary until green light launch
+    const startDelay = CONFIG.generation?.startDelay || 2.0;
+    if (this.time < startDelay) {
+      this.speed = 0;
+      this.vx = 0;
+      this.vy = 0;
+      this.throttle = 0;
+      this.steer = 0;
+      this.targetThrottle = 0;
+      this.targetSteer = 0;
+      this.sense(otherCars);
+      return;
+    }
+
     // Unrestricted Direct Input: 100% instant 60Hz per-tick response for steering, throttle & brake
     if (controls) {
       this.steer = clamp(controls.steer, -1, 1);
