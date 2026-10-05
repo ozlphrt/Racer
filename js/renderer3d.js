@@ -2279,9 +2279,6 @@ export class Renderer3D {
   render(sim, opts, leader) {
     if (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)) {
       this.lastGen = sim.generation;
-      if (opts.follow) {
-        this.resetCamera(true);
-      }
     }
     this.lastSimTime = sim.time;
 
@@ -2331,7 +2328,7 @@ export class Renderer3D {
       const targetZ = 3.5;
 
       // Smooth exponential lerp on camera target
-      const panSpeed = 0.15;
+      const panSpeed = 0.12;
       const dx = (targetX - this.controls.target.x) * panSpeed;
       const dy = (targetY - this.controls.target.y) * panSpeed;
       const dz = (targetZ - this.controls.target.z) * panSpeed;
@@ -2344,13 +2341,10 @@ export class Renderer3D {
       this.camera.position.x += dx;
       this.camera.position.y += dy;
 
-      // Restore canonical broadcast follow altitude (68.0) if lowered by finish cam
+      // Restore canonical broadcast follow altitude (68.0) smoothly and gradually
       const canonicalCamZ = 68.0;
-      if (this.camera.position.z < canonicalCamZ - 1.0 || (sim.time < 1.5 && Math.abs(this.camera.position.z - canonicalCamZ) > 1.0)) {
-        this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.12;
-      } else {
-        this.camera.position.z += dz;
-      }
+      const heightGlide = 0.04;
+      this.camera.position.z += (canonicalCamZ - this.camera.position.z) * heightGlide;
     } else {
       this.controls.autoRotate = true;
       this.controls.autoRotateSpeed = 0.45;

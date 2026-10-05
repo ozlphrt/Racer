@@ -218,9 +218,6 @@ sim.onGeneration = () => {
   leaderboard.reset();
   eliminationModals.clear();
   chart.draw(sim.history);
-  if (state.view3d && renderer3d && state.follow) {
-    renderer3d.resetCamera(true);
-  }
   if (renderer) {
     renderer.cam = null;
   }
