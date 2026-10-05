@@ -35,14 +35,22 @@
 html,
 body {
   height: 100%;
+  height: 100dvh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  overflow: hidden;
 }
 
 body {
   font-family: var(--font);
   color: var(--text);
   background: var(--bg-0);
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body::before {
@@ -82,7 +90,9 @@ kbd {
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -536,8 +546,8 @@ h1 {
 /* ===== Bottom Right Floating Action Dock (Circular Buttons & Panels) ===== */
 .bottom-right-dock {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
+  bottom: max(16px, calc(12px + env(safe-area-inset-bottom, 0px)));
+  right: max(16px, env(safe-area-inset-right, 16px));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1058,8 +1068,8 @@ h1 {
 /* ===== Bottom Action Bar (Controls & Insights Buttons) ===== */
 .bottom-action-bar {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
+  left: max(16px, env(safe-area-inset-left, 16px));
+  bottom: max(16px, calc(12px + env(safe-area-inset-bottom, 0px)));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2294,8 +2304,8 @@ input[type='range']:disabled {
   }
 
   .hud {
-    top: 10px;
-    left: 10px;
+    top: max(10px, env(safe-area-inset-top, 10px));
+    left: max(10px, env(safe-area-inset-left, 10px));
     gap: 7px;
     padding: 5px 8px 8px;
     border-radius: 8px;
@@ -2315,45 +2325,59 @@ input[type='range']:disabled {
   }
 
   .ghost-timer-pill {
-    top: 56px;
+    top: max(56px, calc(46px + env(safe-area-inset-top, 0px)));
   }
 
   .bottom-action-bar {
-    left: 10px;
-    bottom: 10px;
-    gap: 6px;
+    left: max(12px, env(safe-area-inset-left, 12px));
+    bottom: max(22px, calc(18px + env(safe-area-inset-bottom, 0px)));
+    gap: 8px;
   }
 
   .bottom-right-dock {
-    right: 10px;
-    bottom: 10px;
-    gap: 6px;
+    right: max(12px, env(safe-area-inset-right, 12px));
+    bottom: max(22px, calc(18px + env(safe-area-inset-bottom, 0px)));
+    gap: 8px;
   }
 
   .circle-btn {
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
+    touch-action: manipulation;
   }
 
   .leaderboard-tower {
     right: 0;
-    width: min(250px, calc(100vw - 20px));
-    max-height: calc(100vh - 140px);
+    width: min(260px, calc(100vw - 24px));
+    max-height: calc(100dvh - 160px);
+    bottom: 54px;
   }
 
   .leader-card {
     right: 0;
+    bottom: 54px;
   }
 
   .shortcuts-popover {
-    width: min(280px, calc(100vw - 24px));
+    width: min(290px, calc(100vw - 24px));
     left: 0;
+    bottom: calc(100% + 10px);
+  }
+
+  .toast {
+    bottom: max(28px, calc(20px + env(safe-area-inset-bottom, 0px)));
   }
 
   .hyper-modal {
-    width: min(480px, 94vw);
-    max-height: 90vh;
+    width: min(520px, 94vw);
+    max-height: calc(90dvh - env(safe-area-inset-bottom, 0px));
     padding: 16px;
+  }
+
+  .panel {
+    top: max(10px, env(safe-area-inset-top, 10px));
+    bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    max-height: calc(100dvh - 20px);
   }
 }
 
