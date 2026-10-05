@@ -1082,16 +1082,17 @@ h1 {
   transform: translateY(-2px) scale(1.06);
 }
 
-.btn-hyper-launch .ctrl-icon-bolt {
-  font-size: 15px;
-  color: #fbbf24;
-  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.8));
-  animation: bolt-pulse 1.8s ease-in-out infinite;
+.btn-hyper-launch .ctrl-icon-brain {
+  width: 20px;
+  height: 20px;
+  color: #c084fc;
+  filter: drop-shadow(0 0 6px rgba(192, 132, 252, 0.85));
+  animation: brain-pulse 2s ease-in-out infinite;
 }
 
-@keyframes bolt-pulse {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6)); }
-  50% { transform: scale(1.22); filter: drop-shadow(0 0 10px rgba(251, 191, 36, 1)); }
+@keyframes brain-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6)); color: #c084fc; }
+  50% { transform: scale(1.15); filter: drop-shadow(0 0 10px rgba(232, 121, 249, 0.95)); color: #e879f9; }
 }
 
 .shortcuts-popover {
