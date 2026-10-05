@@ -708,10 +708,10 @@ export class Renderer3D {
 
     const distToTrack = this.getMinDistToTrack(trackX, trackY);
 
-    // Completely flat where track is passing by + exactly 1 car length outside each side
+    // Completely flat where track is passing by + 4 full car lengths on both sides of the track
     const trackHalf = (t.width || 84) * 0.5; // ~42m
     const carLength = 26.0;                  // 1 car length (26m)
-    const flatRadius = trackHalf + carLength + 25.0; // ~93m flat radius from centerline
+    const flatRadius = trackHalf + carLength * 4 + 25.0; // ~171m flat radius from centerline (4 cars length on both sides)
 
     if (distToTrack <= flatRadius) return 0; // Strictly flat at ground zero across track & run-off
 
