@@ -1561,6 +1561,45 @@ function formatGenLabel(g) {
   return `Gen ${g}`;
 }
 
+function getPresetTier(gen) {
+  if (gen >= 5000) return 'Ultimate Apex';
+  if (gen >= 2000) return 'Grand Master';
+  if (gen >= 1000) return 'Titan Master';
+  if (gen >= 500) return 'Apex Champion';
+  if (gen >= 250) return 'Veteran Pro';
+  if (gen >= 100) return 'Track Master';
+  if (gen >= 50) return 'Experienced';
+  if (gen >= 10) return 'Intermediate';
+  if (gen >= 5) return 'Learning';
+  if (gen >= 2) return 'Toddler';
+  return 'Random Explorer';
+}
+
+const btnGenDial = $('btn-gen-dial');
+const genDialPopover = $('gen-dial-popover');
+
+export function setGenDialPopoverOpen(open) {
+  if (!genDialPopover) return;
+  genDialPopover.hidden = !open;
+  btnGenDial?.setAttribute('aria-expanded', String(open));
+  btnGenDial?.classList.toggle('is-active', open);
+}
+
+if (btnGenDial) {
+  btnGenDial.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isCurrentlyHidden = genDialPopover ? genDialPopover.hidden : true;
+    setGenDialPopoverOpen(isCurrentlyHidden);
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const widget = $('gen-dial-widget');
+  if (widget && !widget.contains(e.target)) {
+    setGenDialPopoverOpen(false);
+  }
+});
+
 export function loadGenerationPreset(g) {
   const preset = PRESET_BRAINS[g];
   if (!preset || !preset.genome) {
@@ -1611,7 +1650,7 @@ export function loadGenerationPreset(g) {
 
 export function renderGenPresetsRibbon() {
   const container = $('gen-presets-track');
-  if (!container) return;
+  const activeLabelEl = $('gen-dial-active-label');
 
   const currentGen = sim ? sim.generation : 1;
   const isPresetMatch = PRESET_MILESTONES.includes(currentGen);
@@ -1631,40 +1670,55 @@ export function renderGenPresetsRibbon() {
     chips.push({ gen: currentGen, isCurrent: true });
   }
 
+  // Update active label on Dial Menu Trigger Button
+  if (activeLabelEl) {
+    if (isMultiGenBattle) {
+      activeLabelEl.innerHTML = `<span style="color:#f59e0b">⚔️ Showdown</span>`;
+    } else if (activePresetGen !== null) {
+      activeLabelEl.textContent = formatGenLabel(activePresetGen);
+    } else {
+      const liveNum = currentGen >= 1000 ? `${(currentGen / 1000) % 1 === 0 ? currentGen / 1000 : (currentGen / 1000).toFixed(1)}k` : `${currentGen}`;
+      activeLabelEl.innerHTML = `<span class="chip-dot"></span>${liveNum} <span class="chip-badge">LIVE</span>`;
+    }
+  }
+
+  if (!container) return;
+
   let html = '';
   for (const chip of chips) {
     const isCurrent = chip.isCurrent;
     const isSelected = !isMultiGenBattle && (activePresetGen === chip.gen || (activePresetGen === null && isCurrent));
     const label = formatGenLabel(chip.gen);
+    const preset = PRESET_BRAINS[chip.gen];
+    const bestLap = preset?.bestLap ? `${preset.bestLap}s` : (isCurrent && sim?.bestLapEver ? `${sim.bestLapEver.toFixed(1)}s` : null);
+    const tier = isCurrent ? 'Live Trained Model' : getPresetTier(chip.gen);
 
-    if (isCurrent && !isPresetMatch) {
-      const liveNum = chip.gen >= 1000 ? `${(chip.gen / 1000) % 1 === 0 ? chip.gen / 1000 : (chip.gen / 1000).toFixed(1)}k` : `${chip.gen}`;
-      html += `<button class="btn-gen-chip is-current ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Your live trained generation ${chip.gen}">
-        <span class="chip-dot"></span>
-        <span class="chip-text">${liveNum}</span>
-        <span class="chip-badge">LIVE</span>
-      </button>`;
-    } else if (isCurrent && isPresetMatch) {
-      const liveNum = chip.gen >= 1000 ? `${(chip.gen / 1000) % 1 === 0 ? chip.gen / 1000 : (chip.gen / 1000).toFixed(1)}k` : `${chip.gen}`;
-      html += `<button class="btn-gen-chip is-current ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Gen ${chip.gen} milestone (Current Live)">
-        <span class="chip-dot"></span>
-        <span class="chip-text">${liveNum}</span>
-        <span class="chip-badge">LIVE</span>
-      </button>`;
-    } else {
-      html += `<button class="btn-gen-chip ${isSelected ? 'active' : ''}" data-gen="${chip.gen}" type="button" title="Load pre-trained Gen ${chip.gen} champion">
-        <span class="chip-text">${label}</span>
-      </button>`;
-    }
+    html += `
+      <button class="gen-dial-item ${isSelected ? 'active' : ''} ${isCurrent ? 'is-live' : ''}" data-gen="${chip.gen}" type="button" title="${isCurrent ? 'Active live trained generation' : `Load Gen ${chip.gen} preset`}">
+        <div class="gen-dial-item-main">
+          <div class="gen-dial-item-head">
+            ${isCurrent ? '<span class="chip-dot"></span>' : ''}
+            <span class="gen-dial-item-title">${label}</span>
+            ${isCurrent ? '<span class="gen-dial-item-live-badge">LIVE</span>' : ''}
+          </div>
+          <span class="gen-dial-item-tier">${tier}</span>
+        </div>
+        <div class="gen-dial-item-metric">
+          ${bestLap ? `<span class="gen-dial-item-lap">${bestLap}</span>` : ''}
+          ${isSelected ? `<svg class="gen-dial-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>` : ''}
+        </div>
+      </button>
+    `;
   }
 
   container.innerHTML = html;
 
-  container.querySelectorAll('.btn-gen-chip').forEach((btn) => {
+  container.querySelectorAll('.gen-dial-item').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const g = Number(btn.getAttribute('data-gen'));
       loadGenerationPreset(g);
+      setGenDialPopoverOpen(false);
     });
   });
 }

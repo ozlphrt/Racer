@@ -41,27 +41,48 @@
         <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
       </div>
 
-      <!-- AI Generation Presets Scale Ribbon (Vertical Left Dock) -->
-      <nav class="gen-presets-ribbon glass" id="gen-presets-ribbon" aria-label="AI Generation Presets">
-        <div class="gen-presets-label">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
-            <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
-          </svg>
-          <span>AI GEN</span>
+      <!-- AI Generation Dial Menu Widget (Top-Left under HUD) -->
+      <div class="gen-dial-widget" id="gen-dial-widget">
+        <div class="gen-dial-bar">
+          <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="AI Generation Presets" title="Select AI Generation">
+            <svg class="gen-dial-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
+              <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
+            </svg>
+            <span class="gen-dial-tag">AI GEN</span>
+            <span class="gen-dial-active-label" id="gen-dial-active-label">Gen 500</span>
+            <svg class="gen-dial-chevron" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <!-- Compare button stays OUT of dial menu as dedicated action button -->
+          <button class="btn-compare-gens glass" id="btn-compare-gens" type="button" title="Compare AI generations in a head-to-head showdown race">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 3h5v5"></path>
+              <path d="M8 21H3v-5"></path>
+              <path d="M21 3l-7.5 7.5"></path>
+              <path d="M3 21l7.5-7.5"></path>
+            </svg>
+            <span>COMPARE</span>
+          </button>
         </div>
-        <div class="gen-presets-track" id="gen-presets-track"></div>
-        <div class="gen-compare-divider"></div>
-        <button class="btn-compare-gens" id="btn-compare-gens" type="button" title="Compare AI generations in a head-to-head showdown race">
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 3h5v5"></path>
-            <path d="M8 21H3v-5"></path>
-            <path d="M21 3l-7.5 7.5"></path>
-            <path d="M3 21l7.5-7.5"></path>
-          </svg>
-          <span>COMPARE</span>
-        </button>
-      </nav>
+
+        <!-- Dial Menu Popover Dropdown -->
+        <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="AI Generation Presets" hidden>
+          <div class="gen-dial-popover-header">
+            <div class="gen-dial-header-title">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
+                <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
+              </svg>
+              <span>AI GENERATIONS</span>
+            </div>
+            <span class="gen-dial-header-badge">SCALE</span>
+          </div>
+          <div class="gen-dial-preset-list" id="gen-presets-track"></div>
+        </div>
+      </div>
 
       <!-- Ghost Mode 30s Countdown Timer Pill (Top Center) -->
       <div class="ghost-timer-pill glass" id="ghost-timer-pill" aria-label="Ghost Mode Countdown Timer">
