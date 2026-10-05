@@ -2186,12 +2186,13 @@ export class Renderer3D {
   }
 
   render(sim, opts, leader) {
-    if (this.lastGen !== sim.generation) {
+    if (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)) {
       this.lastGen = sim.generation;
       if (opts.follow) {
         this.resetCamera(true);
       }
     }
+    this.lastSimTime = sim.time;
 
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
@@ -2248,10 +2249,17 @@ export class Renderer3D {
       this.controls.target.y += dy;
       this.controls.target.z += dz;
 
-      // Translate camera along with target smoothly without sudden threshold snaps
+      // Translate camera along with target smoothly
       this.camera.position.x += dx;
       this.camera.position.y += dy;
-      this.camera.position.z += dz;
+
+      // Restore canonical broadcast follow altitude (68.0) if lowered by finish cam
+      const canonicalCamZ = 68.0;
+      if (this.camera.position.z < canonicalCamZ - 1.0 || (sim.time < 1.5 && Math.abs(this.camera.position.z - canonicalCamZ) > 1.0)) {
+        this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.12;
+      } else {
+        this.camera.position.z += dz;
+      }
     } else {
       this.controls.autoRotate = true;
       this.controls.autoRotateSpeed = 0.45;
