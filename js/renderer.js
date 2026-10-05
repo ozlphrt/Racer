@@ -890,27 +890,27 @@ export class Renderer {
           this.tireSmokes.push({
             x: lx + (Math.random() - 0.5) * 1.5,
             y: ly + (Math.random() - 0.5) * 1.5,
-            radius: 2.2,
-            maxRadius: 7.5 + Math.random() * 4.5,
-            vx: (Math.random() - 0.5) * 6,
-            vy: (Math.random() - 0.5) * 6,
-            alpha: intensity * 0.42,
+            radius: 1.0,
+            maxRadius: 2.8 + Math.random() * 1.2,
+            vx: (Math.random() - 0.5) * 3.5,
+            vy: (Math.random() - 0.5) * 3.5,
+            alpha: intensity * 0.22,
             life: 1.0,
-            decay: 1.5 + Math.random() * 0.8,
+            decay: 2.2 + Math.random() * 0.8,
           });
           this.tireSmokes.push({
-            x: rx + (Math.random() - 0.5) * 1.5,
-            y: ry + (Math.random() - 0.5) * 1.5,
-            radius: 2.2,
-            maxRadius: 7.5 + Math.random() * 4.5,
-            vx: (Math.random() - 0.5) * 6,
-            vy: (Math.random() - 0.5) * 6,
-            alpha: intensity * 0.42,
+            x: rx + (Math.random() - 0.5) * 0.8,
+            y: ry + (Math.random() - 0.5) * 0.8,
+            radius: 1.0,
+            maxRadius: 2.8 + Math.random() * 1.2,
+            vx: (Math.random() - 0.5) * 3.5,
+            vy: (Math.random() - 0.5) * 3.5,
+            alpha: intensity * 0.22,
             life: 1.0,
-            decay: 1.5 + Math.random() * 0.8,
+            decay: 2.2 + Math.random() * 0.8,
           });
-          if (this.tireSmokes.length > 250) {
-            this.tireSmokes.splice(0, this.tireSmokes.length - 250);
+          if (this.tireSmokes.length > 200) {
+            this.tireSmokes.splice(0, this.tireSmokes.length - 200);
           }
         }
       } else {
@@ -950,16 +950,16 @@ export class Renderer {
       }
       s.x += s.vx * dt;
       s.y += s.vy * dt;
-      s.vx *= 0.94;
-      s.vy *= 0.94;
-      s.radius += 5.5 * dt;
+      s.vx *= 0.92;
+      s.vy *= 0.92;
+      s.radius += 2.8 * dt;
 
       const r = Math.min(s.maxRadius, s.radius);
-      const alpha = s.alpha * Math.pow(s.life, 1.4) * 0.35;
+      const alpha = s.alpha * Math.pow(s.life, 1.4) * 0.22;
       const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-      grad.addColorStop(0, `rgba(242, 245, 250, ${alpha})`);
-      grad.addColorStop(0.5, `rgba(230, 235, 242, ${alpha * 0.6})`);
-      grad.addColorStop(1, `rgba(220, 226, 235, 0)`);
+      grad.addColorStop(0, `rgba(230, 235, 242, ${alpha})`);
+      grad.addColorStop(0.6, `rgba(215, 222, 232, ${alpha * 0.4})`);
+      grad.addColorStop(1, `rgba(200, 210, 220, 0)`);
 
       ctx.fillStyle = grad;
       ctx.beginPath();

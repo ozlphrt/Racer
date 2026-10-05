@@ -2511,7 +2511,7 @@ export class Renderer3D {
         vAlpha = alpha;
         vRotation = rotation;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (420.0 / -mvPosition.z);
+        gl_PointSize = size * (360.0 / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -2520,7 +2520,6 @@ export class Renderer3D {
       varying float vAlpha;
       varying float vRotation;
 
-      // 2D Hash & Value Noise for Organic Fractal Billows
       float hash(vec2 p) {
         return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
       }
@@ -2535,33 +2534,31 @@ export class Renderer3D {
 
       float fbm(vec2 p) {
         float v = 0.0;
-        v += 0.55 * noise(p); p = p * 2.1;
-        v += 0.28 * noise(p); p = p * 2.2;
-        v += 0.17 * noise(p);
+        v += 0.60 * noise(p); p = p * 2.2;
+        v += 0.40 * noise(p);
         return v;
       }
 
       void main() {
-        // Rotate point coord around center by particle rotation
         vec2 pt = gl_PointCoord - vec2(0.5);
-        float cosR = cos(vRotation);
-        float sinR = sin(vRotation);
-        vec2 rotUv = vec2(pt.x * cosR - pt.y * sinR, pt.x * sinR + pt.y * cosR);
-
         float dist = length(pt);
         if (dist > 0.5) discard;
 
-        // Multi-octave fractal turbulence
-        float turb = fbm(rotUv * 6.5 + vec2(1.8, 3.4));
+        // Soft exponential Gaussian feather - eliminates puffy ball edges
+        float feather = exp(-dist * dist * 14.0);
 
-        // Soft radial falloff modulated by fractal turbulence
-        float mask = smoothstep(0.5, 0.06, dist + (turb - 0.5) * 0.32);
+        // Wispy turbulence modulation
+        float cosR = cos(vRotation);
+        float sinR = sin(vRotation);
+        vec2 rotUv = vec2(pt.x * cosR - pt.y * sinR, pt.x * sinR + pt.y * cosR);
+        float turb = fbm(rotUv * 5.0 + vec2(1.2, 2.7));
 
-        // Volumetric ambient lighting with soft crevice shadowing
-        float light = clamp(0.75 + 0.25 * dot(normalize(rotUv + vec2(0.2, -0.3)), vec2(0.0, 1.0)) + (turb - 0.5) * 0.30, 0.68, 1.0);
-        vec3 smokeColor = vec3(0.93, 0.95, 0.97) * light;
+        float mask = feather * (0.60 + 0.40 * turb);
 
-        float alpha = mask * vAlpha * 0.36;
+        // Subtle realistic translucent burnt-rubber vapor tint
+        vec3 smokeColor = vec3(0.85, 0.87, 0.90);
+        float alpha = mask * vAlpha * 0.22;
+
         gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
@@ -2601,27 +2598,27 @@ export class Renderer3D {
           this.smokeParticles.shift(); // recycle oldest
         }
 
-        // Tire rotation slip velocity + thermal upward buoyancy
-        const slipSpd = (car.speed || 50) * 0.07;
-        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 2.8;
-        const driftY = sin * slipSpd + (Math.random() - 0.5) * 2.8;
-        const driftZ = 0.9 + Math.random() * 2.2;
+        // Low-lying tread streak velocity trailing along the tarmac
+        const slipSpd = (car.speed || 50) * 0.05;
+        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 1.5;
+        const driftY = sin * slipSpd + (Math.random() - 0.5) * 1.5;
+        const driftZ = 0.3 + Math.random() * 0.6; // Stays close to ground
 
         this.smokeParticles.push({
-          x: t.x + (Math.random() - 0.5) * 0.7,
-          y: t.y + (Math.random() - 0.5) * 0.7,
-          z: 0.35 + Math.random() * 0.25,
+          x: t.x + (Math.random() - 0.5) * 0.4,
+          y: t.y + (Math.random() - 0.5) * 0.4,
+          z: 0.10 + Math.random() * 0.15,
           vx: driftX,
           vy: driftY,
           vz: driftZ,
-          size: 4.2 + Math.random() * 2.5,
-          maxSize: 14.0 + Math.random() * 8.0,
-          growthRate: 11.0 + Math.random() * 6.5,
+          size: 1.4 + Math.random() * 0.8,
+          maxSize: 3.6 + Math.random() * 1.4,
+          growthRate: 3.8 + Math.random() * 2.0,
           rotation: Math.random() * Math.PI * 2,
-          spin: (Math.random() - 0.5) * 1.6,
-          alpha: Math.min(0.85, intensity * (0.60 + Math.random() * 0.35)),
+          spin: (Math.random() - 0.5) * 1.2,
+          alpha: Math.min(0.70, intensity * (0.50 + Math.random() * 0.25)),
           life: 1.0,
-          decay: 0.95 + Math.random() * 0.55,
+          decay: 1.8 + Math.random() * 0.6,
         });
       }
     }
@@ -2647,9 +2644,9 @@ export class Renderer3D {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vx *= 0.93;
-      p.vy *= 0.93;
-      p.vz *= 0.95;
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+      p.vz *= 0.94;
       p.size = Math.min(p.maxSize, p.size + p.growthRate * dt);
       p.rotation += p.spin * dt;
 
