@@ -145,7 +145,7 @@ export class LeaderboardTower {
       const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
 
       const carNum = isPlayer ? 7 : (carIdx + 1);
-      const displayName = isPlayer ? 'YOU' : `CAR #${carNum}`;
+      const displayName = isPlayer ? 'YOU' : `#${carNum}`;
       const svgHtml = generateCarSideviewSvg(teamIdx, isPlayer);
 
       // Create row DOM: [Rank] [Sideview SVG] [Name] [Status/Gap]

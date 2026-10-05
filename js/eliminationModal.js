@@ -22,7 +22,7 @@ export class EliminationModalManager {
 
     const isPlayer = car === sim.player || car.manual;
     const carIdx = (sim.cars && sim.cars.indexOf(car) >= 0) ? sim.cars.indexOf(car) : (car.gridSlot ?? 0);
-    const carNumber = isPlayer ? 'YOU' : `CAR #${carIdx + 1}`;
+    const carNumber = isPlayer ? 'YOU' : `#${carIdx + 1}`;
     const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
     const carSvg = generateCarSideviewSvg(teamIdx, isPlayer);
 
