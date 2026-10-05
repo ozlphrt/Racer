@@ -34,6 +34,7 @@ export class Renderer {
     this.trailOwner = null;
     this.bursts = [];
     this.skidmarks = [];
+    this.tireSmokes = [];
     this.carPrevTires = new Map();
     this.grassPattern = this.createGrassPattern();
     this.buildPaths();
@@ -91,6 +92,7 @@ export class Renderer {
     this.trail = [];
     this.trailOwner = null;
     this.skidmarks = [];
+    this.tireSmokes = [];
     if (this.carPrevTires) this.carPrevTires.clear();
     this.buildPaths();
     this.buildTrees();
@@ -360,6 +362,7 @@ export class Renderer {
     // Draw car death burst animations
     this.processDeathEvents(sim);
     this.drawBursts();
+    this.drawTireSmokes();
 
     if (leader) {
       if (opts.sensors) this.drawRays(leader);
@@ -881,6 +884,35 @@ export class Renderer {
           }
         }
         this.carPrevTires.set(car, { lx, ly, rx, ry });
+
+        // Emit 2D smoke puffs on skid
+        if (Math.random() < 0.70) {
+          this.tireSmokes.push({
+            x: lx + (Math.random() - 0.5) * 1.5,
+            y: ly + (Math.random() - 0.5) * 1.5,
+            radius: 2.2,
+            maxRadius: 7.5 + Math.random() * 4.5,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            alpha: intensity * 0.42,
+            life: 1.0,
+            decay: 1.5 + Math.random() * 0.8,
+          });
+          this.tireSmokes.push({
+            x: rx + (Math.random() - 0.5) * 1.5,
+            y: ry + (Math.random() - 0.5) * 1.5,
+            radius: 2.2,
+            maxRadius: 7.5 + Math.random() * 4.5,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            alpha: intensity * 0.42,
+            life: 1.0,
+            decay: 1.5 + Math.random() * 0.8,
+          });
+          if (this.tireSmokes.length > 250) {
+            this.tireSmokes.splice(0, this.tireSmokes.length - 250);
+          }
+        }
       } else {
         if (this.carPrevTires.has(car)) this.carPrevTires.delete(car);
       }
@@ -900,6 +932,31 @@ export class Renderer {
       ctx.moveTo(s.x0, s.y0);
       ctx.lineTo(s.x1, s.y1);
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawTireSmokes() {
+    if (!this.tireSmokes || this.tireSmokes.length === 0) return;
+    const ctx = this.ctx;
+    const dt = 1 / 60;
+    ctx.save();
+    for (let i = this.tireSmokes.length - 1; i >= 0; i--) {
+      const s = this.tireSmokes[i];
+      s.life -= s.decay * dt;
+      if (s.life <= 0) {
+        this.tireSmokes.splice(i, 1);
+        continue;
+      }
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vx *= 0.92;
+      s.vy *= 0.92;
+      s.radius += 5.5 * dt;
+      ctx.fillStyle = `rgba(238, 242, 248, ${s.alpha * s.life})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, Math.min(s.maxRadius, s.radius), 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }

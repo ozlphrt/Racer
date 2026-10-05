@@ -328,6 +328,7 @@ export class Renderer3D {
     this.setupTrees();
     this.setupBursts();
     this.setupSkidmarks();
+    this.setupTireSmoke();
     this.setupTrail();
 
     this._rankedCars = [];
@@ -467,6 +468,7 @@ export class Renderer3D {
     if (this.treeGroup) this.scene.remove(this.treeGroup);
     this.clearBursts();
     this.clearSkidmarks();
+    this.clearTireSmoke();
     if (this.trailMesh) this.trailMesh.geometry.setDrawRange(0, 0);
     if (this.trailHistory) this.trailHistory.length = 0;
     this.trailOwner = null;
@@ -2484,6 +2486,145 @@ export class Renderer3D {
     this.burstPointsMesh.geometry.setDrawRange(0, writeIdx);
   }
 
+  setupTireSmoke() {
+    this.maxSmokeParticles = 600;
+    this.smokeParticles = [];
+    this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
+    this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
+    this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
+    geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
+    geo.setDrawRange(0, 0);
+
+    const vertShader = `
+      attribute float size;
+      attribute float alpha;
+      varying float vAlpha;
+      void main() {
+        vAlpha = alpha;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * (480.0 / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const fragShader = `
+      varying float vAlpha;
+      void main() {
+        // Soft volumetric circular smoke puff
+        vec2 coord = gl_PointCoord - vec2(0.5);
+        float dist = length(coord);
+        if (dist > 0.5) discard;
+        float circle = smoothstep(0.5, 0.05, dist);
+        // Realistic light grey-white rubber tire smoke
+        vec3 smokeColor = vec3(0.92, 0.94, 0.96);
+        gl_FragColor = vec4(smokeColor, circle * vAlpha * 0.45);
+      }
+    `;
+
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: vertShader,
+      fragmentShader: fragShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+    });
+
+    this.smokePointsMesh = new THREE.Points(geo, mat);
+    this.smokePointsMesh.frustumCulled = false;
+    this.smokePointsMesh.renderOrder = 450;
+    this.scene.add(this.smokePointsMesh);
+  }
+
+  clearTireSmoke() {
+    this.smokeParticles = [];
+    if (this.smokePointsMesh) this.smokePointsMesh.geometry.setDrawRange(0, 0);
+  }
+
+  addTireSmoke(lx, ly, rx, ry, car, intensity) {
+    const count = intensity > 0.45 ? 2 : 1;
+    const cos = Math.cos(car.angle);
+    const sin = Math.sin(car.angle);
+
+    for (let c = 0; c < count; c++) {
+      const tires = [
+        { x: lx, y: ly },
+        { x: rx, y: ry },
+      ];
+
+      for (const t of tires) {
+        if (this.smokeParticles.length >= this.maxSmokeParticles) {
+          this.smokeParticles.shift(); // recycle oldest
+        }
+
+        // Tire rotation slip velocity + thermal upward buoyancy
+        const slipSpd = (car.speed || 50) * 0.08;
+        const driftX = -cos * slipSpd + (Math.random() - 0.5) * 3.5;
+        const driftY = sin * slipSpd + (Math.random() - 0.5) * 3.5;
+        const driftZ = 1.2 + Math.random() * 2.8;
+
+        this.smokeParticles.push({
+          x: t.x + (Math.random() - 0.5) * 0.8,
+          y: t.y + (Math.random() - 0.5) * 0.8,
+          z: 0.35 + Math.random() * 0.25,
+          vx: driftX,
+          vy: driftY,
+          vz: driftZ,
+          size: 3.2 + Math.random() * 2.0,
+          maxSize: 10.0 + Math.random() * 6.5,
+          growthRate: 8.5 + Math.random() * 5.0,
+          alpha: Math.min(0.85, intensity * (0.65 + Math.random() * 0.35)),
+          life: 1.0,
+          decay: 1.3 + Math.random() * 0.7,
+        });
+      }
+    }
+  }
+
+  updateTireSmoke() {
+    if (!this.smokeParticles || this.smokeParticles.length === 0) {
+      if (this.smokePointsMesh) this.smokePointsMesh.geometry.setDrawRange(0, 0);
+      return;
+    }
+
+    const dt = 1 / 60;
+    let writeIdx = 0;
+
+    for (let i = this.smokeParticles.length - 1; i >= 0; i--) {
+      const p = this.smokeParticles[i];
+      p.life -= p.decay * dt;
+      if (p.life <= 0) {
+        this.smokeParticles.splice(i, 1);
+        continue;
+      }
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vx *= 0.91;
+      p.vy *= 0.91;
+      p.vz *= 0.93;
+      p.size = Math.min(p.maxSize, p.size + p.growthRate * dt);
+
+      const idx = writeIdx * 3;
+      this.smokePosArr[idx] = p.x;
+      this.smokePosArr[idx + 1] = p.y;
+      this.smokePosArr[idx + 2] = p.z;
+
+      this.smokeSizeArr[writeIdx] = p.size;
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.2);
+      writeIdx++;
+    }
+
+    this.smokePointsMesh.geometry.attributes.position.needsUpdate = true;
+    this.smokePointsMesh.geometry.attributes.size.needsUpdate = true;
+    this.smokePointsMesh.geometry.attributes.alpha.needsUpdate = true;
+    this.smokePointsMesh.geometry.setDrawRange(0, writeIdx);
+  }
+
   setupSkidmarks() {
     this.maxSkidQuads = 2400;
     const maxVerts = this.maxSkidQuads * 4;
@@ -2646,6 +2787,8 @@ export class Renderer3D {
           }
         }
         this.carPrevTires.set(car, { lx, ly, rx, ry });
+        // Emit smoke particles from rear skidding tires
+        this.addTireSmoke(lx, ly, rx, ry, car, intensity);
       } else {
         if (this.carPrevTires.has(car)) this.carPrevTires.delete(car);
       }
@@ -3438,6 +3581,9 @@ export class Renderer3D {
     // Update Death Bursts
     this.processDeathEvents(sim);
     this.updateBursts();
+
+    // Update Tire Smoke Particles
+    this.updateTireSmoke();
 
     this.renderer.render(this.scene, this.camera);
   }
