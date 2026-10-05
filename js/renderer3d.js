@@ -3300,18 +3300,19 @@ export class Renderer3D {
         this.camera.updateProjectionMatrix();
       }
     } else if (cameraPreset === 'onboard' && focusCar) {
-      // ONBOARD T-CAM (Cockpit driver perspective looking down nose)
+      // ONBOARD T-CAM (Roll-hoop periscope camera elevated above cockpit & halo)
       this.controls.autoRotate = false;
       const cosA = Math.cos(focusCar.angle);
       const sinA = Math.sin(focusCar.angle);
 
-      const destCamX = focusCar.x + cosA * 0.4;
-      const destCamY = -focusCar.y - sinA * 0.4;
-      const destCamZ = 3.6;
+      // Positioned atop the airbox roll-hoop mount with clear forward sightline
+      const destCamX = focusCar.x - cosA * 1.6;
+      const destCamY = -focusCar.y + sinA * 1.6;
+      const destCamZ = 4.7;
 
-      const destTargetX = focusCar.x + cosA * 45;
-      const destTargetY = -focusCar.y - sinA * 45;
-      const destTargetZ = 2.2;
+      const destTargetX = focusCar.x + cosA * 48;
+      const destTargetY = -focusCar.y - sinA * 48;
+      const destTargetZ = 2.0;
 
       const camGlide = 0.35;
       const targetGlide = 0.35;
@@ -3324,8 +3325,8 @@ export class Renderer3D {
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
 
-      if (Math.abs(this.camera.fov - 42) > 0.1) {
-        this.camera.fov += (42 - this.camera.fov) * 0.08;
+      if (Math.abs(this.camera.fov - 44) > 0.1) {
+        this.camera.fov += (44 - this.camera.fov) * 0.08;
         this.camera.updateProjectionMatrix();
       }
     } else if (cameraPreset === 'heli' && focusCar) {
