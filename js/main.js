@@ -80,6 +80,7 @@ const eliminationModals = new EliminationModalManager($('elimination-stack'), {
 });
 
 sim.onCarEliminated = (car, reason) => {
+  if (hyperRunning) return;
   eliminationModals.show(car, sim, reason);
   const camPos = (state.view3d && renderer3d && renderer3d.camera)
     ? renderer3d.camera.position
@@ -88,6 +89,7 @@ sim.onCarEliminated = (car, reason) => {
 };
 
 sim.onCarDeath = (car) => {
+  if (hyperRunning) return;
   const camPos = (state.view3d && renderer3d && renderer3d.camera)
     ? renderer3d.camera.position
     : { x: car.x, y: car.y, z: 300 };
@@ -961,6 +963,9 @@ function getTargetDurationMs() {
 
 function startHyperTraining() {
   hyperRunning = true;
+  state.hyperRunning = true;
+  sim.hyperRunning = true;
+  audio.silenceAll();
   hyperStartGen = sim.generation;
   hyperStartTime = performance.now();
 
@@ -1102,6 +1107,9 @@ function stopHyperTraining() {
 function finishHyperTraining() {
   const wasRunning = hyperRunning;
   hyperRunning = false;
+  state.hyperRunning = false;
+  sim.hyperRunning = false;
+  audio.silenceAll();
   const elapsedSec = (performance.now() - hyperStartTime) / 1000;
   const elapsedFmt = fmtDuration(elapsedSec);
   const gensDone = sim.generation - hyperStartGen;

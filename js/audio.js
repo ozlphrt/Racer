@@ -434,13 +434,18 @@ export class SpatialAudioEngine {
     return this.enabled;
   }
 
-  update(sim, state, activeFocus, renderer3d, renderer) {
-    if (!this.enabled || !this.inited || !this.ctx || state.paused) {
-      if (this.voices) {
-        for (let i = 0; i < this.voices.length; i++) {
-          this.voices[i].silence();
-        }
+  silenceAll() {
+    if (this.voices) {
+      for (let i = 0; i < this.voices.length; i++) {
+        this.voices[i].silence();
       }
+    }
+  }
+
+  update(sim, state, activeFocus, renderer3d, renderer) {
+    const isTraining = state?.hyperRunning || sim?.hyperRunning || state?.inTrainingMode;
+    if (!this.enabled || !this.inited || !this.ctx || state?.paused || isTraining) {
+      this.silenceAll();
       return;
     }
 
