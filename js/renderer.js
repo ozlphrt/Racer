@@ -881,38 +881,34 @@ export class Renderer {
             if (this.skidmarks.length > maxSkidSegments) {
               this.skidmarks.splice(0, this.skidmarks.length - maxSkidSegments);
             }
+
+            // Emit continuous ribbon quad smoke
+            const normX = -sin;
+            const normY = -cos;
+            this.tireSmokes.push({
+              p0x: prev.lx, p0y: prev.ly,
+              p1x: lx, p1y: ly,
+              nx: normX, ny: normY,
+              w0: 1.2, w1: 1.2,
+              alpha: intensity * 0.35,
+              life: 1.0,
+              decay: 1.6 + Math.random() * 0.4,
+            });
+            this.tireSmokes.push({
+              p0x: prev.rx, p0y: prev.ry,
+              p1x: rx, p1y: ry,
+              nx: normX, ny: normY,
+              w0: 1.2, w1: 1.2,
+              alpha: intensity * 0.35,
+              life: 1.0,
+              decay: 1.6 + Math.random() * 0.4,
+            });
+            if (this.tireSmokes.length > 300) {
+              this.tireSmokes.splice(0, this.tireSmokes.length - 300);
+            }
           }
         }
         this.carPrevTires.set(car, { lx, ly, rx, ry });
-
-        // Emit 2D smoke puffs on skid
-        if (Math.random() < 0.70) {
-          this.tireSmokes.push({
-            x: lx + (Math.random() - 0.5) * 1.5,
-            y: ly + (Math.random() - 0.5) * 1.5,
-            radius: 1.0,
-            maxRadius: 2.8 + Math.random() * 1.2,
-            vx: (Math.random() - 0.5) * 3.5,
-            vy: (Math.random() - 0.5) * 3.5,
-            alpha: intensity * 0.22,
-            life: 1.0,
-            decay: 2.2 + Math.random() * 0.8,
-          });
-          this.tireSmokes.push({
-            x: rx + (Math.random() - 0.5) * 0.8,
-            y: ry + (Math.random() - 0.5) * 0.8,
-            radius: 1.0,
-            maxRadius: 2.8 + Math.random() * 1.2,
-            vx: (Math.random() - 0.5) * 3.5,
-            vy: (Math.random() - 0.5) * 3.5,
-            alpha: intensity * 0.22,
-            life: 1.0,
-            decay: 2.2 + Math.random() * 0.8,
-          });
-          if (this.tireSmokes.length > 200) {
-            this.tireSmokes.splice(0, this.tireSmokes.length - 200);
-          }
-        }
       } else {
         if (this.carPrevTires.has(car)) this.carPrevTires.delete(car);
       }
@@ -948,22 +944,28 @@ export class Renderer {
         this.tireSmokes.splice(i, 1);
         continue;
       }
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      s.vx *= 0.92;
-      s.vy *= 0.92;
-      s.radius += 2.8 * dt;
+      s.w0 += 2.8 * dt;
+      s.w1 += 2.8 * dt;
 
-      const r = Math.min(s.maxRadius, s.radius);
-      const alpha = s.alpha * Math.pow(s.life, 1.2) * 0.45;
-      const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-      grad.addColorStop(0, `rgba(238, 242, 248, ${alpha})`);
-      grad.addColorStop(0.5, `rgba(220, 228, 238, ${alpha * 0.5})`);
-      grad.addColorStop(1, `rgba(200, 210, 220, 0)`);
+      const alpha = s.alpha * Math.pow(s.life, 1.25) * 0.40;
 
-      ctx.fillStyle = grad;
+      const p0lx = s.p0x - s.nx * s.w0;
+      const p0ly = s.p0y - s.ny * s.w0;
+      const p0rx = s.p0x + s.nx * s.w0;
+      const p0ry = s.p0y + s.ny * s.w0;
+
+      const p1lx = s.p1x - s.nx * s.w1;
+      const p1ly = s.p1y - s.ny * s.w1;
+      const p1rx = s.p1x + s.nx * s.w1;
+      const p1ry = s.p1y + s.ny * s.w1;
+
+      ctx.fillStyle = `rgba(235, 240, 248, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.moveTo(p0lx, p0ly);
+      ctx.lineTo(p0rx, p0ry);
+      ctx.lineTo(p1rx, p1ry);
+      ctx.lineTo(p1lx, p1ly);
+      ctx.closePath();
       ctx.fill();
     }
     ctx.restore();
