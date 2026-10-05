@@ -4605,20 +4605,48 @@ export class Renderer3D {
 
     if (cameraPreset === 'auto') {
       const now = performance.now();
-      if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
-        // Weighted preset pool:
-        // Prioritized: 8 (orbit), 7 (broadcast), 6 (heli), 3 (action_rear)
-        // Standard: 1 (chase), 2 (action), 5 (follow)
-        // Deprioritized: 4 (onboard)
+      const p1 = (opts.manual && sim.player && (sim.player.alive || sim.player.finished)) ? sim.player : (rankedCars[0] || leader || focusCar);
+
+      // Check if P1 is approaching the Start/Finish line (2-3 seconds prior to crossing index 0)
+      const t = this.track;
+      let p1ApproachingGantry = false;
+      let gantryHoldDuration = 3500;
+
+      if (p1 && t && t.N && t.spacing && (p1.alive || p1.finished)) {
+        const p1Idx = ((p1.idx % t.N) + t.N) % t.N;
+        // Distance remaining along track forward direction to index 0 (Start/Finish Line)
+        const samplesToLine = (t.N - p1Idx) % t.N;
+        const distToLine = samplesToLine * t.spacing;
+        const p1Speed = p1.speed || 0;
+
+        // Approaching line at speed (avoid stationary triggers at spawn or on cooldown)
+        if (p1Speed > 15) {
+          const timeToLine = distToLine / p1Speed; // seconds until crossing start/finish line
+          // Trigger window: 2 to 3 seconds prior to crossing line (0.1s - 2.8s)
+          if (timeToLine >= 0.1 && timeToLine <= 2.8) {
+            p1ApproachingGantry = true;
+            // Hold camera on TV Gantry until car crosses line and travels ~1.2s past
+            gantryHoldDuration = Math.max(2600, Math.min(5200, (timeToLine + 1.2) * 1000));
+          }
+        }
+      }
+
+      // If P1 is 2-3s prior to start line and cooldown passed (>8s since last gantry cut), cut to TV Gantry
+      const gantryCooldownPassed = !this._lastGantryCutTime || (now - this._lastGantryCutTime > 8000);
+      if (p1ApproachingGantry && gantryCooldownPassed && this._autoPreset !== 'broadcast') {
+        this._autoPreset = 'broadcast';
+        this._lastGantryCutTime = now;
+        this._autoNextSwitch = now + gantryHoldDuration;
+      } else if (!this._autoPreset || !this._autoNextSwitch || (now >= this._autoNextSwitch && this._autoPreset !== 'broadcast')) {
+        // General rotating pool (TV Gantry 'broadcast' is excluded so it ONLY triggers on 2-3s approach)
         const weightedPool = [
-          { preset: 'orbit', weight: 26 },       // Camera 8 (Free Orbit) - Prioritized
-          { preset: 'broadcast', weight: 24 },   // Camera 7 (TV Gantry) - Prioritized
-          { preset: 'heli', weight: 26 },        // Camera 6 (Helicopter) - Prioritized
-          { preset: 'action_rear', weight: 26 }, // Camera 3 (Action Rear) - Prioritized
-          { preset: 'chase', weight: 10 },       // Camera 1 (Chase Cam) - Standard
-          { preset: 'action', weight: 10 },      // Camera 2 (Action Front) - Standard
-          { preset: 'follow', weight: 10 },      // Camera 5 (Broadcast Follow) - Standard
-          { preset: 'onboard', weight: 3 },      // Camera 4 (Onboard T-Cam) - Deprioritized
+          { preset: 'orbit', weight: 30 },       // Camera 8 (Free Orbit) - Prioritized
+          { preset: 'heli', weight: 30 },        // Camera 6 (Helicopter) - Prioritized
+          { preset: 'action_rear', weight: 30 }, // Camera 3 (Action Rear) - Prioritized
+          { preset: 'chase', weight: 12 },       // Camera 1 (Chase Cam) - Standard
+          { preset: 'action', weight: 12 },      // Camera 2 (Action Front) - Standard
+          { preset: 'follow', weight: 12 },      // Camera 5 (Broadcast Follow) - Standard
+          { preset: 'onboard', weight: 4 },      // Camera 4 (Onboard T-Cam) - Deprioritized
         ];
 
         const eligible = weightedPool.filter((item) => item.preset !== this._autoPreset);
@@ -4640,12 +4668,31 @@ export class Renderer3D {
           duration = 1800 + Math.random() * 1000; // 1.8s - 2.8s (brief action cut)
         } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
           duration = 7500 + Math.random() * 3500; // 7.5s - 11.0s (grand sweeping panoramic)
-        } else if (this._autoPreset === 'action_rear' || this._autoPreset === 'broadcast') {
-          duration = 6500 + Math.random() * 3000; // 6.5s - 9.5s (intense battle & gantry)
+        } else if (this._autoPreset === 'action_rear') {
+          duration = 6500 + Math.random() * 3000; // 6.5s - 9.5s (intense battle)
         } else {
           duration = 5000 + Math.random() * 2500; // 5.0s - 7.5s (standard follow/action)
         }
         this._autoNextSwitch = now + duration;
+      } else if (now >= this._autoNextSwitch && this._autoPreset === 'broadcast') {
+        // Gantry shot just finished! Switch immediately to another action/pursuit camera
+        const postGantryPool = [
+          { preset: 'action_rear', weight: 35 },
+          { preset: 'heli', weight: 35 },
+          { preset: 'orbit', weight: 20 },
+          { preset: 'chase', weight: 10 },
+        ];
+        let rnd = Math.random() * 100;
+        let chosen = postGantryPool[0].preset;
+        for (const item of postGantryPool) {
+          if (rnd < item.weight) {
+            chosen = item.preset;
+            break;
+          }
+          rnd -= item.weight;
+        }
+        this._autoPreset = chosen;
+        this._autoNextSwitch = now + 5500 + Math.random() * 2500;
       }
       cameraPreset = this._autoPreset;
     }
