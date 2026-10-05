@@ -1324,54 +1324,61 @@ function updateHighestGenAndLiveSnapshot() {
 }
 
 const GEN_BENCHMARK_META = {
-  1: { tier: 'Untrained · Random exploration', lap: '–', speed: '48 km/h', completion: '12%', cornering: '⭐ (D)' },
-  2: { tier: 'First Steering · Basic guidance', lap: '–', speed: '68 km/h', completion: '28%', cornering: '⭐ (D+)' },
-  5: { tier: 'Path Seeker · Early track adherence', lap: '–', speed: '92 km/h', completion: '55%', cornering: '⭐⭐ (C)' },
-  10: { tier: 'Track Keeper · Full single lap', lap: '58.4s', speed: '125 km/h', completion: '88%', cornering: '⭐⭐ (C+)' },
-  50: { tier: 'Apex Learner · Smooth throttle modulation', lap: '44.2s', speed: '158 km/h', completion: '98%', cornering: '⭐⭐⭐ (B)' },
-  100: { tier: 'Braking Control · Clean apex entry', lap: '36.8s', speed: '182 km/h', completion: '100%', cornering: '⭐⭐⭐ (B+)' },
-  250: { tier: 'Corner Carver · High-speed apex line', lap: '32.1s', speed: '204 km/h', completion: '100%', cornering: '⭐⭐⭐⭐ (A)' },
-  500: { tier: 'Racing Line Master · Optimal momentum', lap: '29.5s', speed: '222 km/h', completion: '100%', cornering: '⭐⭐⭐⭐ (A+)' },
-  1000: { tier: 'Grand Prix Champion · Precision slipstream', lap: '27.4s', speed: '236 km/h', completion: '100%', cornering: '⭐⭐⭐⭐⭐ (S)' },
-  2000: { tier: 'Hyper Evolved · Millimeter kerb clipping', lap: '25.2s', speed: '246 km/h', completion: '100%', cornering: '⭐⭐⭐⭐⭐ (S+)' },
-  5000: { tier: 'Apex Predator · Theoretical physics limit', lap: '23.8s', speed: '254 km/h', completion: '100%', cornering: '⭐⭐⭐⭐⭐ (SS)' },
+  1: { tier: 'Random Exploration · Stochastic weights', lap: null, speed: 48, completion: 12, rating: 'D', gradeClass: 'd' },
+  2: { tier: 'First Steering · Basic angular guidance', lap: null, speed: 68, completion: 28, rating: 'D+', gradeClass: 'd' },
+  5: { tier: 'Path Seeker · Baseline track following', lap: null, speed: 92, completion: 55, rating: 'C', gradeClass: 'c' },
+  10: { tier: 'Track Keeper · Single lap consistency', lap: 58.4, speed: 125, completion: 88, rating: 'C+', gradeClass: 'c' },
+  50: { tier: 'Apex Learner · Smooth throttle control', lap: 44.2, speed: 158, completion: 98, rating: 'B', gradeClass: 'b' },
+  100: { tier: 'Braking Control · Clean apex entry line', lap: 36.8, speed: 182, completion: 100, rating: 'B+', gradeClass: 'b' },
+  250: { tier: 'Corner Carver · High-speed apex line', lap: 32.1, speed: 204, completion: 100, rating: 'A', gradeClass: 'a' },
+  500: { tier: 'Racing Line Master · Momentum preservation', lap: 29.5, speed: 222, completion: 100, rating: 'A+', gradeClass: 'a' },
+  1000: { tier: 'Grand Prix Champion · Precision slipstream', lap: 27.4, speed: 236, completion: 100, rating: 'S', gradeClass: 's' },
+  2000: { tier: 'Hyper Evolved · Millimeter kerb clipping', lap: 25.2, speed: 246, completion: 100, rating: 'S+', gradeClass: 's' },
+  5000: { tier: 'Apex Predator · Theoretical physics limit', lap: 23.8, speed: 254, completion: 100, rating: 'SS', gradeClass: 'ss' },
 };
 
 function getGenMeta(g) {
-  if (g === 'live' || g === userHighestGen || (activePresetGen === null && g === sim.generation)) {
-    const bestLap = sim.bestLapEver && Number.isFinite(sim.bestLapEver) ? `${sim.bestLapEver.toFixed(2)}s` : '–';
+  const isLive = g === 'live' || g === userHighestGen || (activePresetGen === null && g === sim.generation);
+  if (isLive) {
+    const bestLap = sim.bestLapEver && Number.isFinite(sim.bestLapEver) ? +sim.bestLapEver.toFixed(2) : null;
     return {
       name: `Live (Gen ${userHighestGen})`,
-      tier: 'Highest Tested · Real-time evolution',
+      genLabel: formatGenLabel(userHighestGen),
+      isLive: true,
+      tier: 'Active real-time neural evolution model',
       lap: bestLap,
-      speed: sim.allTimeBest ? 'Active' : 'Evolving',
-      completion: 'Live',
-      cornering: 'Dynamic',
+      speed: sim.allTimeBest ? 245 : 210,
+      completion: 100,
+      rating: 'LIVE',
+      gradeClass: 'live',
     };
   }
-  const benchmark = GEN_BENCHMARK_META[g] || {
-    tier: 'Custom Milestone',
-    lap: '–',
-    speed: '200 km/h',
-    completion: '100%',
-    cornering: '⭐⭐⭐⭐',
-  };
   const preset = PRESET_BRAINS[g];
-  const lap = preset?.bestLap ? `${preset.bestLap}s` : benchmark.lap;
+  const benchmark = GEN_BENCHMARK_META[g] || {
+    tier: 'Custom Milestone Model',
+    lap: null,
+    speed: 200,
+    completion: 100,
+    rating: 'A',
+    gradeClass: 'a',
+  };
+  const lap = preset?.bestLap ? preset.bestLap : benchmark.lap;
   return {
     name: formatGenLabel(g),
+    genLabel: formatGenLabel(g),
+    isLive: false,
     tier: benchmark.tier,
     lap: lap,
     speed: benchmark.speed,
     completion: benchmark.completion,
-    cornering: benchmark.cornering,
+    rating: benchmark.rating,
+    gradeClass: benchmark.gradeClass,
   };
 }
 
 export function openGenCompareModal() {
   const backdrop = $('gen-compare-backdrop');
   if (!backdrop) return;
-  renderCompareGenChips();
   renderCompareMatrixTable();
   backdrop.hidden = false;
 }
@@ -1381,97 +1388,124 @@ export function closeGenCompareModal() {
   if (backdrop) backdrop.hidden = true;
 }
 
-function renderCompareGenChips() {
-  const grid = $('compare-gen-selection-grid');
-  if (!grid) return;
+function renderCompareMatrixTable() {
+  const tbody = $('compare-matrix-tbody');
+  const summaryEl = $('compare-selected-summary');
+  const badgeEl = $('compare-selected-badge');
+  const startBtn = $('btn-start-showdown');
+  if (!tbody) return;
 
   const highestGen = Math.max(userHighestGen, 1);
   const isPresetMatch = PRESET_MILESTONES.includes(highestGen);
 
-  const items = [];
+  const allGens = [];
   let currentInserted = false;
 
   for (const m of PRESET_MILESTONES) {
     if (!currentInserted && !isPresetMatch && highestGen < m) {
-      items.push({ key: highestGen, isLive: true });
+      allGens.push(highestGen);
       currentInserted = true;
     }
-    items.push({ key: m, isLive: isPresetMatch && m === highestGen });
+    allGens.push(m);
   }
   if (!currentInserted && !isPresetMatch) {
-    items.push({ key: highestGen, isLive: true });
+    allGens.push(highestGen);
   }
 
-  let html = '';
-  for (const item of items) {
-    const isChecked = compareSelectedGens.has(item.key);
-    const label = formatGenLabel(item.key);
-    const tag = item.isLive ? 'LIVE' : (item.key >= 1000 ? 'TITAN' : (item.key >= 100 ? 'PRO' : 'EARLY'));
-
-    html += `
-      <label class="compare-gen-card ${isChecked ? 'selected' : ''}" data-key="${item.key}">
-        <input type="checkbox" ${isChecked ? 'checked' : ''} data-key="${item.key}">
-        <span class="compare-gen-card-label">${label}</span>
-        <span class="compare-gen-card-tag">${tag}</span>
-      </label>
-    `;
-  }
-
-  grid.innerHTML = html;
-
-  grid.querySelectorAll('input[type="checkbox"]').forEach((chk) => {
-    chk.addEventListener('change', (e) => {
-      const k = Number(chk.getAttribute('data-key'));
-      if (chk.checked) {
-        compareSelectedGens.add(k);
-      } else {
-        if (compareSelectedGens.size > 2) {
-          compareSelectedGens.delete(k);
-        } else {
-          chk.checked = true;
-          toast('⚠️ Need at least 2 generations to compare', 'info');
-          return;
-        }
-      }
-      renderCompareGenChips();
-      renderCompareMatrixTable();
-    });
-  });
-}
-
-function renderCompareMatrixTable() {
-  const tbody = $('compare-matrix-tbody');
-  const summaryEl = $('compare-selected-summary');
-  const startBtn = $('btn-start-showdown');
-  if (!tbody) return;
-
-  const sortedGens = Array.from(compareSelectedGens).sort((a, b) => a - b);
-  const carsPerGen = Math.floor(Math.min(80, Math.max(20, sortedGens.length * 10)) / sortedGens.length);
-  const totalCars = carsPerGen * sortedGens.length;
+  const selectedCount = compareSelectedGens.size;
+  const carsPerGen = selectedCount > 0 ? Math.floor(Math.min(80, Math.max(20, selectedCount * 10)) / selectedCount) : 0;
+  const totalCars = carsPerGen * selectedCount;
 
   if (summaryEl) {
-    summaryEl.textContent = `Selected: ${sortedGens.length} Generations (${totalCars} Cars · ${carsPerGen} each)`;
+    summaryEl.textContent = `${totalCars} Cars on Grid · ${carsPerGen} per era`;
+  }
+  if (badgeEl) {
+    badgeEl.textContent = `${selectedCount} ERAS`;
   }
   if (startBtn) {
-    startBtn.disabled = sortedGens.length < 2;
+    startBtn.disabled = selectedCount < 2;
   }
 
   let html = '';
-  for (const g of sortedGens) {
+  for (const g of allGens) {
+    const isChecked = compareSelectedGens.has(g);
     const meta = getGenMeta(g);
+    const lapDisplay = meta.lap ? `${Number(meta.lap).toFixed(2)}<span class="matrix-unit">s</span>` : `<span class="matrix-na">–</span>`;
+    const speedDisplay = `${meta.speed}<span class="matrix-unit">km/h</span>`;
+    const completionDisplay = `${meta.completion}<span class="matrix-unit">%</span>`;
+
     html += `
-      <tr>
-        <td style="font-weight: 700; font-family: var(--mono); color: #38bdf8;">${meta.name}</td>
-        <td style="color: #cbd5e1;">${meta.tier}</td>
-        <td style="font-family: var(--mono); font-weight: 600; color: #facc15;">${meta.lap}</td>
-        <td style="font-family: var(--mono); color: #86efac;">${meta.speed}</td>
-        <td style="font-family: var(--mono);">${meta.completion}</td>
-        <td>${meta.cornering}</td>
+      <tr class="compare-row ${isChecked ? 'is-selected' : ''} ${meta.isLive ? 'is-live-row' : ''}" data-gen="${g}">
+        <td class="td-select">
+          <label class="matrix-chk-label">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} data-gen="${g}">
+          </label>
+        </td>
+        <td class="td-gen">
+          <div class="gen-name-wrap">
+            <span class="gen-title-code">${meta.genLabel}</span>
+            ${meta.isLive ? '<span class="gen-live-pill"><span class="chip-dot"></span>LIVE</span>' : ''}
+          </div>
+        </td>
+        <td class="td-tier">
+          <span class="gen-tier-desc">${meta.tier}</span>
+        </td>
+        <td class="td-lap">
+          <span class="matrix-val ${meta.lap && meta.lap < 12 ? 'is-record-lap' : ''}">${lapDisplay}</span>
+        </td>
+        <td class="td-speed">
+          <span class="matrix-val">${speedDisplay}</span>
+        </td>
+        <td class="td-completion">
+          <span class="matrix-val">${completionDisplay}</span>
+        </td>
+        <td class="td-rating">
+          <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>
+        </td>
       </tr>
     `;
   }
 
   tbody.innerHTML = html;
+
+  // Clicking anywhere on a table row toggles the era selection
+  tbody.querySelectorAll('.compare-row').forEach((row) => {
+    row.addEventListener('click', (e) => {
+      const g = Number(row.getAttribute('data-gen'));
+      if (compareSelectedGens.has(g)) {
+        if (compareSelectedGens.size > 2) {
+          compareSelectedGens.delete(g);
+        } else {
+          toast('⚠️ Need at least 2 generations for showdown', 'info');
+          return;
+        }
+      } else {
+        compareSelectedGens.add(g);
+      }
+      renderCompareMatrixTable();
+    });
+  });
+
+  tbody.querySelectorAll('input[type="checkbox"]').forEach((chk) => {
+    chk.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    chk.addEventListener('change', (e) => {
+      const g = Number(chk.getAttribute('data-gen'));
+      if (chk.checked) {
+        compareSelectedGens.add(g);
+      } else {
+        if (compareSelectedGens.size > 2) {
+          compareSelectedGens.delete(g);
+        } else {
+          chk.checked = true;
+          toast('⚠️ Need at least 2 generations for showdown', 'info');
+          return;
+        }
+      }
+      renderCompareMatrixTable();
+    });
+  });
 }
 
 export function startMultiGenBattle(selectedGens) {
@@ -1553,22 +1587,18 @@ $('btn-start-showdown')?.addEventListener('click', () => {
 // Quick Matchup Buttons
 $('btn-matchup-all')?.addEventListener('click', () => {
   compareSelectedGens = new Set([1, 10, 100, 500, 1000, 5000]);
-  renderCompareGenChips();
   renderCompareMatrixTable();
 });
 $('btn-matchup-rookie')?.addEventListener('click', () => {
   compareSelectedGens = new Set([1, 5000]);
-  renderCompareGenChips();
   renderCompareMatrixTable();
 });
 $('btn-matchup-champs')?.addEventListener('click', () => {
   compareSelectedGens = new Set([250, 500, 1000, 2000, 5000]);
-  renderCompareGenChips();
   renderCompareMatrixTable();
 });
 $('btn-matchup-live')?.addEventListener('click', () => {
   compareSelectedGens = new Set([userHighestGen, 1000, 5000]);
-  renderCompareGenChips();
   renderCompareMatrixTable();
 });
 
