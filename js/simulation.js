@@ -1,6 +1,8 @@
 import { Car } from './car.js';
 import { NeuralNetwork } from './neuralNetwork.js';
 import { evolve, seedPopulation } from './genetics.js';
+import { TireBarrierSystem } from './tireBarriers.js';
+import { audio } from './audio.js';
 
 /** Runs generations of AI cars (plus an optional manual player car). DOM-free. */
 export class Simulation {
@@ -21,6 +23,8 @@ export class Simulation {
 
     this.mode = 'train'; // 'train' | 'race'
     this.collisionsAlwaysOn = true;
+
+    this.tireBarriers = new TireBarrierSystem(track);
 
     this.reset();
   }
@@ -129,6 +133,7 @@ export class Simulation {
   setTrack(track, keepGeneration = false) {
     if (this.track === track) return;
     this.track = track;
+    this.tireBarriers?.setTrack(track);
     if (!keepGeneration) {
       this.reset();
     } else {
@@ -197,6 +202,7 @@ export class Simulation {
     this.postRaceTimer = null;
     this.aliveCount = this.cars.length;
     this.deathEvents = [];
+    this.tireBarriers?.reset();
   }
 
   setManual(on) {
@@ -253,12 +259,19 @@ export class Simulation {
     const activeCars = this._activeCars;
     for (let i = 0; i < this.cars.length; i++) {
       const c = this.cars[i];
-      if (c && c.alive && !c.crashed && !c.finished) {
+      if (c && (c.alive || c.crashed) && !c.finished) {
         activeCars.push(c);
       }
     }
-    if (this.player && this.player.alive && !this.player.crashed && !this.player.finished) {
+    if (this.player && (this.player.alive || this.player.crashed) && !this.player.finished) {
       activeCars.push(this.player);
+    }
+
+    // Update Dynamic Tire Barrier Physics & Collision Response
+    if (this.tireBarriers) {
+      this.tireBarriers.update(dt, activeCars, (car, impactSpeed) => {
+        audio.playTireThump(impactSpeed);
+      });
     }
 
     const colConfig = this.config.collision || {};

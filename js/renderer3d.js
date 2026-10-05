@@ -326,6 +326,7 @@ export class Renderer3D {
     this.setupCars();
     this.setupRays();
     this.setupTrees();
+    this.setupTireBarriers();
     this.setupBursts();
     this.setupSkidmarks();
     this.setupTireSmoke();
@@ -2787,6 +2788,179 @@ export class Renderer3D {
     this.scene.add(this.treeGroup);
   }
 
+  setupTireBarriers(sim = null) {
+    if (this.tireGroup) {
+      this.scene.remove(this.tireGroup);
+      if (this.tireMesh) {
+        this.tireMesh.geometry.dispose();
+        if (Array.isArray(this.tireMesh.material)) {
+          this.tireMesh.material.forEach((m) => m.dispose());
+        } else {
+          this.tireMesh.material.dispose();
+        }
+      }
+    }
+
+    this.tireGroup = new THREE.Group();
+    this.tireDummy = new THREE.Object3D();
+    this.tireColor = new THREE.Color();
+
+    // FIA Standard safety tire barrier cylinder
+    const tireGeo = new THREE.CylinderGeometry(1.15, 1.15, 0.82, 14);
+    tireGeo.rotateX(Math.PI / 2); // Align vertical height along Z axis
+
+    const tireMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.82,
+      metalness: 0.15,
+      side: THREE.FrontSide,
+    });
+
+    const tires = sim?.tireBarriers?.tires || (this.track ? this.generateTiresForTrack(this.track) : []);
+    this.tireCount = tires.length;
+
+    if (this.tireCount > 0) {
+      this.tireMesh = new THREE.InstancedMesh(tireGeo, tireMat, this.tireCount);
+      this.tireMesh.castShadow = true;
+      this.tireMesh.receiveShadow = true;
+
+      for (let i = 0; i < this.tireCount; i++) {
+        const t = tires[i];
+        this.tireDummy.position.set(t.x, -t.y, t.z);
+        this.tireDummy.rotation.set(t.pitch || 0, t.roll || 0, -(t.yaw || 0));
+        this.tireDummy.scale.set(1, 1, 1);
+        this.tireDummy.updateMatrix();
+        this.tireMesh.setMatrixAt(i, this.tireDummy.matrix);
+
+        this.tireColor.setRGB(t.color.r, t.color.g, t.color.b);
+        this.tireMesh.setColorAt(i, this.tireColor);
+      }
+
+      this.tireMesh.instanceMatrix.needsUpdate = true;
+      if (this.tireMesh.instanceColor) this.tireMesh.instanceColor.needsUpdate = true;
+      this.tireGroup.add(this.tireMesh);
+    }
+
+    this.scene.add(this.tireGroup);
+  }
+
+  generateTiresForTrack(track) {
+    if (!track) return [];
+    const t = track;
+    const N = t.N;
+    const minCurv = 1 / 250;
+    const rawCorner = new Array(N).fill(false);
+    for (let k = 0; k < N; k++) {
+      rawCorner[k] = Math.abs(t.curvature[k]) >= minCurv;
+    }
+    const isCorner = new Array(N).fill(false);
+    for (let k = 0; k < N; k++) {
+      if (rawCorner[k]) {
+        for (let d = -2; d <= 2; d++) {
+          isCorner[(k + d + N) % N] = true;
+        }
+      }
+    }
+    const colors = [
+      { r: 0.88, g: 0.12, b: 0.28 }, // Crimson Red
+      { r: 0.95, g: 0.96, b: 0.98 }, // Pure White
+      { r: 0.12, g: 0.16, b: 0.22 }, // Dark Graphite
+    ];
+    const tires = [];
+    let id = 0;
+    for (let k = 0; k < N; k += 2) {
+      if (!isCorner[k]) continue;
+      const curv = t.curvature[k];
+      const isLeftTurn = curv >= 0;
+      const edgeX = isLeftTurn ? t.ox[k] : t.ix[k];
+      const edgeY = isLeftTurn ? t.oy[k] : t.iy[k];
+      const cdx = edgeX - t.cx[k];
+      const cdy = edgeY - t.cy[k];
+      const cLen = Math.hypot(cdx, cdy) || 1;
+      const outNx = cdx / cLen;
+      const outNy = cdy / cLen;
+      const colorGroup = Math.floor(k / 4) % 2;
+      const baseColor = colors[colorGroup];
+
+      for (let row = 0; row < 2; row++) {
+        const margin = 4.8 + row * 1.7;
+        const stackX = edgeX + outNx * margin;
+        const stackY = edgeY + outNy * margin;
+        for (let tier = 0; tier < 2; tier++) {
+          const z = 0.42 + tier * 0.84;
+          const tireColor = tier === 1 && Math.random() < 0.3 ? colors[2] : baseColor;
+          tires.push({
+            id: id++,
+            x: stackX,
+            y: stackY,
+            z: z,
+            yaw: Math.atan2(outNy, outNx) + Math.PI / 2,
+            pitch: 0,
+            roll: 0,
+            color: tireColor,
+          });
+        }
+      }
+    }
+    return tires;
+  }
+
+  updateTireBarriers(sim) {
+    if (!sim?.tireBarriers?.tires || !this.tireMesh) return;
+    const tires = sim.tireBarriers.tires;
+    if (tires.length !== this.tireCount) {
+      this.setupTireBarriers(sim);
+      return;
+    }
+
+    let updated = false;
+    for (let i = 0; i < tires.length; i++) {
+      const t = tires[i];
+      if (!t.sleeping || t.needsRenderUpdate) {
+        this.tireDummy.position.set(t.x, -t.y, t.z);
+        this.tireDummy.rotation.set(t.pitch || 0, t.roll || 0, -(t.yaw || 0));
+        this.tireDummy.scale.set(1, 1, 1);
+        this.tireDummy.updateMatrix();
+        this.tireMesh.setMatrixAt(i, this.tireDummy.matrix);
+        t.needsRenderUpdate = false;
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      this.tireMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  setTrack(track) {
+    this.track = track;
+    if (this.terrainMesh) {
+      this.scene.remove(this.terrainMesh);
+      this.terrainMesh.geometry.dispose();
+      this.terrainMesh.material.dispose();
+    }
+    if (this.trackMesh) {
+      this.scene.remove(this.trackMesh);
+      this.trackMesh.geometry.dispose();
+      this.trackMesh.material.dispose();
+    }
+    if (this.decorGroup) {
+      this.scene.remove(this.decorGroup);
+    }
+    if (this.treeGroup) {
+      this.scene.remove(this.treeGroup);
+    }
+    if (this.tireGroup) {
+      this.scene.remove(this.tireGroup);
+    }
+
+    this.setupTerrain();
+    this.setupTrack();
+    this.setupTrees();
+    this.setupTireBarriers();
+    this.resetCamera();
+  }
+
   setupBursts() {
     this.maxBurstSparks = 400;
     this.burstSparks = [];
@@ -4065,6 +4239,9 @@ export class Renderer3D {
     } else {
       this.playerCar.visible = false;
     }
+
+    // Update Dynamic Tire Barrier Physics Transforms
+    this.updateTireBarriers(sim);
 
     // Update Persistent Rubber Skid Marks
     this.updateSkidmarks(sim);

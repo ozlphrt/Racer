@@ -648,6 +648,31 @@ export class SpatialAudioEngine {
       }
     } catch {}
   }
+
+  playTireThump(intensity = 1.0) {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime;
+    if (this._lastTireSoundTime && now - this._lastTireSoundTime < 0.08) return;
+    this._lastTireSoundTime = now;
+
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(32, now + 0.16);
+
+      const vol = Math.min(0.42, 0.18 * (intensity / 30));
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(vol, now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.24);
+    } catch {}
+  }
 }
 
 export const audio = new SpatialAudioEngine();

@@ -344,6 +344,7 @@ export class Renderer {
 
     this.drawTerrain();
     this.drawTrack();
+    this.drawTireBarriers(sim);
 
     // Draw tire skid marks on asphalt
     this.updateSkidmarks(sim);
@@ -685,6 +686,45 @@ export class Renderer {
     ctx.lineWidth = 4;
     ctx.stroke(path);
     ctx.globalAlpha = 1;
+  }
+
+  drawTireBarriers(sim) {
+    if (!sim?.tireBarriers?.tires || sim.tireBarriers.tires.length === 0) return;
+    const ctx = this.ctx;
+    const tires = sim.tireBarriers.tires;
+
+    ctx.save();
+    for (let i = 0; i < tires.length; i++) {
+      const t = tires[i];
+      // 1. Soft ground contact shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.arc(t.x + 0.4, t.y + 0.5, t.radius * 1.05, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Outer Rubber Tread with FIA color coding
+      const r = Math.round(t.color.r * 255);
+      const g = Math.round(t.color.g * 255);
+      const b = Math.round(t.color.b * 255);
+      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. Inner Center Void / Rim Hub
+      ctx.fillStyle = '#111620';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.radius * 0.46, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 4. Subtle Outer Bead Highlight
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.lineWidth = 0.35;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.radius * 0.85, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   drawGhosts(cars, leader, carRankMap = null, visibleBadgeSet = null) {
