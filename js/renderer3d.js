@@ -1659,7 +1659,7 @@ export class Renderer3D {
     // Front Display (Facing incoming cars upstream)
     const frontDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.6, plateHeight - 0.6);
     frontDisplayGeo.rotateX(Math.PI / 2);
-    frontDisplayGeo.rotateY(Math.PI);
+    frontDisplayGeo.rotateZ(Math.PI);
     const frontDisplay = new THREE.Mesh(frontDisplayGeo, displayMat);
     frontDisplay.position.copy(scoreboardCenter);
     frontDisplay.position.add(new THREE.Vector3(-tx * (plateDepth * 0.5 + 0.06), -ty * (plateDepth * 0.5 + 0.06), 0));
