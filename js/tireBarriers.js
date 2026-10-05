@@ -319,18 +319,18 @@ export class TireBarrierSystem {
                 const nx = dx / dist;
                 const ny = dy / dist;
 
-                // Momentum transfer into tire
+                // Heavy tyre inertia & momentum transfer (stays grounded rather than flying into the sky)
                 const impactSpeed = Math.max(18, carSpeed);
-                const force = impactSpeed * 0.72 + 12;
+                const force = impactSpeed * 0.38 + 5.0;
 
-                tire.vx += nx * force + (Math.random() - 0.5) * 6;
-                tire.vy += ny * force + (Math.random() - 0.5) * 6;
-                // Vertical launch: Tires pop and fly upwards upon violent impact!
-                tire.vz += Math.min(32, impactSpeed * 0.28 + 5.0 + Math.random() * 6);
+                tire.vx += nx * force + (Math.random() - 0.5) * 3;
+                tire.vy += ny * force + (Math.random() - 0.5) * 3;
+                // Low, heavy realistic vertical hop and topple
+                tire.vz += Math.min(2.4, 0.5 + Math.random() * 1.4);
 
-                tire.vyaw += (Math.random() - 0.5) * 16;
-                tire.vpitch += (Math.random() - 0.5) * 12;
-                tire.vroll += (Math.random() - 0.5) * 12;
+                tire.vyaw += (Math.random() - 0.5) * 8;
+                tire.vpitch += (Math.random() - 0.5) * 6;
+                tire.vroll += (Math.random() - 0.5) * 6;
                 tire.sleeping = false;
                 tire.displaced = true;
                 tire.despawnTimer = 3.0; // Clean up off track in exactly 3 seconds
@@ -338,10 +338,15 @@ export class TireBarrierSystem {
                 tire.needsRenderUpdate = true;
                 this.hasActiveTires = true;
 
-                // Car impact cushioning: absorbs energy and pushes car back slightly
-                car.vx *= 0.82;
-                car.vy *= 0.82;
-                car.speed *= 0.82;
+                // Retires / crashes the car upon violent tyre barrier collision
+                if (car.alive && !car.crashed) {
+                  car.die('crash');
+                }
+
+                // Car absorbs barrier impact energy and decelerates
+                car.vx *= 0.65;
+                car.vy *= 0.65;
+                car.speed *= 0.65;
 
                 onImpact?.(car, impactSpeed);
               }
@@ -355,10 +360,10 @@ export class TireBarrierSystem {
     if (!this.hasActiveTires) return;
     let anyMoving = false;
 
-    const gravity = 52.0;
+    const gravity = 95.0; // Heavy rubber mass stays grounded
     const groundLevel = 0.05; // Ground surface elevation
-    const linDamping = Math.pow(0.86, clampedDt * 60);
-    const rotDamping = Math.pow(0.88, clampedDt * 60);
+    const linDamping = Math.pow(0.82, clampedDt * 60);
+    const rotDamping = Math.pow(0.85, clampedDt * 60);
 
     const activeTires = [];
 
@@ -426,24 +431,24 @@ export class TireBarrierSystem {
       const extentZ = Math.sqrt(r * r * (1.0 - nz * nz) + h * h * (nz * nz));
       const minZ = groundLevel + extentZ;
 
-      // Ground collision & bounce
+      // Ground collision & dead-thud rubber bounce
       if (tire.z <= minZ) {
         tire.z = minZ;
-        tire.vz = -tire.vz * 0.32; // Rubber bounce restitution
-        if (Math.abs(tire.vz) < 0.7) tire.vz = 0;
+        tire.vz = -tire.vz * 0.16; // Heavy rubber dead restitution
+        if (Math.abs(tire.vz) < 0.4) tire.vz = 0;
 
         // Ground friction scrub & rotational damping
-        tire.vx *= 0.90;
-        tire.vy *= 0.90;
-        tire.vyaw *= 0.88;
-        tire.vpitch *= 0.80;
-        tire.vroll *= 0.80;
+        tire.vx *= 0.86;
+        tire.vy *= 0.86;
+        tire.vyaw *= 0.82;
+        tire.vpitch *= 0.75;
+        tire.vroll *= 0.75;
 
         // When moving slowly, natural gravity topples and settles tilted tires flat onto the ground
         const planarSpeedSq = tire.vx * tire.vx + tire.vy * tire.vy;
         if (planarSpeedSq < 28.0) {
-          tire.pitch *= 0.90;
-          tire.roll *= 0.90;
+          tire.pitch *= 0.88;
+          tire.roll *= 0.88;
         }
       }
 
@@ -513,12 +518,12 @@ export class TireBarrierSystem {
               const dot = relVx * normX + relVy * normY;
 
               if (dot > 0) {
-                const imp = dot * 0.45;
+                const imp = dot * 0.40;
                 t1.vx -= normX * imp;
                 t1.vy -= normY * imp;
                 t2.vx += normX * imp;
                 t2.vy += normY * imp;
-                t2.vz += Math.abs(imp) * 0.25;
+                t2.vz += Math.min(1.2, Math.abs(imp) * 0.08);
                 t2.sleeping = false;
                 t2.displaced = true;
                 if (!t2.despawnTimer) t2.despawnTimer = 3.0;
