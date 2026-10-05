@@ -3680,9 +3680,9 @@ export class Renderer3D {
     this.tireColor = new THREE.Color();
 
     // FIA Standard safety protection tyre (Extruded ring with distinct hollow center & rounded rubber tread)
-    const outerRadius = 1.40;
-    const innerRadius = 0.65;
-    const tyreHeight = 0.88;
+    const outerRadius = 2.10;
+    const innerRadius = 0.98;
+    const tyreHeight = 1.32;
 
     // Fast, lightweight hollow tire geometry (40 vertices instead of 1,728)
     const segments = 10;

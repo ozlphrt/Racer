@@ -72,11 +72,11 @@ export class TireBarrierSystem {
       return s / 4294967296;
     };
 
-    const outerRadius = 1.40;
-    const tireDiameter = outerRadius * 2.0; // 2.80m
-    const stackSpacing = tireDiameter;      // Stacks touching each other: 2.80m center-to-center
-    const rowDepth = outerRadius * Math.sqrt(3); // 2.425m for close triangular packing
-    const baseMargin = 4.2; // Runoff distance outside the kerb/track edge
+    const outerRadius = 2.10;
+    const tireDiameter = outerRadius * 2.0; // 4.20m
+    const stackSpacing = tireDiameter;      // Stacks touching each other: 4.20m center-to-center
+    const rowDepth = outerRadius * Math.sqrt(3); // 3.637m for close triangular packing
+    const baseMargin = 4.6; // Runoff distance outside the kerb/track edge
 
     for (let c = 0; c < kerbRuns.length; c++) {
       const run = kerbRuns[c];
@@ -197,8 +197,7 @@ export class TireBarrierSystem {
             const pitch = (rand() - 0.5) * 0.05;
             const roll = (rand() - 0.5) * 0.05;
             const yaw = st.yaw + (rand() - 0.5) * 0.25;
-            const z = 0.44 + tier * 0.88;
-
+            const z = 0.66 + tier * 1.32;
             const tireColor = tier === stackTiers - 1 && rand() < 0.20 ? colors[2] : stackBaseColor;
             const posX = stackX + jitterX;
             const posY = stackY + jitterY;
@@ -227,7 +226,7 @@ export class TireBarrierSystem {
               basePitch: pitch,
               baseRoll: roll,
               radius: outerRadius,
-              height: 0.88,
+              height: 1.32,
               mass: 1.0,
               color: tireColor,
               sleeping: true,
@@ -384,8 +383,8 @@ export class TireBarrierSystem {
       const cosP = Math.cos(tire.pitch);
       const cosR = Math.cos(tire.roll);
       const nz = Math.abs(cosP * cosR); // Vertical alignment of tire's cylinder axis
-      const r = tire.radius || 1.40;
-      const h = (tire.height || 0.88) * 0.5;
+      const r = tire.radius || 2.10;
+      const h = (tire.height || 1.32) * 0.5;
       const extentZ = Math.sqrt(r * r * (1.0 - nz * nz) + h * h * (nz * nz));
       const minZ = groundLevel + extentZ;
 
