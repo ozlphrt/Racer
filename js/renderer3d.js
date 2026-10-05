@@ -1794,6 +1794,8 @@ export class Renderer3D {
           metalness: origMetalness,
         });
 
+        mat.customProgramCacheKey = () => `f1_body_car_${isPlayer ? 'player' : carIdx}_${carNumber}`;
+
         mat.onBeforeCompile = (shader) => {
           shader.uniforms.decalTex = { value: numTex };
           shader.vertexShader = shader.vertexShader.replace(
@@ -1835,46 +1837,40 @@ export class Renderer3D {
               }
             #endif
 
-            // Surface Decal Wrapping directly onto the 3D bodywork contours
+            // Surface Decal Wrapping directly onto the 3D bodywork curvature
             if (vIsBody > 0.5) {
               vec4 decal = vec4(0.0);
-              // 1. Nose Cone top surface (conforms to hood curvature):
-              if (vModelPos.x >= 0.70 && vModelPos.x <= 1.25 && abs(vModelPos.z) <= 0.16 && vModelPos.y >= 0.35) {
-                float uNose = (vModelPos.z - (-0.16)) / 0.32;
-                float vNose = (vModelPos.x - 0.70) / 0.55;
+
+              // 1. Nose Cone top surface (conforms smoothly to curved 3D monocoque hood):
+              if (vModelPos.x >= 0.65 && vModelPos.x <= 1.45 && abs(vModelPos.z) <= 0.22 && vModelPos.y >= 0.28) {
+                float uNose = clamp((0.22 - vModelPos.z) / 0.44, 0.0, 1.0);
+                float vNose = clamp((vModelPos.x - 0.65) / 0.80, 0.0, 1.0);
                 vec4 s = texture2D(decalTex, vec2(uNose, vNose));
-                if (s.a > 0.05) decal = s;
+                if (s.a > 0.02) decal = s;
               }
-              // 2. Shark Fin Left side (conforms to vertical fin surface):
-              else if (vModelPos.x >= 0.35 && vModelPos.x <= 0.82 && vModelPos.y >= 0.65 && vModelPos.y <= 0.90 && vModelPos.z >= 0.002) {
-                float uFinL = (0.82 - vModelPos.x) / 0.47;
-                float vFinL = (vModelPos.y - 0.65) / 0.25;
+              // 2. Shark Fin Left side (conforms smoothly to vertical aero fin surface):
+              else if (vModelPos.x >= -0.85 && vModelPos.x <= 0.15 && vModelPos.y >= 0.46 && vModelPos.y <= 0.74 && vModelPos.z >= 0.001) {
+                float uFinL = clamp((0.15 - vModelPos.x) / 1.00, 0.0, 1.0);
+                float vFinL = clamp((vModelPos.y - 0.46) / 0.28, 0.0, 1.0);
                 vec4 s = texture2D(decalTex, vec2(uFinL, vFinL));
-                if (s.a > 0.05) decal = s;
+                if (s.a > 0.02) decal = s;
               }
               // 3. Shark Fin Right side:
-              else if (vModelPos.x >= 0.35 && vModelPos.x <= 0.82 && vModelPos.y >= 0.65 && vModelPos.y <= 0.90 && vModelPos.z <= -0.002) {
-                float uFinR = (vModelPos.x - 0.35) / 0.47;
-                float vFinR = (vModelPos.y - 0.65) / 0.25;
+              else if (vModelPos.x >= -0.85 && vModelPos.x <= 0.15 && vModelPos.y >= 0.46 && vModelPos.y <= 0.74 && vModelPos.z <= -0.001) {
+                float uFinR = clamp((vModelPos.x - (-0.85)) / 1.00, 0.0, 1.0);
+                float vFinR = clamp((vModelPos.y - 0.46) / 0.28, 0.0, 1.0);
                 vec4 s = texture2D(decalTex, vec2(uFinR, vFinR));
-                if (s.a > 0.05) decal = s;
+                if (s.a > 0.02) decal = s;
               }
-              // 4. Sidepod Left side (conforms to outer sidepod curvature):
-              else if (vModelPos.x >= -0.20 && vModelPos.x <= 0.60 && vModelPos.y >= 0.22 && vModelPos.y <= 0.38 && vModelPos.z >= 0.28) {
-                float uPodL = (0.60 - vModelPos.x) / 0.80;
-                float vPodL = (vModelPos.y - 0.22) / 0.16;
-                vec4 s = texture2D(decalTex, vec2(uPodL, vPodL));
-                if (s.a > 0.05) decal = s;
-              }
-              // 5. Sidepod Right side:
-              else if (vModelPos.x >= -0.20 && vModelPos.x <= 0.60 && vModelPos.y >= 0.22 && vModelPos.y <= 0.38 && vModelPos.z <= -0.28) {
-                float uPodR = (vModelPos.x - (-0.20)) / 0.80;
-                float vPodR = (vModelPos.y - 0.22) / 0.16;
-                vec4 s = texture2D(decalTex, vec2(uPodR, vPodR));
-                if (s.a > 0.05) decal = s;
+              // 4. Rear Wing DRS Flap:
+              else if (vModelPos.x >= -1.27 && vModelPos.x <= -0.71 && vModelPos.y >= 0.35 && abs(vModelPos.z) <= 0.45) {
+                float uWing = clamp((0.45 - vModelPos.z) / 0.90, 0.0, 1.0);
+                float vWing = clamp((vModelPos.y - 0.35) / 0.25, 0.0, 1.0);
+                vec4 s = texture2D(decalTex, vec2(uWing, vWing));
+                if (s.a > 0.02) decal = s;
               }
 
-              if (decal.a > 0.05) {
+              if (decal.a > 0.02) {
                 diffuseColor.rgb = mix(diffuseColor.rgb, decal.rgb, decal.a);
               }
             }`
@@ -1886,47 +1882,6 @@ export class Renderer3D {
     });
 
     group.add(model);
-
-    // High-visibility, prominent 3D car number decal plates on the F1 model
-    const decalMat = new THREE.MeshBasicMaterial({
-      map: numTex,
-      transparent: true,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -3,
-    });
-
-    // 1. Nose Cone Decal (Top / Front camera view)
-    const noseGeo = new THREE.PlaneGeometry(4.4, 2.4);
-    const noseMesh = new THREE.Mesh(noseGeo, decalMat);
-    noseMesh.position.set(6.4, 0, 2.22);
-    noseMesh.rotation.set(0, 0.14, -Math.PI / 2);
-    noseMesh.renderOrder = 900;
-    group.add(noseMesh);
-
-    // 2. Left Shark Fin Decal (Side / Trackside camera view)
-    const finGeo = new THREE.PlaneGeometry(3.6, 1.9);
-    const finLeftMesh = new THREE.Mesh(finGeo, decalMat);
-    finLeftMesh.position.set(-1.0, 0.24, 3.8);
-    finLeftMesh.rotation.set(Math.PI / 2, 0, 0);
-    finLeftMesh.renderOrder = 900;
-    group.add(finLeftMesh);
-
-    // 3. Right Shark Fin Decal (Side / Trackside camera view)
-    const finRightMesh = new THREE.Mesh(finGeo, decalMat);
-    finRightMesh.position.set(-1.0, -0.24, 3.8);
-    finRightMesh.rotation.set(-Math.PI / 2, 0, Math.PI);
-    finRightMesh.renderOrder = 900;
-    group.add(finRightMesh);
-
-    // 4. Rear Wing DRS Decal (Rear / Chase camera view)
-    const rearGeo = new THREE.PlaneGeometry(4.8, 1.9);
-    const rearMesh = new THREE.Mesh(rearGeo, decalMat);
-    rearMesh.position.set(-8.9, 0, 4.12);
-    rearMesh.rotation.set(0, -0.22, -Math.PI / 2);
-    rearMesh.renderOrder = 900;
-    group.add(rearMesh);
-
     return group;
   }
 
