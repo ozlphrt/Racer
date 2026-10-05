@@ -2404,8 +2404,6 @@ export class Renderer3D {
     this.treeGroup = new THREE.Group();
     const t = this.track;
     const b = t.bounds;
-    const minSafeDist = t.half + 40;
-    const minSafeDistSq = minSafeDist * minSafeDist;
 
     // Deterministic PRNG based on track geometry
     let s = (Math.round(b.minX + b.minY + b.w * 13 + b.h * 17) & 0x7fffffff) || 48271;
@@ -2414,14 +2412,15 @@ export class Renderer3D {
       return s / 4294967296;
     };
 
-    const pad = 260;
+    // Expand area to populate all surrounding hills and rolling countryside
+    const pad = Math.max(1200, Math.max(b.w, b.h) * 0.75);
     const minX = b.minX - pad;
     const maxX = b.maxX + pad;
     const minY = b.minY - pad;
     const maxY = b.maxY + pad;
 
-    // 1. Organic cluster centers (groves) with diverse species biomes
-    const numClusters = 10 + Math.floor(rand() * 6);
+    // 1. Organic cluster centers (groves) across the surrounding terrain
+    const numClusters = 28 + Math.floor(rand() * 12);
     const clusterCenters = [];
     for (let c = 0; c < numClusters; c++) {
       // Each grove has a dominant tree species archetype (0: Pine, 1: Oak, 2: Cypress, 3: Birch)
@@ -2429,8 +2428,8 @@ export class Renderer3D {
       clusterCenters.push({
         cx: minX + rand() * (maxX - minX),
         cy: minY + rand() * (maxY - minY),
-        radius: 45 + rand() * 85,
-        count: 3 + Math.floor(rand() * 5),
+        radius: 60 + rand() * 140,
+        count: 6 + Math.floor(rand() * 10),
         groveType,
       });
     }
@@ -2451,8 +2450,8 @@ export class Renderer3D {
       }
     }
 
-    // Standalone trees for sparse natural meadow scattering
-    const standalone = 22 + Math.floor(rand() * 10);
+    // Standalone trees for sparse natural meadow scattering on hill slopes
+    const standalone = 80 + Math.floor(rand() * 40);
     for (let i = 0; i < standalone; i++) {
       candidates.push({
         x: minX + rand() * (maxX - minX),
@@ -2471,62 +2470,65 @@ export class Renderer3D {
       const { x, y, species } = cand;
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
 
-      const nearestIdx = t.nearestIndex(x, y, 0, t.N / 2, t.N / 2);
-      if (t.lateralDistSq(x, y, nearestIdx) > minSafeDistSq) {
-        let tooClose = false;
-        for (const ex of allPlaced) {
-          const d2 = (x - ex.x) ** 2 + (y - ex.y) ** 2;
-          if (d2 < (ex.r * 0.75 + 11) ** 2) {
-            tooClose = true;
-            break;
-          }
+      // In Three.js world space, the point is at (x, -y).
+      const groundZ = this.getTerrainHeight(x, -y);
+
+      // Trees should ONLY grow where the terrain starts (above ground zero, Z > 0.2m)
+      if (groundZ <= 0.2) continue;
+
+      let tooClose = false;
+      for (const ex of allPlaced) {
+        const d2 = (x - ex.x) ** 2 + (y - ex.y) ** 2;
+        if (d2 < (ex.r * 0.75 + 11) ** 2) {
+          tooClose = true;
+          break;
         }
-        if (!tooClose) {
-          const roll = rand();
-          let r;
-          if (roll < 0.25) r = 8 + rand() * 5;
-          else if (roll < 0.75) r = 14 + rand() * 8;
-          else r = 22 + rand() * 10;
+      }
+      if (!tooClose) {
+        const roll = rand();
+        let r;
+        if (roll < 0.25) r = 8 + rand() * 5;
+        else if (roll < 0.75) r = 14 + rand() * 8;
+        else r = 22 + rand() * 10;
 
-          const yaw = rand() * Math.PI * 2;
-          const leanX = (rand() - 0.5) * 0.08;
-          const leanY = (rand() - 0.5) * 0.08;
-          const heightMult = 0.85 + rand() * 0.35;
+        const yaw = rand() * Math.PI * 2;
+        const leanX = (rand() - 0.5) * 0.08;
+        const leanY = (rand() - 0.5) * 0.08;
+        const heightMult = 0.85 + rand() * 0.35;
 
-          let hue, sat, lit;
-          if (species === 0) {
-            // Pine: Deep Nordic forest / Alpine emerald needle tones
-            hue = 0.36 + (rand() - 0.5) * 0.06;
-            sat = 0.58 + rand() * 0.18;
-            lit = 0.17 + rand() * 0.08;
-            const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit };
-            placedPines.push(treeData);
-            allPlaced.push(treeData);
-          } else if (species === 1) {
-            // Broadleaf Oak: Lush leafy summer canopy
-            hue = 0.28 + (rand() - 0.5) * 0.08;
-            sat = 0.52 + rand() * 0.18;
-            lit = 0.22 + rand() * 0.10;
-            const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit };
-            placedOaks.push(treeData);
-            allPlaced.push(treeData);
-          } else if (species === 2) {
-            // Columnar Cypress: Dusty Mediterranean olive & warm sage
-            hue = 0.32 + (rand() - 0.5) * 0.05;
-            sat = 0.42 + rand() * 0.15;
-            lit = 0.19 + rand() * 0.07;
-            const treeData = { x, y, r, yaw, leanX, leanY, heightMult: heightMult * 1.35, hue, sat, lit };
-            placedCypresses.push(treeData);
-            allPlaced.push(treeData);
-          } else {
-            // Birch / Blossom: Golden amber & autumn ochre leaves
-            hue = 0.09 + rand() * 0.08;
-            sat = 0.72 + rand() * 0.18;
-            lit = 0.36 + rand() * 0.12;
-            const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit };
-            placedBirches.push(treeData);
-            allPlaced.push(treeData);
-          }
+        let hue, sat, lit;
+        if (species === 0) {
+          // Pine: Deep Nordic forest / Alpine emerald needle tones
+          hue = 0.36 + (rand() - 0.5) * 0.06;
+          sat = 0.58 + rand() * 0.18;
+          lit = 0.17 + rand() * 0.08;
+          const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ };
+          placedPines.push(treeData);
+          allPlaced.push(treeData);
+        } else if (species === 1) {
+          // Broadleaf Oak: Lush leafy summer canopy
+          hue = 0.28 + (rand() - 0.5) * 0.08;
+          sat = 0.52 + rand() * 0.18;
+          lit = 0.22 + rand() * 0.10;
+          const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ };
+          placedOaks.push(treeData);
+          allPlaced.push(treeData);
+        } else if (species === 2) {
+          // Columnar Cypress: Dusty Mediterranean olive & warm sage
+          hue = 0.32 + (rand() - 0.5) * 0.05;
+          sat = 0.42 + rand() * 0.15;
+          lit = 0.19 + rand() * 0.07;
+          const treeData = { x, y, r, yaw, leanX, leanY, heightMult: heightMult * 1.35, hue, sat, lit, groundZ };
+          placedCypresses.push(treeData);
+          allPlaced.push(treeData);
+        } else {
+          // Birch / Blossom: Golden amber & autumn ochre leaves
+          hue = 0.09 + rand() * 0.08;
+          sat = 0.72 + rand() * 0.18;
+          lit = 0.36 + rand() * 0.12;
+          const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ };
+          placedBirches.push(treeData);
+          allPlaced.push(treeData);
         }
       }
     }
@@ -2551,10 +2553,9 @@ export class Renderer3D {
       const cone3Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
 
       for (let i = 0; i < count; i++) {
-        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedPines[i];
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedPines[i];
         const trunkH = (r * 0.75 + 4) * heightMult;
         const trunkR = Math.max(1.0, r * 0.12);
-        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
         dummy.position.set(x, -y, groundZ + trunkH / 2);
@@ -2626,10 +2627,9 @@ export class Renderer3D {
       const oakRightInst = new THREE.InstancedMesh(crownGeo, leafMat, count);
 
       for (let i = 0; i < count; i++) {
-        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedOaks[i];
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedOaks[i];
         const trunkH = (r * 0.65 + 3.5) * heightMult;
         const trunkR = Math.max(1.3, r * 0.16);
-        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
         dummy.position.set(x, -y, groundZ + trunkH / 2);
@@ -2706,10 +2706,9 @@ export class Renderer3D {
       const cypTopInst = new THREE.InstancedMesh(topGeo, leafMat, count);
 
       for (let i = 0; i < count; i++) {
-        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedCypresses[i];
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedCypresses[i];
         const trunkH = (r * 0.4 + 2.5) * heightMult;
         const trunkR = Math.max(0.9, r * 0.08);
-        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
         dummy.position.set(x, -y, groundZ + trunkH / 2);
@@ -2768,10 +2767,9 @@ export class Renderer3D {
       const birchCrown2Inst = new THREE.InstancedMesh(crownGeo, leafMat, count);
 
       for (let i = 0; i < count; i++) {
-        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit } = placedBirches[i];
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedBirches[i];
         const trunkH = (r * 0.85 + 4) * heightMult;
         const trunkR = Math.max(0.9, r * 0.11);
-        const groundZ = this.getTerrainHeight(x, y);
 
         // Trunk
         dummy.position.set(x, -y, groundZ + trunkH / 2);
