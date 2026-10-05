@@ -329,11 +329,12 @@
 
   <!-- Hyper-Speed Headless Training & Neural Hub Modal -->
   <div class="hyper-modal-backdrop" id="hyper-modal" hidden>
-    <div class="hyper-modal glass">
+    <div class="hyper-modal">
+      <!-- Modal Header -->
       <div class="hyper-modal-header">
         <div class="hyper-modal-title">
           <span class="hyper-icon">
-            <svg class="ctrl-icon-brain" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
               <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
               <path d="M12 8.5h-2.5"></path>
@@ -345,23 +346,44 @@
             </svg>
           </span>
           <div>
-            <h3>AI Neural &amp; Training Hub</h3>
-            <p class="tagline">Neuroevolution · Genetic Algorithms &amp; Neural Analytics</p>
+            <div class="hyper-title-row">
+              <h3>NEURAL TRAINING HUB</h3>
+              <span class="hub-version-badge">HEADLESS v2.4</span>
+            </div>
+            <p class="tagline">High-Throughput Evolutionary Simulation · Multi-Threaded Physics</p>
           </div>
         </div>
-        <button class="btn btn-ghost" id="btn-hyper-close" type="button" aria-label="Close modal">✕</button>
+        <button class="btn-hub-close" id="btn-hyper-close" type="button" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       <!-- Hub Section Navigation Tabs -->
       <div class="hub-nav-tabs" role="tablist">
         <button class="btn-hub-tab active" id="hub-tab-btn-train" type="button" role="tab" aria-selected="true">
-          ⚡ Train Yourself
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span>Training Lab</span>
         </button>
         <button class="btn-hub-tab" id="hub-tab-btn-storage" type="button" role="tab" aria-selected="false">
-          💾 Save &amp; Load Generations
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>Model Storage</span>
         </button>
         <button class="btn-hub-tab" id="hub-tab-btn-analytics" type="button" role="tab" aria-selected="false">
-          📊 Brain &amp; Analytics
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>Telemetry &amp; Brain</span>
         </button>
       </div>
 
@@ -369,78 +391,172 @@
         <!-- ================= SECTION 1: TRAIN YOURSELF ================= -->
         <div class="hub-pane active" id="hub-pane-train">
           <div class="hyper-setup" id="hyper-setup-view">
-            <p class="hyper-desc">Bypasses WebGL &amp; canvas rendering to run neuroevolution <strong>30× to 80× faster</strong> than real-time.</p>
-            
-            <!-- Target Type Mode Tabs -->
-            <div class="hyper-mode-tabs" role="tablist">
-              <button class="btn-hyper-tab active" id="tab-hyper-gens" type="button" role="tab" aria-selected="true">
-                🔢 By Generations
-              </button>
-              <button class="btn-hyper-tab" id="tab-hyper-time" type="button" role="tab" aria-selected="false">
-                ⏱️ By Time Duration
-              </button>
-            </div>
-
-            <!-- Section 1A: By Generations -->
-            <div class="hyper-tab-pane" id="pane-hyper-gens">
-              <label class="hyper-label">Quick Generation Presets:</label>
-              <div class="hyper-preset-btns" id="hyper-gen-presets">
-                <button class="btn btn-chip" data-gens="25">+25 Gens</button>
-                <button class="btn btn-chip active" data-gens="50">+50 Gens</button>
-                <button class="btn btn-chip" data-gens="100">+100 Gens</button>
-                <button class="btn btn-chip" data-gens="250">+250 Gens</button>
-                <button class="btn btn-chip" data-gens="500">+500 Gens</button>
-                <button class="btn btn-chip" data-gens="1000">+1000 Gens</button>
+            <!-- Engine Spec Banner -->
+            <div class="hub-engine-specs">
+              <div class="hub-spec-item">
+                <span class="hub-spec-val">80 CARS</span>
+                <span class="hub-spec-label">POPULATION</span>
               </div>
-              <div class="slider-row" style="margin-top: 14px;">
-                <label for="hyper-target-input">Custom Generations to Add:</label>
-                <input type="number" id="hyper-target-input" class="select-input" min="1" max="10000" value="50" style="width: 120px; text-align: right;">
+              <div class="hub-spec-sep"></div>
+              <div class="hub-spec-item">
+                <span class="hub-spec-val">30×–80×</span>
+                <span class="hub-spec-label">ACCELERATION</span>
+              </div>
+              <div class="hub-spec-sep"></div>
+              <div class="hub-spec-item">
+                <span class="hub-spec-val">60 Hz</span>
+                <span class="hub-spec-label">PHYSICS RATE</span>
               </div>
             </div>
 
-            <!-- Section 1B: By Time Duration -->
-            <div class="hyper-tab-pane" id="pane-hyper-time" hidden>
-              <label class="hyper-label">Quick Time Presets:</label>
-              <div class="hyper-preset-btns" id="hyper-time-presets">
-                <button class="btn btn-chip active" data-mins="1">1 Min</button>
-                <button class="btn btn-chip" data-mins="5">5 Mins</button>
-                <button class="btn btn-chip" data-mins="15">15 Mins</button>
-                <button class="btn btn-chip" data-mins="30">30 Mins</button>
-                <button class="btn btn-chip" data-mins="60">1 Hour</button>
-                <button class="btn btn-chip" data-mins="120">2 Hours</button>
-                <button class="btn btn-chip" data-mins="360">6 Hours</button>
+            <!-- Configuration Card -->
+            <div class="hub-config-card">
+              <!-- Target Type Mode Switcher -->
+              <div class="hyper-mode-tabs" role="tablist">
+                <button class="btn-hyper-tab active" id="tab-hyper-gens" type="button" role="tab" aria-selected="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="9" x2="20" y2="9"></line>
+                    <line x1="4" y1="15" x2="20" y2="15"></line>
+                    <line x1="10" y1="3" x2="8" y2="21"></line>
+                    <line x1="16" y1="3" x2="14" y2="21"></line>
+                  </svg>
+                  <span>Generations Target</span>
+                </button>
+                <button class="btn-hyper-tab" id="tab-hyper-time" type="button" role="tab" aria-selected="false">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <span>Time Duration Target</span>
+                </button>
               </div>
-              <div class="hyper-time-inputs-row" style="margin-top: 14px;">
-                <div class="time-input-field">
-                  <label for="hyper-time-hours">Hours</label>
-                  <input type="number" id="hyper-time-hours" class="select-input" min="0" max="72" value="0" style="width: 85px; text-align: right;">
+
+              <!-- Section 1A: By Generations -->
+              <div class="hyper-tab-pane" id="pane-hyper-gens">
+                <div class="hub-field-header">
+                  <span class="hyper-label">Quick Generation Presets</span>
+                  <span class="hub-field-sub">Select amount to simulate</span>
                 </div>
-                <div class="time-input-field">
-                  <label for="hyper-time-mins">Minutes</label>
-                  <input type="number" id="hyper-time-mins" class="select-input" min="0" max="59" value="1" style="width: 85px; text-align: right;">
+                <div class="hyper-preset-grid" id="hyper-gen-presets">
+                  <button class="btn btn-chip" data-gens="25">
+                    <span class="chip-main">+25</span>
+                    <span class="chip-sub">GENS</span>
+                  </button>
+                  <button class="btn btn-chip active" data-gens="50">
+                    <span class="chip-main">+50</span>
+                    <span class="chip-sub">GENS</span>
+                  </button>
+                  <button class="btn btn-chip" data-gens="100">
+                    <span class="chip-main">+100</span>
+                    <span class="chip-sub">GENS</span>
+                  </button>
+                  <button class="btn btn-chip" data-gens="250">
+                    <span class="chip-main">+250</span>
+                    <span class="chip-sub">GENS</span>
+                  </button>
+                  <button class="btn btn-chip" data-gens="500">
+                    <span class="chip-main">+500</span>
+                    <span class="chip-sub">GENS</span>
+                  </button>
+                  <button class="btn btn-chip" data-gens="1000">
+                    <span class="chip-main">+1000</span>
+                    <span class="chip-sub">GENS</span>
+                  </button>
                 </div>
-                <div class="time-input-field">
-                  <label for="hyper-time-secs">Seconds</label>
-                  <input type="number" id="hyper-time-secs" class="select-input" min="0" max="59" value="0" style="width: 85px; text-align: right;">
+
+                <div class="hub-stepper-card">
+                  <div class="hub-stepper-label">
+                    <span class="stepper-title">Custom Generations</span>
+                    <span class="stepper-desc">Simulate continuous generations headless</span>
+                  </div>
+                  <div class="hub-stepper-controls">
+                    <button class="btn-stepper" id="btn-step-dec" type="button" aria-label="Decrease generations">−</button>
+                    <input type="number" id="hyper-target-input" class="hub-num-input" min="1" max="10000" value="50">
+                    <button class="btn-stepper" id="btn-step-inc" type="button" aria-label="Increase generations">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 1B: By Time Duration -->
+              <div class="hyper-tab-pane" id="pane-hyper-time" hidden>
+                <div class="hub-field-header">
+                  <span class="hyper-label">Quick Duration Presets</span>
+                  <span class="hub-field-sub">Set auto-stop timer</span>
+                </div>
+                <div class="hyper-preset-grid" id="hyper-time-presets">
+                  <button class="btn btn-chip active" data-mins="1">
+                    <span class="chip-main">1</span>
+                    <span class="chip-sub">MIN</span>
+                  </button>
+                  <button class="btn btn-chip" data-mins="5">
+                    <span class="chip-main">5</span>
+                    <span class="chip-sub">MINS</span>
+                  </button>
+                  <button class="btn btn-chip" data-mins="15">
+                    <span class="chip-main">15</span>
+                    <span class="chip-sub">MINS</span>
+                  </button>
+                  <button class="btn btn-chip" data-mins="30">
+                    <span class="chip-main">30</span>
+                    <span class="chip-sub">MINS</span>
+                  </button>
+                  <button class="btn btn-chip" data-mins="60">
+                    <span class="chip-main">1</span>
+                    <span class="chip-sub">HOUR</span>
+                  </button>
+                  <button class="btn btn-chip" data-mins="120">
+                    <span class="chip-main">2</span>
+                    <span class="chip-sub">HOURS</span>
+                  </button>
+                </div>
+
+                <div class="hyper-time-inputs-row">
+                  <div class="time-input-field">
+                    <label for="hyper-time-hours">Hours</label>
+                    <input type="number" id="hyper-time-hours" class="hub-num-input" min="0" max="72" value="0">
+                  </div>
+                  <div class="time-input-field">
+                    <label for="hyper-time-mins">Minutes</label>
+                    <input type="number" id="hyper-time-mins" class="hub-num-input" min="0" max="59" value="1">
+                  </div>
+                  <div class="time-input-field">
+                    <label for="hyper-time-secs">Seconds</label>
+                    <input type="number" id="hyper-time-secs" class="hub-num-input" min="0" max="59" value="0">
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
-              <button class="btn btn-primary btn-large btn-hyper-start-main" id="btn-hyper-start" type="button" style="flex: 2; font-size: 15px; padding: 13px;">
-                🚀 Start Hyper Training
+            <!-- Action Buttons -->
+            <div class="hub-action-row">
+              <button class="btn-hub-primary" id="btn-hyper-start" type="button">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span>Start Fast-Forward Simulation</span>
               </button>
-              <button class="btn btn-ghost" id="btn-hyper-reset-setup" type="button" style="flex: 1; font-size: 13px; padding: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
-                ↺ Reset Learning
+              <button class="btn-hub-danger-ghost" id="btn-hyper-reset-setup" type="button" title="Reset all neural weights and start fresh from Gen 1">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <path d="M3 3v5h5"></path>
+                </svg>
+                <span>Reset Learning</span>
               </button>
             </div>
           </div>
 
+          <!-- Running Telemetry View -->
           <div class="hyper-running" id="hyper-running-view" hidden>
             <div class="hyper-progress-wrap">
               <div class="hyper-progress-labels">
-                <span>Progress: <strong id="hyper-prog-pct">0%</strong></span>
-                <span id="hyper-target-info">Gen <strong id="hyper-cur-gen">1</strong> / <span id="hyper-target-gen">50</span></span>
+                <div class="prog-label-left">
+                  <span class="prog-dot"></span>
+                  <span>SIMULATION ACTIVE</span>
+                </div>
+                <div class="prog-label-right">
+                  <span id="hyper-target-info">GEN <strong id="hyper-cur-gen">1</strong> / <span id="hyper-target-gen">50</span></span>
+                  <span class="prog-badge" id="hyper-prog-pct">0%</span>
+                </div>
               </div>
               <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill"></div></div>
             </div>
@@ -448,34 +564,42 @@
             <div class="hyper-stats-grid">
               <div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value" id="hyper-stat-time">0.0s</span></div>
               <div class="stat"><span class="stat-label">Remaining</span><span class="stat-value" id="hyper-stat-rem">–</span></div>
-              <div class="stat"><span class="stat-label">Gen Rate</span><span class="stat-value" id="hyper-stat-rate">0 gen/s</span></div>
+              <div class="stat"><span class="stat-label">Rate</span><span class="stat-value" id="hyper-stat-rate">0 gen/s</span></div>
               <div class="stat"><span class="stat-label">Gens Added</span><span class="stat-value" id="hyper-stat-added">+0</span></div>
               <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hyper-stat-fitness">–</span></div>
               <div class="stat accent-amber"><span class="stat-label">Best Lap</span><span class="stat-value" id="hyper-stat-lap">–</span></div>
               <div class="stat accent-violet"><span class="stat-label">Pop Avg Fitness</span><span class="stat-value" id="hyper-stat-pop-avg">–</span></div>
-              <div class="stat accent-violet"><span class="stat-label">Pop Median Fitness</span><span class="stat-value" id="hyper-stat-pop-median">–</span></div>
-              <div class="stat accent-green"><span class="stat-label">Survival (Fin / Crash)</span><span class="stat-value" id="hyper-stat-pop-survival">–</span></div>
+              <div class="stat accent-violet"><span class="stat-label">Pop Median</span><span class="stat-value" id="hyper-stat-pop-median">–</span></div>
+              <div class="stat accent-green"><span class="stat-label">Survival (Fin/Crash)</span><span class="stat-value" id="hyper-stat-pop-survival">–</span></div>
               <div class="stat accent-cyan"><span class="stat-label">Pace vs Avg Lap</span><span class="stat-value" id="hyper-stat-pop-pace">–</span></div>
             </div>
 
-            <div class="hyper-chart-container" style="position: relative; margin-top: 14px;">
-              <div class="hyper-chart-legend" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px; color: var(--text-dim);">
-                <div style="display: flex; gap: 10px; align-items: center;">
-                  <span><i class="sw cyan" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22d3ee; margin-right:3px; vertical-align:middle;"></i>Best (Cyan)</span>
-                  <span><i class="sw violet" style="display:inline-block; width:10px; height:2px; background:#a78bfa; margin-right:3px; vertical-align:middle;"></i>Pop Avg (Purple)</span>
-                  <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>Min-Max Band</span>
+            <div class="hyper-chart-container">
+              <div class="hyper-chart-legend">
+                <div class="legend-items">
+                  <span><i class="sw cyan"></i>Best</span>
+                  <span><i class="sw violet"></i>Pop Avg</span>
+                  <span class="band-tag"><i></i>Min-Max Band</span>
                 </div>
-                <span style="font-family: var(--mono); color: rgba(255,255,255,0.6); font-size: 10.5px;">Hover points for telemetry</span>
+                <span class="telemetry-hint">Hover points for telemetry</span>
               </div>
-              <canvas id="hyper-chart-canvas" class="chart-canvas" style="height: 140px; border-radius: 8px; width: 100%;"></canvas>
+              <canvas id="hyper-chart-canvas" class="chart-canvas"></canvas>
             </div>
 
-            <div class="btn-row" style="margin-top: 18px; display: flex; gap: 10px;">
-              <button class="btn btn-primary btn-large" id="btn-hyper-stop" type="button" style="flex: 2; padding: 12px; font-size: 14px;">
-                🏁 Stop &amp; Resume 3D View
+            <div class="hub-action-row" style="margin-top: 16px;">
+              <button class="btn-hub-primary" id="btn-hyper-stop" type="button">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16"></rect>
+                  <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+                <span>Stop &amp; Resume 3D View</span>
               </button>
-              <button class="btn btn-ghost" id="btn-hyper-reset-running" type="button" style="flex: 1; padding: 12px; font-size: 13px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;" title="Reset all neural weights and start fresh from Gen 1">
-                ↺ Reset Learning
+              <button class="btn-hub-danger-ghost" id="btn-hyper-reset-running" type="button" title="Reset all neural weights and start fresh from Gen 1">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <path d="M3 3v5h5"></path>
+                </svg>
+                <span>Reset Learning</span>
               </button>
             </div>
           </div>
@@ -485,7 +609,17 @@
         <div class="hub-pane" id="hub-pane-storage" hidden>
           <div class="hub-storage-card">
             <div class="hub-storage-header">
-              <span class="hub-badge-trophy">🏆 Champion Snapshot</span>
+              <div class="hub-badge-trophy">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                  <path d="M4 22h16"></path>
+                  <path d="M10 14.66V17c0 .55-.45 1-1 1H7"></path>
+                  <path d="M14 14.66V17c0 .55.45 1 1 1h2"></path>
+                  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+                </svg>
+                <span>Champion Neural Snapshot</span>
+              </div>
               <span class="hub-storage-meta" id="hub-storage-timestamp">Saved –</span>
             </div>
             <div class="hub-storage-body" id="hub-saved-info">
@@ -494,29 +628,58 @@
           </div>
 
           <div class="hub-storage-actions">
-            <label class="hyper-label">Generation Management:</label>
-            <div class="btn-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 12px;">
-              <button class="btn btn-primary" id="hub-btn-save" type="button">
-                💾 Save Current Gen
+            <div class="hub-field-header" style="margin-bottom: 10px;">
+              <span class="hyper-label">Model Checkpoint Controls</span>
+            </div>
+            <div class="hub-btn-grid">
+              <button class="btn-hub-action" id="hub-btn-save" type="button">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                <span>Save Checkpoint</span>
               </button>
-              <button class="btn" id="hub-btn-load" type="button">
-                ⤓ Load &amp; Seed
+              <button class="btn-hub-action" id="hub-btn-load" type="button">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Load &amp; Seed</span>
               </button>
-              <button class="btn" id="hub-btn-export" type="button">
-                ⇪ Export JSON
+              <button class="btn-hub-action" id="hub-btn-export" type="button">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>Export JSON</span>
               </button>
-              <button class="btn" id="hub-btn-import" type="button">
-                ⇩ Import JSON
+              <button class="btn-hub-action" id="hub-btn-import" type="button">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+                  <path d="M12 12v9"></path>
+                  <path d="m8 17 4 4 4-4"></path>
+                </svg>
+                <span>Import JSON</span>
               </button>
             </div>
-            <button class="btn btn-ghost" id="hub-btn-clear" type="button" style="width: 100%; margin-bottom: 14px; border-color: rgba(239, 68, 68, 0.35); color: #f87171;">
-              ✕ Clear Saved Champion &amp; Reset
+            <button class="btn-hub-danger-ghost" id="hub-btn-clear" type="button" style="width: 100%; margin-top: 10px; margin-bottom: 14px;">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Clear Saved Champion &amp; Reset</span>
             </button>
           </div>
 
           <div class="hub-storage-settings">
             <label class="switch-row" for="hub-toggle-autosave">
-              <span>Auto-save whenever a new best record is achieved</span>
+              <div class="switch-label-wrap">
+                <span class="switch-main-text">Continuous Auto-Save</span>
+                <span class="switch-sub-text">Automatically stores champion whenever an all-time record lap is broken</span>
+              </div>
               <input type="checkbox" id="hub-toggle-autosave" class="switch" checked>
             </label>
           </div>
@@ -527,10 +690,23 @@
           <!-- Neural Network Visualizer -->
           <div class="hub-analytics-section">
             <div class="hub-analytics-header">
-              <h4>🧠 Leader's Neural Network</h4>
+              <div class="hub-section-title">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <circle cx="3" cy="6" r="2"></circle>
+                  <circle cx="3" cy="18" r="2"></circle>
+                  <circle cx="21" cy="6" r="2"></circle>
+                  <circle cx="21" cy="18" r="2"></circle>
+                  <line x1="5" y1="6.5" x2="9.5" y2="10.5"></line>
+                  <line x1="5" y1="17.5" x2="9.5" y2="13.5"></line>
+                  <line x1="14.5" y1="10.5" x2="19" y2="6.5"></line>
+                  <line x1="14.5" y1="13.5" x2="19" y2="17.5"></line>
+                </svg>
+                <h4>Leader's Neural Network</h4>
+              </div>
               <span class="hub-nn-tag">8 Inputs · 16 ReLu · 16 ReLu · 2 Outputs</span>
             </div>
-            <canvas id="nn-canvas-hub" class="nn-canvas" style="height: 180px; width: 100%; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid var(--border);"></canvas>
+            <canvas id="nn-canvas-hub" class="nn-canvas" style="height: 170px; width: 100%; border-radius: 10px;"></canvas>
             <div class="legend" style="margin-top: 6px; font-size: 11px;">
               <span><i class="sw cyan"></i>positive weight</span>
               <span><i class="sw magenta"></i>negative weight</span>
@@ -541,22 +717,27 @@
           <!-- Fitness History Chart -->
           <div class="hub-analytics-section" style="margin-top: 16px;">
             <div class="hub-analytics-header">
-              <h4>📈 Fitness Over Generations</h4>
+              <div class="hub-section-title">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <h4>Fitness Over Generations</h4>
+              </div>
               <span class="hub-chart-info">All-Time Evolution Curve</span>
             </div>
-            <div class="hyper-chart-legend" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px; color: var(--text-dim);">
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <span><i class="sw cyan" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22d3ee; margin-right:3px; vertical-align:middle;"></i>Best (Cyan)</span>
-                <span><i class="sw violet" style="display:inline-block; width:10px; height:2px; background:#a78bfa; margin-right:3px; vertical-align:middle;"></i>Pop Avg (Purple)</span>
-                <span style="opacity: 0.75;"><i style="display:inline-block; width:7px; height:7px; background:rgba(167,139,250,0.3); border:1px solid #a78bfa; border-radius:2px; margin-right:3px; vertical-align:middle;"></i>Min-Max Band</span>
+            <div class="hyper-chart-legend">
+              <div class="legend-items">
+                <span><i class="sw cyan"></i>Best (Cyan)</span>
+                <span><i class="sw violet"></i>Pop Avg (Purple)</span>
+                <span class="band-tag"><i></i>Min-Max Band</span>
               </div>
-              <span style="font-family: var(--mono); color: rgba(255,255,255,0.6); font-size: 10px;">Hover points for stats</span>
+              <span class="telemetry-hint">Hover points for stats</span>
             </div>
-            <canvas id="chart-canvas-hub" class="chart-canvas" style="height: 160px; width: 100%; border-radius: 8px;"></canvas>
+            <canvas id="chart-canvas-hub" class="chart-canvas" style="height: 150px; width: 100%; border-radius: 10px;"></canvas>
           </div>
 
           <!-- Evolution & Storage Insights Summary -->
-          <div class="hub-insights-grid" style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;">
+          <div class="hub-insights-grid">
             <div class="stat"><span class="stat-label">Gen Count</span><span class="stat-value" id="hub-stat-gen">1</span></div>
             <div class="stat accent-cyan"><span class="stat-label">Best Fitness</span><span class="stat-value" id="hub-stat-fit">–</span></div>
             <div class="stat accent-amber"><span class="stat-label">Record Lap</span><span class="stat-value" id="hub-stat-lap">–</span></div>

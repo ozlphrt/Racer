@@ -921,6 +921,22 @@ hyperTargetInput?.addEventListener('input', () => {
   });
 });
 
+$('btn-step-dec')?.addEventListener('click', () => {
+  if (!hyperTargetInput) return;
+  const cur = Number(hyperTargetInput.value) || 50;
+  const next = Math.max(1, cur - (cur > 100 ? 50 : 25));
+  hyperTargetInput.value = next;
+  hyperTargetInput.dispatchEvent(new Event('input'));
+});
+
+$('btn-step-inc')?.addEventListener('click', () => {
+  if (!hyperTargetInput) return;
+  const cur = Number(hyperTargetInput.value) || 50;
+  const next = Math.min(10000, cur + (cur >= 100 ? 50 : 25));
+  hyperTargetInput.value = next;
+  hyperTargetInput.dispatchEvent(new Event('input'));
+});
+
 // Time presets
 document.querySelectorAll('#hyper-time-presets .btn-chip').forEach((btn) => {
   btn.addEventListener('click', () => {
