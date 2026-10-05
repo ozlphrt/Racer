@@ -2830,6 +2830,8 @@ export class Renderer3D {
     this._lastFocusCar = null;
     this._actionAngle = null;
     this._lastActionFocus = null;
+    this._actionRearAngle = null;
+    this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
     const t = this.track;
@@ -3002,6 +3004,85 @@ export class Renderer3D {
       const destTargetZ = 2.4;
 
       // Dynamic adaptive FOV zoom
+      const targetFov = 38 + Math.min(14, (carGap / 110) * 14);
+      this.camera.fov += (targetFov - this.camera.fov) * 0.05;
+      this.camera.updateProjectionMatrix();
+
+      const camGlide = 0.075;
+      const targetGlide = 0.095;
+
+      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+    } else if (cameraPreset === 'action_rear' && focusCar) {
+      // ACTION REAR CAM (Pursuit battle angle behind P2/P1 looking forward while keeping both in viewport)
+      this.controls.autoRotate = false;
+
+      const p1 = focusCar;
+      // Find P2 (the car directly behind P1 or next closest alive car)
+      let p2 = null;
+      if (rankedCars.length > 1) {
+        const p1RankIdx = rankedCars.indexOf(p1);
+        if (p1RankIdx >= 0 && p1RankIdx + 1 < rankedCars.length) {
+          p2 = rankedCars[p1RankIdx + 1];
+        } else if (p1RankIdx > 0) {
+          p2 = rankedCars[p1RankIdx - 1];
+        } else {
+          p2 = rankedCars[1];
+        }
+      }
+
+      const p2X = (p2 && p2.alive) ? p2.x : (p1.x - Math.cos(p1.angle) * 32.0);
+      const p2Y = (p2 && p2.alive) ? -p2.y : (-p1.y + Math.sin(p1.angle) * 32.0);
+
+      const dx = p1.x - p2X;
+      const dy = (-p1.y) - p2Y;
+      const carGap = Math.hypot(dx, dy);
+
+      // Trailing reference car (P2 if exists and alive, else behind P1)
+      const rearAnchorX = (p2 && p2.alive) ? p2.x : p1.x;
+      const rearAnchorY = (p2 && p2.alive) ? -p2.y : -p1.y;
+      const leadAngle = (p2 && p2.alive) ? p2.angle : p1.angle;
+
+      // Low-pass orientation damping on rear chase battle angle
+      if (typeof this._actionRearAngle !== 'number' || this._lastActionRearFocus !== p1) {
+        this._actionRearAngle = leadAngle;
+        this._actionRearTargetX = rearAnchorX;
+        this._actionRearTargetY = rearAnchorY;
+        this._lastActionRearFocus = p1;
+      } else {
+        let diffAngle = leadAngle - this._actionRearAngle;
+        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+        this._actionRearAngle += diffAngle * 0.055; // Smooth gyro-stabilized pan
+
+        this._actionRearTargetX += (rearAnchorX - this._actionRearTargetX) * 0.12;
+        this._actionRearTargetY += (rearAnchorY - this._actionRearTargetY) * 0.12;
+      }
+
+      const cosA = Math.cos(this._actionRearAngle);
+      const sinA = Math.sin(this._actionRearAngle);
+      const nx = -sinA;
+      const ny = -cosA;
+
+      // Position camera BEHIND the trailing car looking forward towards leader
+      const trailDist = 26.0 + Math.min(50.0, carGap * 0.38);
+      const lateralSweep = Math.sin(sim ? sim.time * 0.35 : 0) * 5.5;
+      const destCamX = this._actionRearTargetX - cosA * trailDist + nx * (5.5 + lateralSweep);
+      const destCamY = this._actionRearTargetY + sinA * trailDist + ny * (5.5 + lateralSweep);
+      // Height elevates to maintain line-of-sight over P2 directly onto P1
+      const destCamZ = 6.5 + Math.min(16.0, carGap * 0.15);
+
+      // Target centered between P2 and P1 (biased 60% towards P1 leading the battle)
+      const destTargetX = p1.x * 0.60 + p2X * 0.40;
+      const destTargetY = (-p1.y) * 0.60 + p2Y * 0.40;
+      const destTargetZ = 2.4;
+
+      // Dynamic adaptive FOV zoom ensuring both cars remain framed in viewport
       const targetFov = 38 + Math.min(14, (carGap / 110) * 14);
       this.camera.fov += (targetFov - this.camera.fov) * 0.05;
       this.camera.updateProjectionMatrix();

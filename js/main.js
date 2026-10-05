@@ -651,7 +651,8 @@ function setCameraPreset(preset) {
 
   const names = {
     chase: 'Chase Cam (Dynamic Follow)',
-    action: 'Action Cam (Front Duel Framing P1 & P2)',
+    action: 'Action Front (Front Duel Framing P1 & P2)',
+    action_rear: 'Action Rear (Rear Battle Framing P2 & P1)',
     onboard: 'Onboard T-Cam (Cockpit View)',
     follow: 'Broadcast Follow (Classic High Tracker)',
     heli: 'Helicopter Chase (Cinematic Aerial Pursuit)',
@@ -755,18 +756,21 @@ window.addEventListener('keydown', (e) => {
       setCameraPreset('action');
       break;
     case '3':
-      setCameraPreset('onboard');
+      setCameraPreset('action_rear');
       break;
     case '4':
-      setCameraPreset('follow');
+      setCameraPreset('onboard');
       break;
     case '5':
-      setCameraPreset('heli');
+      setCameraPreset('follow');
       break;
     case '6':
-      setCameraPreset('broadcast');
+      setCameraPreset('heli');
       break;
     case '7':
+      setCameraPreset('broadcast');
+      break;
+    case '8':
       setCameraPreset('orbit');
       break;
     case 'x':
