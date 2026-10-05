@@ -645,7 +645,21 @@ h1 {
 .cam-pill-icon {
   flex-shrink: 0;
   color: #38bdf8;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, color 0.22s ease, filter 0.22s ease;
+}
+
+.cam-pill-btn.is-auto-director .cam-pill-icon {
+  color: #22c55e; /* Vivid Emerald Green to clearly indicate Auto Director is active */
+  filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.75));
+}
+
+.cam-pill-btn.is-auto-director {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.cam-pill-btn.is-auto-director:hover {
+  border-color: rgba(34, 197, 94, 0.75);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.3);
 }
 
 .cam-pill-btn:hover .cam-pill-icon {

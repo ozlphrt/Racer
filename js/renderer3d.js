@@ -3710,6 +3710,7 @@ export class Renderer3D {
     const focusCar = opts.manual && sim.player ? sim.player : leader;
     const hasFinisher = (sim.cars && sim.cars.some((c) => c.finished)) || (opts.manual && sim.player?.finished);
     let cameraPreset = opts.cameraPreset || 'auto';
+    this.isAutoDirector = (opts.cameraPreset || 'auto') === 'auto';
 
     if (cameraPreset === 'auto') {
       const now = performance.now();
@@ -3722,6 +3723,7 @@ export class Renderer3D {
       }
       cameraPreset = this._autoPreset;
     }
+    this.activeCameraPreset = cameraPreset;
 
     // 2. Camera View & Preset Positioning
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {

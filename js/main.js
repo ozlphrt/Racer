@@ -654,6 +654,42 @@ function setCameraPopoverOpen(open) {
   btnCameraMenu?.classList.toggle('is-active', open);
 }
 
+const CAMERA_SHORT_NAMES = {
+  auto: 'Auto Director',
+  chase: 'Chase Cam',
+  action: 'Action Front',
+  action_rear: 'Action Rear',
+  onboard: 'Onboard T-Cam',
+  follow: 'Broadcast Follow',
+  heli: 'Helicopter',
+  broadcast: 'TV Gantry',
+  orbit: 'Free Orbit',
+};
+
+function updateCameraPill() {
+  const labelEl = $('cam-pill-label');
+  const btn = $('btn-camera-menu');
+  const isAuto = (state.cameraPreset || 'auto') === 'auto';
+
+  if (btn) {
+    btn.classList.toggle('is-auto-director', isAuto);
+  }
+
+  if (labelEl) {
+    if (isAuto && renderer3d && renderer3d.activeCameraPreset) {
+      const activeShotName = CAMERA_SHORT_NAMES[renderer3d.activeCameraPreset] || renderer3d.activeCameraPreset;
+      if (labelEl.textContent !== activeShotName) {
+        labelEl.textContent = activeShotName;
+      }
+    } else {
+      const targetName = CAMERA_SHORT_NAMES[state.cameraPreset] || 'Auto Director';
+      if (labelEl.textContent !== targetName) {
+        labelEl.textContent = targetName;
+      }
+    }
+  }
+}
+
 function setCameraPreset(preset, showToast = true) {
   state.cameraPreset = preset;
   if (!state.view3d) {
@@ -673,22 +709,7 @@ function setCameraPreset(preset, showToast = true) {
     btn.classList.toggle('active', btn.getAttribute('data-preset') === preset);
   });
 
-  const shortNames = {
-    auto: 'Auto Director',
-    chase: 'Chase Cam',
-    action: 'Action Front',
-    action_rear: 'Action Rear',
-    onboard: 'Onboard T-Cam',
-    follow: 'Broadcast Follow',
-    heli: 'Helicopter',
-    broadcast: 'TV Gantry',
-    orbit: 'Free Orbit',
-  };
-
-  const labelEl = $('cam-pill-label');
-  if (labelEl) {
-    labelEl.textContent = shortNames[preset] || preset;
-  }
+  updateCameraPill();
 
   const names = {
     auto: 'Auto Director (Dynamic Broadcast Cycling)',
@@ -1466,6 +1487,9 @@ function frame(now) {
   } else {
     renderer.render(sim, state, activeFocus);
   }
+
+  // Real-time camera pill status (displays active shot and green auto-director icon)
+  updateCameraPill();
 
   // Update F1 Live Leaderboard Tower with smooth overtake animations
   leaderboard.update(sim, activeFocus);
