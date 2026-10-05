@@ -3466,44 +3466,16 @@ export class Renderer3D {
 
     const candidates = [];
 
-    // 1. Roadside & Corner Verge Boulders (Directly lining the race track corridor outside the asphalt)
-    if (numTrackPts > 0) {
-      for (let i = 0; i < numTrackPts; i += 2) {
-        const ptX = cxArr[i];
-        const ptY = cyArr[i];
-        const tX = txArr[i];
-        const tY = tyArr[i];
-        const nx = -tY;
-        const ny = tX;
-
-        for (const side of [-1, 1]) {
-          if (rand() < 0.72) {
-            const count = 1 + Math.floor(rand() * 4);
-            const rockType = Math.floor(rand() * 3);
-            for (let k = 0; k < count; k++) {
-              const lateralDist = side * (roadHalf + 7.5 + rand() * 52.0);
-              const longDist = (rand() - 0.5) * 26.0;
-              candidates.push({
-                x: ptX + nx * lateralDist + tX * longDist,
-                y: ptY + ny * lateralDist + tY * longDist,
-                rockType,
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Hillside & Mountain Crag Outcrops (Rock formations on rolling hillsides)
-    const numClusters = 34;
+    // 1. Distant Hillside & Mountain Crag Outcrops (Tasteful, scenic rock clusters on distant rolling hills)
+    const numClusters = 7;
     for (let c = 0; c < numClusters; c++) {
       const cX = minX + rand() * (maxX - minX);
       const cY = minY + rand() * (maxY - minY);
       const rockType = Math.floor(rand() * 3);
-      const count = 5 + Math.floor(rand() * 8);
+      const count = 3 + Math.floor(rand() * 3); // 3 to 5 rocks per cluster
       for (let k = 0; k < count; k++) {
         const angle = rand() * Math.PI * 2;
-        const dist = Math.sqrt(rand()) * (50 + rand() * 110);
+        const dist = Math.sqrt(rand()) * (25 + rand() * 45);
         candidates.push({
           x: cX + Math.cos(angle) * dist,
           y: cY + Math.sin(angle) * dist,
@@ -3512,8 +3484,8 @@ export class Renderer3D {
       }
     }
 
-    // 3. Standalone Mountain Megaliths & Landmark Monoliths
-    for (let i = 0; i < 90; i++) {
+    // 2. Distant Horizon Mountain Megaliths
+    for (let i = 0; i < 12; i++) {
       candidates.push({
         x: minX + rand() * (maxX - minX),
         y: minY + rand() * (maxY - minY),
@@ -3526,12 +3498,14 @@ export class Renderer3D {
     const placedType2 = [];
 
     const { lakes: wLakes, river: wRiver } = this.getWaterBodies();
+    // Enforce large safety clearance: NO rocks within 140m of track centerline or flat runoff
+    const minSafeTrackClearance = roadHalf + 95.0;
 
     for (const cand of candidates) {
       const { x, y, rockType } = cand;
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
 
-      // Ensure minimum clearance from track asphalt centerline
+      // Ensure large clearance from track asphalt centerline
       let minDistToTrack = Infinity;
       if (numTrackPts > 0) {
         for (let i = 0; i < numTrackPts; i += 2) {
@@ -3539,10 +3513,11 @@ export class Renderer3D {
           if (d < minDistToTrack) minDistToTrack = d;
         }
       }
-      if (minDistToTrack < roadHalf + 5.5) continue; // Safe buffer outside tarmac
+      if (minDistToTrack < minSafeTrackClearance) continue; // Completely remove rocks near track / runoff
 
       // In Three.js world space, the point is at (x, -y)
       const groundZ = this.getTerrainHeight(x, -y);
+      if (groundZ <= 0.8) continue; // Rocks only sit naturally up on elevated hills and mountains
 
       // Exclude water bodies
       let inWater = false;
