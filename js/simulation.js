@@ -253,17 +253,17 @@ export class Simulation {
       if (!p.alive) p.reset();
     }
 
-    // Active racing cars collection
+    // Active racing & finished rollout cars collection (solid collision presence maintained)
     if (!this._activeCars) this._activeCars = [];
     this._activeCars.length = 0;
     const activeCars = this._activeCars;
     for (let i = 0; i < this.cars.length; i++) {
       const c = this.cars[i];
-      if (c && (c.alive || c.crashed) && !c.finished) {
+      if (c && (c.alive || c.crashed || c.finished)) {
         activeCars.push(c);
       }
     }
-    if (this.player && (this.player.alive || this.player.crashed) && !this.player.finished) {
+    if (this.player && (this.player.alive || this.player.crashed || this.player.finished)) {
       activeCars.push(this.player);
     }
 

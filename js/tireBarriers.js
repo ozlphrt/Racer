@@ -308,7 +308,7 @@ export class TireBarrierSystem {
 
       for (let c = 0; c < cars.length; c++) {
         const car = cars[c];
-        if (!car || (!car.alive && !car.crashed) || car.finished) continue;
+        if (!car || (!car.alive && !car.crashed && !car.finished)) continue;
 
         const carX = car.x;
         const carY = car.y;

@@ -95,7 +95,7 @@ export class Car {
       const oy = this.y;
       for (let i = 0; i < otherCars.length; i++) {
         const oc = otherCars[i];
-        if (!oc || oc === this || !oc.alive || oc.crashed) continue;
+        if (!oc || oc === this || (!oc.alive && !oc.finished) || oc.crashed) continue;
         const rx = oc.x - ox;
         const ry = oc.y - oy;
         if (Math.abs(rx) <= maxRange && Math.abs(ry) <= maxRange && rx * rx + ry * ry <= maxRangeSq) {
@@ -178,18 +178,25 @@ export class Car {
     // A car is heading in the wrong way if angled > 72° (0.40π rad) away from forward track tangent
     const isWrongWay = Math.abs(headingDiff) > Math.PI * 0.40;
 
-    // If car has crossed finish line: smooth celebration cooldown cruise along track (NEVER removed)
+    // If car has crossed finish line: smooth celebration cooldown rollout along track, slowly coming to a complete stop
     if (this.finished) {
-      this.speed = Math.max(35, this.speed - (this.speed * 0.45 + 25) * dt);
-      let diff = targetHeading - this.angle;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      this.angle += diff * Math.min(1, 4.0 * dt);
-      this.vx = Math.cos(this.angle) * this.speed;
-      this.vy = Math.sin(this.angle) * this.speed;
-      this.x += this.vx * dt;
-      this.y += this.vy * dt;
-      this.idx = t.nearestIndex(this.x, this.y, this.idx);
+      if (this.speed > 0.05) {
+        // Natural progressive rollout braking: smooth deceleration until full stop
+        this.speed = Math.max(0, this.speed - (this.speed * 0.35 + 16) * dt);
+        let diff = targetHeading - this.angle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.angle += diff * Math.min(1, 4.0 * dt);
+        this.vx = Math.cos(this.angle) * this.speed;
+        this.vy = Math.sin(this.angle) * this.speed;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.idx = t.nearestIndex(this.x, this.y, this.idx);
+      } else {
+        this.speed = 0;
+        this.vx = 0;
+        this.vy = 0;
+      }
       return;
     }
 
