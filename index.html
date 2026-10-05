@@ -47,10 +47,7 @@
       <div class="leader-card glass" id="leader-card">
         <!-- Speed & Position Indicator Row -->
         <div class="cockpit-speed-row">
-          <div class="leader-badge-group">
-            <span class="leader-dot" id="leader-dot"></span>
-            <span class="pos-badge" id="leader-pos-badge">P.1</span>
-          </div>
+          <span class="pos-badge" id="leader-pos-badge">P.1</span>
           <div class="cockpit-speed-box">
             <span class="cockpit-speed-val" id="leader-speed">0</span>
             <span class="cockpit-speed-unit">KM/H</span>
@@ -80,34 +77,22 @@
                 <circle cx="50" cy="50" r="5" fill="#38bdf8"/>
               </svg>
             </div>
-            <div class="cockpit-meta-label">
-              <span class="label-name">STEER</span>
-              <span class="label-val" id="cockpit-steer-val">0°</span>
-            </div>
+            <span class="cockpit-steer-val" id="cockpit-steer-val">0°</span>
           </div>
 
           <!-- Brake & Gas Pedals -->
           <div class="cockpit-pedals-section">
-            <!-- Brake Pedal -->
-            <div class="pedal-column">
-              <div class="pedal-gauge brake">
-                <div class="pedal-fill brake" id="pedal-brake-fill"></div>
-                <div class="pedal-ribs">
-                  <span></span><span></span><span></span><span></span>
-                </div>
+            <div class="pedal-gauge brake">
+              <div class="pedal-fill brake" id="pedal-brake-fill"></div>
+              <div class="pedal-ribs">
+                <span></span><span></span><span></span><span></span>
               </div>
-              <span class="pedal-name brake">BRAKE</span>
             </div>
-
-            <!-- Gas / Throttle Pedal -->
-            <div class="pedal-column">
-              <div class="pedal-gauge gas">
-                <div class="pedal-fill gas" id="pedal-gas-fill"></div>
-                <div class="pedal-ribs">
-                  <span></span><span></span><span></span><span></span>
-                </div>
+            <div class="pedal-gauge gas">
+              <div class="pedal-fill gas" id="pedal-gas-fill"></div>
+              <div class="pedal-ribs">
+                <span></span><span></span><span></span><span></span>
               </div>
-              <span class="pedal-name gas">GAS</span>
             </div>
           </div>
         </div>
