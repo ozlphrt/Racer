@@ -3955,28 +3955,28 @@ export class Renderer3D {
   createSmokeTexture() {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
+    canvas.width = 256;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 128, 128);
+    ctx.clearRect(0, 0, 256, 256);
 
-    // Multi-lobed organic soft cloud puffs (breaks up spherical symmetry)
+    // Multi-lobed organic soft cloud vapor puffs (large feathered billows)
     const lobes = [
-      { x: 64, y: 64, r: 56, a: 0.35 },
-      { x: 50, y: 56, r: 42, a: 0.28 },
-      { x: 78, y: 54, r: 40, a: 0.28 },
-      { x: 54, y: 76, r: 38, a: 0.25 },
-      { x: 74, y: 74, r: 44, a: 0.25 },
-      { x: 64, y: 44, r: 34, a: 0.22 },
-      { x: 42, y: 66, r: 32, a: 0.20 },
-      { x: 86, y: 64, r: 32, a: 0.20 },
+      { x: 128, y: 128, r: 110, a: 0.85 },
+      { x: 104, y: 112, r: 84, a: 0.70 },
+      { x: 154, y: 108, r: 80, a: 0.70 },
+      { x: 108, y: 150, r: 76, a: 0.65 },
+      { x: 148, y: 146, r: 86, a: 0.65 },
+      { x: 128, y: 88, r: 68, a: 0.55 },
+      { x: 84, y: 132, r: 64, a: 0.50 },
+      { x: 172, y: 128, r: 64, a: 0.50 },
     ];
 
     for (const lobe of lobes) {
       const grad = ctx.createRadialGradient(lobe.x, lobe.y, 0, lobe.x, lobe.y, lobe.r);
       grad.addColorStop(0.0, `rgba(255, 255, 255, ${lobe.a})`);
-      grad.addColorStop(0.40, `rgba(255, 255, 255, ${lobe.a * 0.70})`);
-      grad.addColorStop(0.75, `rgba(255, 255, 255, ${lobe.a * 0.20})`);
+      grad.addColorStop(0.35, `rgba(255, 255, 255, ${lobe.a * 0.75})`);
+      grad.addColorStop(0.70, `rgba(255, 255, 255, ${lobe.a * 0.25})`);
       grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
 
       ctx.fillStyle = grad;
@@ -3993,7 +3993,7 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeParticles = 1200;
+    this.maxSmokeParticles = 1600;
     this.smokeParticles = [];
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
@@ -4019,7 +4019,8 @@ export class Renderer3D {
         vAlpha = alpha;
         vRot = rotation;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (340.0 / -mvPosition.z);
+        // Correct large perspective sprite scaling across broadcast follow cameras
+        gl_PointSize = clamp(size * (1500.0 / -mvPosition.z), 2.0, 380.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -4038,11 +4039,11 @@ export class Renderer3D {
         );
         
         vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * vAlpha;
+        float alpha = texColor.a * vAlpha * 0.70;
         if (alpha < 0.005) discard;
 
-        // Translucent motorsport white-grey tire friction vapor
-        vec3 smokeColor = vec3(0.92, 0.94, 0.96);
+        // Rich motorsport white-grey tire friction vapor
+        vec3 smokeColor = vec3(0.93, 0.94, 0.96);
         gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
@@ -4075,19 +4076,19 @@ export class Renderer3D {
     }
     // Eject smoke puff directly at the tyre contact patch with backward drift and vertical billow
     this.smokeParticles.push({
-      x: x + (Math.random() - 0.5) * 0.5,
-      y: y + (Math.random() - 0.5) * 0.5,
-      z: z + Math.random() * 0.20,
-      vx: (carVx * 0.12) + (Math.random() - 0.5) * 2.2,
-      vy: (carVy * 0.12) + (Math.random() - 0.5) * 2.2,
-      vz: 2.2 + Math.random() * 2.6, // Billows upwards into the air
-      size: 4.6 + Math.random() * 2.2,
-      growthRate: 8.5 + Math.random() * 4.0,
+      x: x + (Math.random() - 0.5) * 0.8,
+      y: y + (Math.random() - 0.5) * 0.8,
+      z: z + Math.random() * 0.35,
+      vx: (carVx * 0.15) + (Math.random() - 0.5) * 3.5,
+      vy: (carVy * 0.15) + (Math.random() - 0.5) * 3.5,
+      vz: 2.8 + Math.random() * 3.5, // Billows upwards into the air
+      size: 11.0 + Math.random() * 5.5, // Large, car-proportional world size
+      growthRate: 20.0 + Math.random() * 10.0, // Billows out into thick dense clouds
       rotation: Math.random() * Math.PI * 2,
-      vRot: (Math.random() - 0.5) * 2.2,
-      alpha: Math.min(0.28, intensity * 0.28),
+      vRot: (Math.random() - 0.5) * 2.5,
+      alpha: Math.min(0.65, intensity * 0.65),
       life: 1.0,
-      decay: 1.45 + Math.random() * 0.35,
+      decay: 1.25 + Math.random() * 0.30,
     });
   }
 
@@ -4326,10 +4327,10 @@ export class Renderer3D {
 
             // Emit continuous dense vapor plume interpolated along the tyre trajectory
             const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-            if (camDistSq < 450 || car === sim.player) {
+            if (camDistSq < 600 || car === sim.player) {
               const carVx = car.vx || 0;
               const carVy = -(car.vy || 0);
-              const numPuffs = Math.max(1, Math.min(4, Math.ceil(dL / 1.1)));
+              const numPuffs = Math.max(2, Math.min(5, Math.ceil(dL / 0.85)));
               for (let s = 1; s <= numPuffs; s++) {
                 const frac = s / numPuffs;
                 const pxL = prev.lx + (lx - prev.lx) * frac;
