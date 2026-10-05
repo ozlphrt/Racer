@@ -823,7 +823,7 @@ export class Renderer {
     if (n < 2) return;
     ctx.lineWidth = 1.8;
     for (let i = 1; i < n; i++) {
-      ctx.strokeStyle = `rgba(251, 191, 36, ${(i / n) * 0.08})`;
+      ctx.strokeStyle = `rgba(251, 191, 36, ${(i / n) * 0.28})`;
       ctx.beginPath();
       ctx.moveTo(t[(i - 1) * 2], t[(i - 1) * 2 + 1]);
       ctx.lineTo(t[i * 2], t[i * 2 + 1]);
