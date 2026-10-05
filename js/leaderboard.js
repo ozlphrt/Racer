@@ -87,7 +87,7 @@ export class LeaderboardTower {
   constructor(containerEl, onSelectCar = null) {
     this.container = containerEl;
     this.onSelectCar = onSelectCar;
-    this.maxVisible = 6;
+    this.maxVisible = 10;
     this.rowHeight = 32;
 
     this.carMetaMap = new Map();
@@ -108,7 +108,7 @@ export class LeaderboardTower {
           <span class="tower-title">LEADERBOARD</span>
         </div>
         <div class="tower-header-actions">
-          <div class="tower-mode-badge">TOP 3 + 3</div>
+          <div class="tower-mode-badge">TOP 10</div>
           <button class="tower-collapse-btn" id="tower-collapse-btn" type="button" aria-label="Toggle leaderboard">
             <svg class="tower-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
@@ -219,30 +219,8 @@ export class LeaderboardTower {
       carTrueRankMap.set(active[r], r + 1);
     }
 
-    // 3. Filter to Top 3 positions and the 3 cars nearest to them
-    const top3 = active.slice(0, 3);
-    const chosenSet = new Set(top3);
-    if (sim.player && (sim.player.alive || sim.player.finished)) chosenSet.add(sim.player);
-
-    const remaining = active.filter((c) => !chosenSet.has(c));
-    if (remaining.length > 0 && top3.length > 0) {
-      remaining.sort((a, b) => {
-        let minA = Infinity;
-        let minB = Infinity;
-        for (const t of top3) {
-          const dA = Math.hypot(a.x - t.x, a.y - t.y);
-          const dB = Math.hypot(b.x - t.x, b.y - t.y);
-          if (dA < minA) minA = dA;
-          if (dB < minB) minB = dB;
-        }
-        return minA - minB;
-      });
-      for (let k = 0; k < Math.min(3, remaining.length); k++) {
-        chosenSet.add(remaining[k]);
-      }
-    }
-
-    const displayCars = active.filter((c) => chosenSet.has(c)).slice(0, this.maxVisible);
+    // 3. Display Top 10 positions in direct race order
+    const displayCars = active.slice(0, this.maxVisible);
     const displaySet = new Set(displayCars);
 
     const leader = active[0] || leaderCar;

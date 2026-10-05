@@ -349,29 +349,11 @@ export class Renderer {
       carRankMap.set(rankedCars[rank], rank + 1);
     }
 
-    // Identify Top 3 positions and the 3 cars nearest to them on track
-    const top3 = rankedCars.slice(0, 3);
-    const visibleSet = new Set(top3);
+    // Identify Top 10 positions on track
+    const top10 = rankedCars.slice(0, 10);
+    const visibleSet = new Set(top10);
     if (sim && sim.player && sim.player.alive) visibleSet.add(sim.player);
     if (leader && leader.alive) visibleSet.add(leader);
-
-    const otherCars = rankedCars.filter((c) => !visibleSet.has(c));
-    if (otherCars.length > 0 && top3.length > 0) {
-      otherCars.sort((a, b) => {
-        let minA = Infinity;
-        let minB = Infinity;
-        for (const t of top3) {
-          const dA = Math.hypot(a.x - t.x, a.y - t.y);
-          const dB = Math.hypot(b.x - t.x, b.y - t.y);
-          if (dA < minA) minA = dA;
-          if (dB < minB) minB = dB;
-        }
-        return minA - minB;
-      });
-      for (let k = 0; k < Math.min(3, otherCars.length); k++) {
-        visibleSet.add(otherCars[k]);
-      }
-    }
 
     this.drawGhosts(sim.cars, leader, carRankMap, visibleSet);
 
