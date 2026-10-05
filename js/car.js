@@ -46,6 +46,8 @@ export class Car {
     this.slipAngle = 0;
     this.contacts = 0;
     this.collisionPenalty = 0;
+    this.offTrackTimer = 0;
+    this.offTrackPenalty = 0;
     this.speed = 0;
     this.steer = 0;
     this.targetSteer = 0;
@@ -300,10 +302,25 @@ export class Car {
       this.stall += dt;
     }
 
-    // Wall collision: any body corner farther from the centerline than half the width
-    if (this.isOffTrack(cos, sin)) {
+    // Wall & Runoff collision handling:
+    if (this.isDeepOffTrack(cos, sin)) {
       this.die('crash');
       return;
+    } else if (this.isOffTrack(cos, sin)) {
+      // In grass runoff zone: apply tire drag deceleration, off-track penalty, and recovery timer
+      this.offTrackTimer += dt;
+      this.offTrackPenalty += 140 * dt;
+      const grassDrag = Math.max(0, 1 - 2.8 * dt);
+      this.vx *= grassDrag;
+      this.vy *= grassDrag;
+      this.speed = Math.hypot(this.vx, this.vy);
+      if (this.offTrackTimer > 1.8) {
+        this.die('crash');
+        return;
+      }
+    } else if (this.offTrackTimer > 0) {
+      // Recovered safely back onto tarmac / curb
+      this.offTrackTimer = Math.max(0, this.offTrackTimer - 2.5 * dt);
     }
 
     if (!this.manual) {
@@ -315,12 +332,13 @@ export class Car {
     }
   }
 
-  isOffTrack(cos, sin) {
+  isOffTrack(cos, sin, extraBuffer = 0) {
     const hl = CONFIG.car.length / 2;
     const hw = CONFIG.car.width / 2;
     // Small buffer on launch frame to prevent rear grid row corner false clipping
     const safetyBuffer = this.time < 1.2 ? 5.0 : 0.0;
-    const halfWidth = this.track.half + safetyBuffer;
+    const curbBuffer = 7.5; // Curb / rumble strip tolerance
+    const halfWidth = this.track.half + safetyBuffer + curbBuffer + extraBuffer;
     const lim = halfWidth * halfWidth;
 
     for (let sx = -1; sx <= 1; sx += 2) {
@@ -331,6 +349,11 @@ export class Car {
       }
     }
     return false;
+  }
+
+  isDeepOffTrack(cos, sin) {
+    // 16px past the curb (23.5px beyond asphalt white line) hits the outer barrier
+    return this.isOffTrack(cos, sin, 16.0);
   }
 
   get fitness() {
@@ -383,7 +406,12 @@ export class Car {
       s -= Math.min(s * 0.45, contactDeduction); // Meaningful collision penalty while preserving forward drive
     }
 
-    // 8. Wall crash penalty (strict penalty for going off-track)
+    // 8. Grass Runoff penalty
+    if (this.offTrackPenalty > 0) {
+      s -= Math.min(s * 0.40, this.offTrackPenalty);
+    }
+
+    // 9. Wall crash penalty (strict penalty for going deep off-track)
     if (this.crashed) {
       s -= f.crashPenalty || 600;
     }
