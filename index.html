@@ -18,6 +18,30 @@
       <canvas id="track-canvas" aria-label="Race track simulation 2D" hidden></canvas>
       <canvas id="track-canvas-3d" aria-label="Race track simulation 3D"></canvas>
 
+      <!-- Top Left HUD Panel -->
+      <div class="hud glass">
+        <div class="hud-item"><span class="hud-label">Generation</span><span class="hud-value" id="hud-gen">1</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">Alive</span><span class="hud-value" id="hud-alive">80</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">Lap</span><span class="hud-value" id="hud-lap">1/5</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">Best Lap</span><span class="hud-value small" id="hud-best-lap">–</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-item"><span class="hud-label">FPS</span><span class="hud-value small" id="hud-fps">60</span></div>
+        <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
+      </div>
+
+      <!-- Ghost Mode 30s Countdown Timer Pill (Top Center) -->
+      <div class="ghost-timer-pill glass" id="ghost-timer-pill" aria-label="Ghost Mode Countdown Timer">
+        <span class="ghost-timer-title" id="ghost-timer-title">GHOST MODE</span>
+        <div class="ghost-timer-divider"></div>
+        <span class="ghost-timer-value" id="ghost-timer-value">30s</span>
+      </div>
+
+      <!-- Broadcast Elimination Modal Notification Stack (Top Center) -->
+      <div class="elimination-stack" id="elimination-stack" aria-live="assertive"></div>
+
       <!-- Bottom Right Floating Action Dock (Circular Buttons & Panels) -->
       <div class="bottom-right-dock" id="bottom-right-dock">
         <!-- Live Leaderboard Tower Panel -->
