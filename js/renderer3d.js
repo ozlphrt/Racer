@@ -1057,25 +1057,38 @@ export class Renderer3D {
     ctx.clearRect(0, 0, 512, 256);
 
     const numStr = String(num);
-    const numColor = isLeader ? '#facc15' : isPlayer ? '#22c55e' : '#ffffff';
-    const fontSize = numStr.length >= 3 ? 140 : numStr.length === 2 ? 170 : 195;
+    const numColor = isLeader ? '#fbbf24' : isPlayer ? '#22c55e' : '#ffffff';
+    const borderColor = isLeader ? '#f59e0b' : isPlayer ? '#16a34a' : 'rgba(255, 255, 255, 0.85)';
+    const fontSize = numStr.length >= 3 ? 150 : numStr.length === 2 ? 180 : 205;
 
+    // 1. High contrast racing badge backing plate
+    ctx.beginPath();
+    ctx.roundRect(28, 14, 456, 228, 42);
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.92)';
+    ctx.fill();
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = borderColor;
+    ctx.stroke();
+
+    // 2. Crisp text typography
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `italic 900 ${fontSize}px "Outfit", "JetBrains Mono", Impact, "Arial Black", sans-serif`;
 
-    // 1. Heavy dark carbon vinyl outline so digits contrast sharply against any paint
+    // Drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+
+    // Heavy dark outline
     ctx.lineJoin = 'round';
-    ctx.lineWidth = 26;
-    ctx.strokeStyle = '#05070d';
+    ctx.lineWidth = 18;
+    ctx.strokeStyle = '#000000';
     ctx.strokeText(numStr, 256, 128);
 
-    // 2. Secondary racing trim stroke for high-definition depth
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.strokeText(numStr, 256, 128);
-
-    // 3. Crisp vinyl color fill (Die-cut vinyl graphic directly on the body)
+    // Vivid color fill
+    ctx.shadowBlur = 0;
     ctx.fillStyle = numColor;
     ctx.fillText(numStr, 256, 128);
 
@@ -1873,6 +1886,47 @@ export class Renderer3D {
     });
 
     group.add(model);
+
+    // High-visibility, prominent 3D car number decal plates on the F1 model
+    const decalMat = new THREE.MeshBasicMaterial({
+      map: numTex,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+    });
+
+    // 1. Nose Cone Decal (Top / Front camera view)
+    const noseGeo = new THREE.PlaneGeometry(4.4, 2.4);
+    const noseMesh = new THREE.Mesh(noseGeo, decalMat);
+    noseMesh.position.set(6.4, 0, 2.22);
+    noseMesh.rotation.set(0, 0.14, -Math.PI / 2);
+    noseMesh.renderOrder = 900;
+    group.add(noseMesh);
+
+    // 2. Left Shark Fin Decal (Side / Trackside camera view)
+    const finGeo = new THREE.PlaneGeometry(3.6, 1.9);
+    const finLeftMesh = new THREE.Mesh(finGeo, decalMat);
+    finLeftMesh.position.set(-1.0, 0.24, 3.8);
+    finLeftMesh.rotation.set(Math.PI / 2, 0, 0);
+    finLeftMesh.renderOrder = 900;
+    group.add(finLeftMesh);
+
+    // 3. Right Shark Fin Decal (Side / Trackside camera view)
+    const finRightMesh = new THREE.Mesh(finGeo, decalMat);
+    finRightMesh.position.set(-1.0, -0.24, 3.8);
+    finRightMesh.rotation.set(-Math.PI / 2, 0, Math.PI);
+    finRightMesh.renderOrder = 900;
+    group.add(finRightMesh);
+
+    // 4. Rear Wing DRS Decal (Rear / Chase camera view)
+    const rearGeo = new THREE.PlaneGeometry(4.8, 1.9);
+    const rearMesh = new THREE.Mesh(rearGeo, decalMat);
+    rearMesh.position.set(-8.9, 0, 4.12);
+    rearMesh.rotation.set(0, -0.22, -Math.PI / 2);
+    rearMesh.renderOrder = 900;
+    group.add(rearMesh);
+
     return group;
   }
 
