@@ -332,6 +332,9 @@ export class TireBarrierSystem {
                 tire.vpitch += (Math.random() - 0.5) * 12;
                 tire.vroll += (Math.random() - 0.5) * 12;
                 tire.sleeping = false;
+                tire.displaced = true;
+                tire.despawnTimer = 3.0; // Clean up off track in exactly 3 seconds
+                tire.scale = 1.0;
                 tire.needsRenderUpdate = true;
                 this.hasActiveTires = true;
 
@@ -361,7 +364,39 @@ export class TireBarrierSystem {
 
     for (let i = 0; i < this.tires.length; i++) {
       const tire = this.tires[i];
-      if (tire.sleeping) continue;
+      if (tire.sleeping && !tire.displaced) continue;
+
+      // Handle 3-second crash cleanup timer for displaced tires on the track
+      if (tire.displaced) {
+        tire.despawnTimer -= clampedDt;
+        if (tire.despawnTimer <= 0.6) {
+          // Smooth shrink & sink transition as track marshals clear the tarmac
+          const fadeFrac = Math.max(0, tire.despawnTimer / 0.6);
+          tire.scale = fadeFrac;
+          tire.needsRenderUpdate = true;
+          if (tire.despawnTimer <= 0) {
+            // Cleanly restore to base wall stack and sleep
+            tire.x = tire.baseX;
+            tire.y = tire.baseY;
+            tire.z = tire.baseZ;
+            tire.vx = 0;
+            tire.vy = 0;
+            tire.vz = 0;
+            tire.yaw = tire.baseYaw;
+            tire.pitch = 0;
+            tire.roll = 0;
+            tire.vyaw = 0;
+            tire.vpitch = 0;
+            tire.vroll = 0;
+            tire.scale = 1.0;
+            tire.sleeping = true;
+            tire.displaced = false;
+            tire.needsRenderUpdate = true;
+            continue;
+          }
+        }
+      }
+
       activeTires.push(tire);
 
       // Apply linear velocity damping
@@ -427,7 +462,11 @@ export class TireBarrierSystem {
         const finalNz = Math.abs(Math.cos(tire.pitch) * Math.cos(tire.roll));
         const finalExtent = Math.sqrt(r * r * (1.0 - finalNz * finalNz) + h * h * (finalNz * finalNz));
         tire.z = groundLevel + finalExtent;
-        tire.sleeping = true;
+        if (!tire.displaced) {
+          tire.sleeping = true;
+        } else {
+          anyMoving = true;
+        }
       } else {
         anyMoving = true;
       }
@@ -481,6 +520,8 @@ export class TireBarrierSystem {
                 t2.vy += normY * imp;
                 t2.vz += Math.abs(imp) * 0.25;
                 t2.sleeping = false;
+                t2.displaced = true;
+                if (!t2.despawnTimer) t2.despawnTimer = 3.0;
                 t2.needsRenderUpdate = true;
                 anyMoving = true;
               }

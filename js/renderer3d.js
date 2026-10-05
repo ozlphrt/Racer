@@ -3792,7 +3792,8 @@ export class Renderer3D {
       if (!t.sleeping || t.needsRenderUpdate) {
         this.tireDummy.position.set(t.x, -t.y, t.z);
         this.tireDummy.rotation.set(t.pitch || 0, t.roll || 0, -(t.yaw || 0));
-        this.tireDummy.scale.set(1, 1, 1);
+        const s = t.scale !== undefined ? t.scale : 1;
+        this.tireDummy.scale.set(s, s, s);
         this.tireDummy.updateMatrix();
         this.tireMesh.setMatrixAt(i, this.tireDummy.matrix);
         t.needsRenderUpdate = false;
