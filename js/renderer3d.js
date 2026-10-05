@@ -1052,45 +1052,30 @@ export class Renderer3D {
   createRaceNumberTexture(num, isLeader = false, isPlayer = false) {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 256;
+    canvas.height = 512;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 512, 256);
+    ctx.clearRect(0, 0, 512, 512);
 
     const numStr = String(num);
-    const numColor = isLeader ? '#fbbf24' : isPlayer ? '#22c55e' : '#ffffff';
-    const borderColor = isLeader ? '#f59e0b' : isPlayer ? '#16a34a' : 'rgba(255, 255, 255, 0.85)';
-    const fontSize = numStr.length >= 3 ? 150 : numStr.length === 2 ? 180 : 205;
+    const fontSize = numStr.length >= 3 ? 200 : numStr.length === 2 ? 260 : 310;
 
-    // 1. High contrast racing badge backing plate
+    // 1. Classic Motorsport White Roundel Disc
     ctx.beginPath();
-    ctx.roundRect(28, 14, 456, 228, 42);
-    ctx.fillStyle = 'rgba(10, 15, 28, 0.92)';
+    ctx.arc(256, 256, 230, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.lineWidth = 16;
-    ctx.strokeStyle = borderColor;
+
+    // 2. Bold Black Outer Border
+    ctx.lineWidth = 26;
+    ctx.strokeStyle = '#000000';
     ctx.stroke();
 
-    // 2. Crisp text typography
+    // 3. Crisp Bold Black Number
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `italic 900 ${fontSize}px "Outfit", "JetBrains Mono", Impact, "Arial Black", sans-serif`;
-
-    // Drop shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 4;
-
-    // Heavy dark outline
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 18;
-    ctx.strokeStyle = '#000000';
-    ctx.strokeText(numStr, 256, 128);
-
-    // Vivid color fill
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = numColor;
-    ctx.fillText(numStr, 256, 128);
+    ctx.font = `900 ${fontSize}px "Outfit", "JetBrains Mono", Impact, "Arial Black", sans-serif`;
+    ctx.fillStyle = '#000000';
+    ctx.fillText(numStr, 256, 260);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
@@ -1841,36 +1826,29 @@ export class Renderer3D {
             if (vIsBody > 0.5) {
               vec4 decal = vec4(0.0);
 
-              // 1. Nose Cone top surface (conforms smoothly to curved 3D monocoque hood):
-              if (vModelPos.x >= 0.65 && vModelPos.x <= 1.45 && abs(vModelPos.z) <= 0.22 && vModelPos.y >= 0.28) {
-                float uNose = clamp((0.22 - vModelPos.z) / 0.44, 0.0, 1.0);
-                float vNose = clamp((vModelPos.x - 0.65) / 0.80, 0.0, 1.0);
+              // 1. Nose Cone Roundel (compact 1:1 circular disc facing forward/upwards):
+              if (vModelPos.x >= 0.94 && vModelPos.x <= 1.18 && abs(vModelPos.z) <= 0.12 && vModelPos.y >= 0.32) {
+                float uNose = clamp((vModelPos.z - (-0.12)) / 0.24, 0.0, 1.0);
+                float vNose = clamp((1.18 - vModelPos.x) / 0.24, 0.0, 1.0);
                 vec4 s = texture2D(decalTex, vec2(uNose, vNose));
-                if (s.a > 0.02) decal = s;
+                if (s.a > 0.05) decal = s;
               }
-              // 2. Shark Fin Left side (conforms smoothly to vertical aero fin surface):
-              else if (vModelPos.x >= -0.85 && vModelPos.x <= 0.15 && vModelPos.y >= 0.46 && vModelPos.y <= 0.74 && vModelPos.z >= 0.001) {
-                float uFinL = clamp((0.15 - vModelPos.x) / 1.00, 0.0, 1.0);
-                float vFinL = clamp((vModelPos.y - 0.46) / 0.28, 0.0, 1.0);
+              // 2. Shark Fin Left side (compact 1:1 circular disc):
+              else if (vModelPos.x >= -0.42 && vModelPos.x <= -0.24 && vModelPos.y >= 0.49 && vModelPos.y <= 0.67 && vModelPos.z >= 0.001) {
+                float uFinL = clamp((-0.24 - vModelPos.x) / 0.18, 0.0, 1.0);
+                float vFinL = clamp((vModelPos.y - 0.49) / 0.18, 0.0, 1.0);
                 vec4 s = texture2D(decalTex, vec2(uFinL, vFinL));
-                if (s.a > 0.02) decal = s;
+                if (s.a > 0.05) decal = s;
               }
-              // 3. Shark Fin Right side:
-              else if (vModelPos.x >= -0.85 && vModelPos.x <= 0.15 && vModelPos.y >= 0.46 && vModelPos.y <= 0.74 && vModelPos.z <= -0.001) {
-                float uFinR = clamp((vModelPos.x - (-0.85)) / 1.00, 0.0, 1.0);
-                float vFinR = clamp((vModelPos.y - 0.46) / 0.28, 0.0, 1.0);
+              // 3. Shark Fin Right side (compact 1:1 circular disc):
+              else if (vModelPos.x >= -0.42 && vModelPos.x <= -0.24 && vModelPos.y >= 0.49 && vModelPos.y <= 0.67 && vModelPos.z <= -0.001) {
+                float uFinR = clamp((vModelPos.x - (-0.42)) / 0.18, 0.0, 1.0);
+                float vFinR = clamp((vModelPos.y - 0.49) / 0.18, 0.0, 1.0);
                 vec4 s = texture2D(decalTex, vec2(uFinR, vFinR));
-                if (s.a > 0.02) decal = s;
-              }
-              // 4. Rear Wing DRS Flap:
-              else if (vModelPos.x >= -1.27 && vModelPos.x <= -0.71 && vModelPos.y >= 0.35 && abs(vModelPos.z) <= 0.45) {
-                float uWing = clamp((0.45 - vModelPos.z) / 0.90, 0.0, 1.0);
-                float vWing = clamp((vModelPos.y - 0.35) / 0.25, 0.0, 1.0);
-                vec4 s = texture2D(decalTex, vec2(uWing, vWing));
-                if (s.a > 0.02) decal = s;
+                if (s.a > 0.05) decal = s;
               }
 
-              if (decal.a > 0.02) {
+              if (decal.a > 0.05) {
                 diffuseColor.rgb = mix(diffuseColor.rgb, decal.rgb, decal.a);
               }
             }`
