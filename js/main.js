@@ -1031,10 +1031,6 @@ function updateHud(leader) {
       }
     }
     setTxt('leader-pos-badge', `P.${rank}`);
-
-    const prog = Math.min(100, Math.max(0, car.lapProgress * 100));
-    const pb = $('leader-progress-bar');
-    if (pb) pb.style.width = `${prog}%`;
   } else {
     setTxt('leader-pos-badge', 'P.1');
     setTxt('stat-leader-contacts', '0 (Clean ✨)');

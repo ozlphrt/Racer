@@ -885,13 +885,13 @@ h1 {
   box-shadow: 0 0 10px var(--lime);
 }
 
-/* Speed & Lap Progress Row */
+/* Speed & Position Row */
 .cockpit-speed-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 4px 8px;
   background: rgba(15, 23, 42, 0.6);
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -918,32 +918,6 @@ h1 {
   font-weight: 700;
   color: var(--text-faint);
   letter-spacing: 0.05em;
-}
-
-.cockpit-lap-box {
-  display: flex;
-  align-items: center;
-  flex: 1;
-}
-
-.cockpit-lap-bar {
-  position: relative;
-  flex: 1;
-  height: 5px;
-  border-radius: 5px;
-  background: rgba(148, 163, 184, 0.15);
-  overflow: hidden;
-}
-
-.cockpit-lap-fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--violet), var(--cyan));
-  transition: width 0.1s linear;
 }
 
 /* Telemetry Grid: Steering Wheel + Pedals */
