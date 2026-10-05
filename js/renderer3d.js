@@ -1810,13 +1810,22 @@ export class Renderer3D {
     const startDelay = CONFIG.generation?.startDelay || 2.0;
     const simTime = sim ? sim.time : startDelay;
     const maxLaps = CONFIG.generation?.maxLaps || 5;
+
+    // Identify current leader / player in P1
     const currentLeader = (sim?.player && (sim.player.alive || sim.player.finished)) ? sim.player : (sim?.leader || leader);
     const lapsDone = currentLeader ? (currentLeader.laps || 0) : 0;
-    const currentLap = Math.min(lapsDone + 1, maxLaps);
-    const lapsRemaining = Math.max(0, maxLaps - lapsDone);
-    const isFinished = currentLeader ? currentLeader.finished : false;
+    const isFinished = Boolean(
+      (currentLeader && (currentLeader.finished || currentLeader.laps >= maxLaps)) ||
+      (sim?.cars && sim.cars.some((c) => c.finished || c.laps >= maxLaps)) ||
+      (sim?.player && (sim.player.finished || sim.player.laps >= maxLaps))
+    );
 
-    let mainText = `${lapsRemaining} ${lapsRemaining === 1 ? 'LAP' : 'LAPS'} TO GO`;
+    // Current lap being driven (1-indexed: 1, 2, ..., maxLaps)
+    const currentLap = Math.min(lapsDone + 1, maxLaps);
+    // Number of laps remaining AFTER the current lap
+    const lapsToGo = Math.max(0, maxLaps - currentLap);
+
+    let mainText = `${lapsToGo} ${lapsToGo === 1 ? 'LAP' : 'LAPS'} TO GO`;
     let subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
     let color = '#38bdf8'; // Electric Cyan
     let isFinal = false;
@@ -1831,17 +1840,23 @@ export class Renderer3D {
       subText = 'GREEN LIGHTS · RACE ON';
       color = '#22c55e'; // Bright Green
       isFinal = true;
-    } else if (isFinished) {
-      mainText = 'CHEQUERED FLAG';
-      subText = 'RACE FINISHED · WINNER P1';
+    } else if (isFinished || lapsDone >= maxLaps) {
+      mainText = 'FINISH';
+      subText = 'CHEQUERED FLAG · RACE WINNER';
       color = '#a3e635'; // Neon Lime Green
       isFinal = true;
-    } else if (currentLap === maxLaps || lapsRemaining === 1) {
-      mainText = '1 LAP TO GO';
-      subText = 'FINAL LAP · LEADER ON LAST LAP';
+    } else if (currentLap === maxLaps) {
+      // Leader is currently driving the last lap of the race (Lap 5 of 5)
+      mainText = 'FINAL LAP';
+      subText = `LAP ${maxLaps} OF ${maxLaps} · LEADER ON FINAL LAP`;
       color = '#fbbf24'; // Radiant Gold
       isFinal = true;
-    } else if (lapsRemaining === 2) {
+    } else if (lapsToGo === 1) {
+      // Leader is on penultimate lap (e.g. Lap 4 of 5) -> 1 lap left after this one
+      mainText = '1 LAP TO GO';
+      subText = `LAP ${currentLap} OF ${maxLaps} · NEXT IS FINAL LAP`;
+      color = '#f59e0b'; // Amber
+    } else if (lapsToGo === 2) {
       mainText = '2 LAPS TO GO';
       subText = `LAP ${currentLap} OF ${maxLaps} · RACE LEADER`;
       color = '#f472b6'; // Hot Pink / Magenta

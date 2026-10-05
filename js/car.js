@@ -301,7 +301,7 @@ export class Car {
         this.laps++;
         this.lapTimes.push(this.time - this.lapStart);
         this.lapStart = this.time;
-        if (!this.manual && this.laps >= g.maxLaps) {
+        if (this.laps >= g.maxLaps) {
           this.finished = true;
           this.die('finished');
           return;
