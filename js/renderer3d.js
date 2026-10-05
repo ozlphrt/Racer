@@ -1581,8 +1581,8 @@ export class Renderer3D {
     });
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = 999; // Render on top with alpha transparency after track and skidmarks
-    sprite.scale.set(6.4, 6.4, 1);
-    sprite.position.set(0, 0, 7.2);
+    sprite.scale.set(3.8, 3.8, 1);
+    sprite.position.set(0, 0, 5.8);
     sprite.visible = false;
     return sprite;
   }
@@ -2739,7 +2739,7 @@ export class Renderer3D {
             if (badge.material.map !== tex) {
               badge.material.map = tex;
             }
-            badge.scale.set(6.4, 6.4, 1);
+            badge.scale.set(3.8, 3.8, 1);
           } else {
             badge.visible = false;
           }
@@ -2800,7 +2800,7 @@ export class Renderer3D {
           if (badge.material.map !== tex) {
             badge.material.map = tex;
           }
-          badge.scale.set(6.4, 6.4, 1);
+          badge.scale.set(3.8, 3.8, 1);
         } else {
           badge.visible = false;
         }
