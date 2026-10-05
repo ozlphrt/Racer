@@ -1010,17 +1010,17 @@ export class Renderer3D {
     const t = this.track;
     const N = t.N;
 
-    // Track surface mesh flush at ground level
+    // Track surface mesh flush at ground level (Z = 0.05)
     const vertices = [];
     const indices = [];
     const uvs = [];
 
     for (let i = 0; i < N; i++) {
       // Outer point
-      vertices.push(t.ox[i], -t.oy[i], 0.10);
+      vertices.push(t.ox[i], -t.oy[i], 0.05);
       uvs.push(0, (i / N) * 20);
       // Inner point
-      vertices.push(t.ix[i], -t.iy[i], 0.10);
+      vertices.push(t.ix[i], -t.iy[i], 0.05);
       uvs.push(1, (i / N) * 20);
 
       const nxt = (i + 1) % N;
@@ -1044,28 +1044,29 @@ export class Renderer3D {
       roughness: 0.85,
       metalness: 0.1,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     this.trackMesh = new THREE.Mesh(geo, mat);
     this.trackMesh.castShadow = false;
     this.trackMesh.receiveShadow = true;
+    this.trackMesh.renderOrder = 1;
     this.scene.add(this.trackMesh);
 
     // Decorative track lines & kerbs
     this.decorGroup = new THREE.Group();
 
-    // Outer & Inner Solid White Boundary Line Mesh Ribbons (2.2px wide)
-    const lineWidth = 2.2;
+    // Outer & Inner Solid White Boundary Line Mesh Ribbons (2.4m wide, elevated on top of asphalt)
+    const lineWidth = 2.4;
     const borderMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.35,
       metalness: 0.05,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
       depthTest: true,
     });
 
@@ -1090,8 +1091,8 @@ export class Renderer3D {
       const v3 = nxt * 2 + 1;
 
       outerBorderVerts.push(
-        t.ox[i], -t.oy[i], 0.025,
-        t.ox[i] + onx * lineWidth, -t.oy[i] + ony * lineWidth, 0.025
+        t.ox[i], -t.oy[i], 0.12,
+        t.ox[i] + onx * lineWidth, -t.oy[i] + ony * lineWidth, 0.12
       );
       outerBorderIndices.push(v0, v1, v2, v1, v3, v2);
 
@@ -1103,8 +1104,8 @@ export class Renderer3D {
       const iny = idy / iDist;
 
       innerBorderVerts.push(
-        t.ix[i], -t.iy[i], 0.025,
-        t.ix[i] + inx * lineWidth, -t.iy[i] + iny * lineWidth, 0.025
+        t.ix[i], -t.iy[i], 0.12,
+        t.ix[i] + inx * lineWidth, -t.iy[i] + iny * lineWidth, 0.12
       );
       innerBorderIndices.push(v0, v1, v2, v1, v3, v2);
     }
@@ -1114,7 +1115,7 @@ export class Renderer3D {
     outerBorderGeo.setIndex(outerBorderIndices);
     outerBorderGeo.computeVertexNormals();
     const outerBorderMesh = new THREE.Mesh(outerBorderGeo, borderMat);
-    outerBorderMesh.renderOrder = 4;
+    outerBorderMesh.renderOrder = 10;
     this.decorGroup.add(outerBorderMesh);
 
     const innerBorderGeo = new THREE.BufferGeometry();
@@ -1122,23 +1123,23 @@ export class Renderer3D {
     innerBorderGeo.setIndex(innerBorderIndices);
     innerBorderGeo.computeVertexNormals();
     const innerBorderMesh = new THREE.Mesh(innerBorderGeo, borderMat);
-    innerBorderMesh.renderOrder = 4;
+    innerBorderMesh.renderOrder = 10;
     this.decorGroup.add(innerBorderMesh);
 
-    // 3. Centerline Solid Dashed Markings (Bold dashed quads)
+    // 3. Centerline Solid Dashed Markings (Bold dashed quads on top of asphalt)
     const centerDashVerts = [];
     const centerDashIndices = [];
-    const dashHalfWidth = 0.8;
+    const dashHalfWidth = 0.9;
     const centerMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.4,
       metalness: 0.05,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.85,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
       depthTest: true,
     });
 
@@ -1164,10 +1165,10 @@ export class Renderer3D {
       const v3 = dashIdx * 4 + 3;
 
       centerDashVerts.push(
-        t.cx[i] - nx1 * dashHalfWidth, -t.cy[i] - ny1 * dashHalfWidth, 0.022,
-        t.cx[i] + nx1 * dashHalfWidth, -t.cy[i] + ny1 * dashHalfWidth, 0.022,
-        t.cx[iEnd] - nx2 * dashHalfWidth, -t.cy[iEnd] - ny2 * dashHalfWidth, 0.022,
-        t.cx[iEnd] + nx2 * dashHalfWidth, -t.cy[iEnd] + ny2 * dashHalfWidth, 0.022
+        t.cx[i] - nx1 * dashHalfWidth, -t.cy[i] - ny1 * dashHalfWidth, 0.11,
+        t.cx[i] + nx1 * dashHalfWidth, -t.cy[i] + ny1 * dashHalfWidth, 0.11,
+        t.cx[iEnd] - nx2 * dashHalfWidth, -t.cy[iEnd] - ny2 * dashHalfWidth, 0.11,
+        t.cx[iEnd] + nx2 * dashHalfWidth, -t.cy[iEnd] + ny2 * dashHalfWidth, 0.11
       );
       centerDashIndices.push(v0, v1, v2, v1, v3, v2);
       dashIdx++;
@@ -1178,7 +1179,7 @@ export class Renderer3D {
     centerDashGeo.setIndex(centerDashIndices);
     centerDashGeo.computeVertexNormals();
     const centerDashMesh = new THREE.Mesh(centerDashGeo, centerMat);
-    centerDashMesh.renderOrder = 3;
+    centerDashMesh.renderOrder = 8;
     this.decorGroup.add(centerDashMesh);
 
     // Red & White 3D Apex Kerbs (FIA-standard verge-side rumble strips)
@@ -1272,9 +1273,9 @@ export class Renderer3D {
             const w0 = maxKerbWidth * Math.sqrt(Math.max(0, 2 * u0 - u0 * u0));
             const w1 = maxKerbWidth * Math.sqrt(Math.max(0, 2 * u1 - u1 * u1));
 
-            const zTrk = 0.026;
-            const zVrg0 = 0.026 + 0.012 * (w0 / maxKerbWidth);
-            const zVrg1 = 0.026 + 0.012 * (w1 / maxKerbWidth);
+            const zTrk = 0.08;
+            const zVrg0 = 0.08 + 0.08 * (w0 / maxKerbWidth);
+            const zVrg1 = 0.08 + 0.08 * (w1 / maxKerbWidth);
 
             const tx0 = (1 - u0) * xs[k0] + u0 * xs[k1];
             const ty0 = (1 - u0) * (-ys[k0]) + u0 * (-ys[k1]);
@@ -1308,8 +1309,8 @@ export class Renderer3D {
           const j = run[s + 1];
           const target = (k % 2 === 0) ? redVerts : whiteVerts;
 
-          const zTrk = 0.026;
-          const zVrg = 0.038;
+          const zTrk = 0.08;
+          const zVrg = 0.16;
 
           const tx0 = xs[k];
           const ty0 = -ys[k];
@@ -1338,9 +1339,9 @@ export class Renderer3D {
             const w0 = maxKerbWidth * Math.sqrt(Math.max(0, 1 - u0 * u0));
             const w1 = maxKerbWidth * Math.sqrt(Math.max(0, 1 - u1 * u1));
 
-            const zTrk = 0.026;
-            const zVrg0 = 0.026 + 0.012 * (w0 / maxKerbWidth);
-            const zVrg1 = 0.026 + 0.012 * (w1 / maxKerbWidth);
+            const zTrk = 0.08;
+            const zVrg0 = 0.08 + 0.08 * (w0 / maxKerbWidth);
+            const zVrg1 = 0.08 + 0.08 * (w1 / maxKerbWidth);
 
             const tx0 = (1 - u0) * xs[k0] + u0 * xs[k1];
             const ty0 = (1 - u0) * (-ys[k0]) + u0 * (-ys[k1]);
@@ -1376,8 +1377,8 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -3,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
       depthTest: true,
     });
     const kerbWhiteMat = new THREE.MeshStandardMaterial({
@@ -1386,8 +1387,8 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -3,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
       depthTest: true,
     });
 
@@ -1395,14 +1396,14 @@ export class Renderer3D {
       kerbRedGeo.setAttribute('position', new THREE.Float32BufferAttribute(redVerts, 3));
       kerbRedGeo.computeVertexNormals();
       const redKerbMesh = new THREE.Mesh(kerbRedGeo, kerbRedMat);
-      redKerbMesh.renderOrder = 8;
+      redKerbMesh.renderOrder = 12;
       this.decorGroup.add(redKerbMesh);
     }
     if (whiteVerts.length) {
       kerbWhiteGeo.setAttribute('position', new THREE.Float32BufferAttribute(whiteVerts, 3));
       kerbWhiteGeo.computeVertexNormals();
       const whiteKerbMesh = new THREE.Mesh(kerbWhiteGeo, kerbWhiteMat);
-      whiteKerbMesh.renderOrder = 8;
+      whiteKerbMesh.renderOrder = 12;
       this.decorGroup.add(whiteKerbMesh);
     }
 
@@ -1442,15 +1443,15 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
+      polygonOffsetFactor: -5,
+      polygonOffsetUnits: -5,
       depthTest: true,
     });
     const tarmacBand = new THREE.Mesh(bandGeo, bandMat);
-    tarmacBand.renderOrder = 12;
+    tarmacBand.renderOrder = 14;
 
-    // Position flush on the tarmac surface
-    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.025);
+    // Position flush on top of the tarmac surface
+    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.12);
 
     // Orient: Plane width aligns along road width (dx, dy), length aligns along track tangent (tx, ty)
     const roadAngle = Math.atan2(dy, dx);
@@ -1465,16 +1466,16 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
+      polygonOffsetFactor: -6,
+      polygonOffsetUnits: -6,
       depthTest: true,
     });
     const startBar = new THREE.Mesh(barGeo, barMat);
-    startBar.renderOrder = 14;
+    startBar.renderOrder = 16;
     startBar.position.set(
       (ix + ox) / 2 - tx * (bandLength + 4.0),
       (iy + oy) / 2 - ty * (bandLength + 4.0),
-      0.026
+      0.13
     );
     startBar.rotation.z = roadAngle;
     this.decorGroup.add(startBar);
