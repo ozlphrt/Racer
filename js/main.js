@@ -947,7 +947,7 @@ function updateHud(leader) {
   setTxt('pill-pop', pop);
   setTxt('hud-gen', sim.generation);
   setTxt('hud-alive', sim.aliveCount);
-  setTxt('hud-best-lap', fmtTime(sim.bestLapEver));
+  setTxt('hud-best-lap', fmtTime(sim.currentGenBestLap));
   setTxt('hud-fps', currentFps);
   const tf = $('hud-timer-fill');
   if (tf) tf.style.width = `${(sim.time / CONFIG.generation.timeLimit) * 100}%`;

@@ -583,4 +583,19 @@ export class Simulation {
     for (const c of this.cars) bf = Math.max(bf, c.fitness);
     return bf;
   }
+
+  /** Fastest lap time completed by any car in the current race/generation. */
+  get currentGenBestLap() {
+    let best = Infinity;
+    if (this.cars) {
+      for (let i = 0; i < this.cars.length; i++) {
+        const bl = this.cars[i].bestLap;
+        if (bl < best) best = bl;
+      }
+    }
+    if (this.player && this.player.bestLap < best) {
+      best = this.player.bestLap;
+    }
+    return best;
+  }
 }
