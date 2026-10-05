@@ -2886,7 +2886,7 @@ export class Renderer3D {
 
     const placedPines = [];
     const placedOaks = [];
-    const placedCypresses = [];
+    const placedCedars = [];
     const placedBirches = [];
 
     const allPlaced = [];
@@ -2960,12 +2960,12 @@ export class Renderer3D {
           placedOaks.push(treeData);
           allPlaced.push(treeData);
         } else if (species === 2) {
-          // Columnar Cypress: Dusty Mediterranean olive & warm sage
-          hue = 0.32 + (rand() - 0.5) * 0.05;
-          sat = 0.42 + rand() * 0.15;
-          lit = 0.19 + rand() * 0.07;
-          const treeData = { x, y, r, yaw, leanX, leanY, heightMult: heightMult * 1.35, hue, sat, lit, groundZ };
-          placedCypresses.push(treeData);
+          // Majestic Tiered Cedar (Cedrus Libani): Deep blue-green / alpine cedar evergreen
+          hue = 0.38 + (rand() - 0.5) * 0.05;
+          sat = 0.44 + rand() * 0.15;
+          lit = 0.18 + rand() * 0.06;
+          const treeData = { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ };
+          placedCedars.push(treeData);
           allPlaced.push(treeData);
         } else {
           // Birch / Blossom: Golden amber & autumn ochre leaves
@@ -3136,68 +3136,98 @@ export class Renderer3D {
       this.treeGroup.add(oakTrunkInst, oakMainInst, oakLeftInst, oakRightInst);
     }
 
-    // === SPECIES 2: MEDITERRANEAN CYPRESS (Tall Columnar Silhouette) ===
-    if (placedCypresses.length > 0) {
-      const count = placedCypresses.length;
-      const trunkGeo = new THREE.CylinderGeometry(0.45, 0.65, 1.0, 6);
+    // === SPECIES 2: MAJESTIC TIERED CEDAR (Tabular Spreading Horizontal Canopy Shelves) ===
+    if (placedCedars.length > 0) {
+      const count = placedCedars.length;
+      const trunkGeo = new THREE.CylinderGeometry(0.55, 1.25, 1.0, 7);
       trunkGeo.rotateX(Math.PI / 2);
-      const cypTrunkInst = new THREE.InstancedMesh(trunkGeo, darkWoodMat, count);
+      const cedarTrunkInst = new THREE.InstancedMesh(trunkGeo, darkWoodMat, count);
 
-      const colGeo = new THREE.CylinderGeometry(0.35, 0.95, 1.0, 8);
-      colGeo.rotateX(Math.PI / 2);
-      const cypBodyInst = new THREE.InstancedMesh(colGeo, leafMat, count);
-
-      const topGeo = new THREE.ConeGeometry(0.85, 1.0, 8);
-      topGeo.rotateX(Math.PI / 2);
-      const cypTopInst = new THREE.InstancedMesh(topGeo, leafMat, count);
+      const coneGeo = new THREE.ConeGeometry(1.0, 1.0, 7);
+      coneGeo.rotateX(Math.PI / 2);
+      const tier1Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
+      const tier2Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
+      const tier3Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
+      const tier4Inst = new THREE.InstancedMesh(coneGeo, leafMat, count);
 
       for (let i = 0; i < count; i++) {
-        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedCypresses[i];
-        const trunkH = (r * 0.4 + 2.5) * heightMult;
-        const trunkR = Math.max(0.9, r * 0.08);
+        const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedCedars[i];
+        const trunkH = (r * 0.50 + 3.2) * heightMult;
+        const trunkR = Math.max(1.1, r * 0.14);
 
-        // Trunk
+        // Sturdy Cedar Trunk
         dummy.position.set(x, -y, groundZ + trunkH / 2);
         dummy.scale.set(trunkR, trunkR, trunkH);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
-        cypTrunkInst.setMatrixAt(i, dummy.matrix);
+        cedarTrunkInst.setMatrixAt(i, dummy.matrix);
 
-        // Columnar Foliage Body
-        const cypR = r * 0.55;
-        const bodyH = r * 2.2 * heightMult;
-        const bodyZ = trunkH + bodyH / 2;
-        dummy.position.set(x, -y, groundZ + bodyZ);
-        dummy.scale.set(cypR, cypR, bodyH);
+        // Tier 1: Wide Lower Tabular Shelf
+        const t1H = r * 0.40 * heightMult;
+        const t1R = r * 1.20;
+        const t1Z = trunkH * 0.65;
+        dummy.position.set(x, -y, groundZ + t1Z + t1H / 2);
+        dummy.scale.set(t1R, t1R * 0.95, t1H);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
-        cypBodyInst.setMatrixAt(i, dummy.matrix);
+        tier1Inst.setMatrixAt(i, dummy.matrix);
 
-        // Pointed Crown Tip
-        const topH = r * 1.0 * heightMult;
-        const topZ = trunkH + bodyH + topH / 2;
-        dummy.position.set(x, -y, groundZ + topZ);
-        dummy.scale.set(cypR * 0.85, cypR * 0.85, topH);
-        dummy.rotation.set(leanX, leanY, yaw);
+        // Tier 2: Mid-Lower Tabular Shelf
+        const t2H = r * 0.36 * heightMult;
+        const t2R = r * 0.94;
+        const t2Z = t1Z + t1H * 0.82;
+        dummy.position.set(x, -y, groundZ + t2Z + t2H / 2);
+        dummy.scale.set(t2R, t2R * 0.95, t2H);
+        dummy.rotation.set(leanX, leanY, yaw + 0.8);
         dummy.updateMatrix();
-        cypTopInst.setMatrixAt(i, dummy.matrix);
+        tier2Inst.setMatrixAt(i, dummy.matrix);
+
+        // Tier 3: Mid-Upper Tabular Shelf
+        const t3H = r * 0.32 * heightMult;
+        const t3R = r * 0.68;
+        const t3Z = t2Z + t2H * 0.82;
+        dummy.position.set(x, -y, groundZ + t3Z + t3H / 2);
+        dummy.scale.set(t3R, t3R * 0.95, t3H);
+        dummy.rotation.set(leanX, leanY, yaw + 1.6);
+        dummy.updateMatrix();
+        tier3Inst.setMatrixAt(i, dummy.matrix);
+
+        // Tier 4: Top Flattened Crown
+        const t4H = r * 0.28 * heightMult;
+        const t4R = r * 0.44;
+        const t4Z = t3Z + t3H * 0.82;
+        dummy.position.set(x, -y, groundZ + t4Z + t4H / 2);
+        dummy.scale.set(t4R, t4R * 0.95, t4H);
+        dummy.rotation.set(leanX, leanY, yaw + 2.4);
+        dummy.updateMatrix();
+        tier4Inst.setMatrixAt(i, dummy.matrix);
 
         color.setHSL(hue, sat, lit);
-        cypBodyInst.setColorAt(i, color);
-        color.setHSL(hue, sat, Math.min(0.9, lit * 1.2));
-        cypTopInst.setColorAt(i, color);
+        tier1Inst.setColorAt(i, color);
+        color.setHSL(hue, sat, Math.min(0.9, lit * 1.10));
+        tier2Inst.setColorAt(i, color);
+        color.setHSL(hue, sat, Math.min(0.9, lit * 1.20));
+        tier3Inst.setColorAt(i, color);
+        color.setHSL(hue, sat, Math.min(0.9, lit * 1.30));
+        tier4Inst.setColorAt(i, color);
       }
 
-      cypTrunkInst.instanceMatrix.needsUpdate = true;
-      cypBodyInst.instanceMatrix.needsUpdate = true;
-      cypTopInst.instanceMatrix.needsUpdate = true;
-      if (cypBodyInst.instanceColor) cypBodyInst.instanceColor.needsUpdate = true;
-      if (cypTopInst.instanceColor) cypTopInst.instanceColor.needsUpdate = true;
-      cypTrunkInst.castShadow = true; cypTrunkInst.receiveShadow = true;
-      cypBodyInst.castShadow = true; cypBodyInst.receiveShadow = true;
-      cypTopInst.castShadow = true; cypTopInst.receiveShadow = true;
+      cedarTrunkInst.instanceMatrix.needsUpdate = true;
+      tier1Inst.instanceMatrix.needsUpdate = true;
+      tier2Inst.instanceMatrix.needsUpdate = true;
+      tier3Inst.instanceMatrix.needsUpdate = true;
+      tier4Inst.instanceMatrix.needsUpdate = true;
+      if (tier1Inst.instanceColor) tier1Inst.instanceColor.needsUpdate = true;
+      if (tier2Inst.instanceColor) tier2Inst.instanceColor.needsUpdate = true;
+      if (tier3Inst.instanceColor) tier3Inst.instanceColor.needsUpdate = true;
+      if (tier4Inst.instanceColor) tier4Inst.instanceColor.needsUpdate = true;
+      cedarTrunkInst.castShadow = true; cedarTrunkInst.receiveShadow = true;
+      tier1Inst.castShadow = true; tier1Inst.receiveShadow = true;
+      tier2Inst.castShadow = true; tier2Inst.receiveShadow = true;
+      tier3Inst.castShadow = true; tier3Inst.receiveShadow = true;
+      tier4Inst.castShadow = true; tier4Inst.receiveShadow = true;
 
-      this.treeGroup.add(cypTrunkInst, cypBodyInst, cypTopInst);
+      this.treeGroup.add(cedarTrunkInst, tier1Inst, tier2Inst, tier3Inst, tier4Inst);
     }
 
     // === SPECIES 3: GOLDEN AUTUMN BIRCH (Pale Trunk + Fluffy Amber Canopy) ===
