@@ -22,36 +22,40 @@ export class TireBarrierSystem {
     const t = this.track;
     const N = t.N;
 
-    const minCurv = 1 / 280;
-    const isCorner = new Array(N).fill(false);
+    // 1. Detect sharp curve zones matching track kerbs
+    const minCurv = 1 / 200;
+    const rawKerb = new Array(N).fill(false);
     for (let k = 0; k < N; k++) {
-      if (Math.abs(t.curvature[k]) >= minCurv) {
-        isCorner[k] = true;
-      }
+      rawKerb[k] = Math.abs(t.curvature[k]) >= minCurv;
     }
 
-    // Find continuous corner runs along the track
-    const cornerRuns = [];
-    let inRun = false;
-    let runStart = 0;
-
+    // Dilate by 2 samples to match full kerb coverage
+    const isKerb = new Array(N).fill(false);
     for (let k = 0; k < N; k++) {
-      if (isCorner[k]) {
-        if (!inRun) {
-          inRun = true;
-          runStart = k;
-        }
-      } else {
-        if (inRun) {
-          inRun = false;
-          if (k - runStart >= 4) {
-            cornerRuns.push({ start: runStart, end: k - 1 });
-          }
+      if (rawKerb[k]) {
+        for (let d = -2; d <= 2; d++) {
+          isKerb[(k + d + N) % N] = true;
         }
       }
     }
-    if (inRun && N - runStart >= 4) {
-      cornerRuns.push({ start: runStart, end: N - 1 });
+
+    // Find all contiguous sharp curve / kerb runs
+    const visited = new Uint8Array(N);
+    const kerbRuns = [];
+    for (let k = 0; k < N; k++) {
+      const prev = (k - 1 + N) % N;
+      if (isKerb[k] && !isKerb[prev] && !visited[k]) {
+        const runIndices = [];
+        let curr = k;
+        while (isKerb[curr] && !visited[curr]) {
+          visited[curr] = 1;
+          runIndices.push(curr);
+          curr = (curr + 1) % N;
+        }
+        if (runIndices.length >= 4) {
+          kerbRuns.push(runIndices);
+        }
+      }
     }
 
     // Colors for FIA safety barriers: Alternating bold Red, White, and Graphite
@@ -68,24 +72,39 @@ export class TireBarrierSystem {
       return s / 4294967296;
     };
 
-    for (let c = 0; c < cornerRuns.length; c++) {
-      const run = cornerRuns[c];
+    const outerRadius = 1.40;
+    const tireDiameter = outerRadius * 2.0; // 2.80m
+    const stackSpacing = tireDiameter;      // Stacks touching each other: 2.80m center-to-center
+    const rowDepth = outerRadius * Math.sqrt(3); // 2.425m for close triangular packing
+    const baseMargin = 4.2; // Runoff distance outside the kerb/track edge
 
-      // Extract continuous points along the outer edge of the corner run
-      const pts = [];
-      for (let k = run.start; k <= run.end; k++) {
-        const kCurv = t.curvature[k];
-        const turnOuterLeft = kCurv >= 0;
-        const edgeX = turnOuterLeft ? t.ox[k] : t.ix[k];
-        const edgeY = turnOuterLeft ? t.oy[k] : t.iy[k];
-        const cdx = edgeX - t.cx[k];
-        const cdy = edgeY - t.cy[k];
+    for (let c = 0; c < kerbRuns.length; c++) {
+      const run = kerbRuns[c];
+      const L = run.length;
+
+      // Determine turn direction: Outside of LEFT turn is outer edge (ox, oy); Outside of RIGHT turn is inner edge (ix, iy)
+      let avgCurv = 0;
+      for (const idx of run) avgCurv += t.curvature[idx];
+      avgCurv /= L;
+
+      const isLeftTurn = avgCurv > 0;
+      const edgeXs = isLeftTurn ? t.ox : t.ix;
+      const edgeYs = isLeftTurn ? t.oy : t.iy;
+
+      // Extract continuous centerline & edge coordinates along the outside of the sharp curve
+      const rawPts = [];
+      for (let i = 0; i < L; i++) {
+        const k = run[i];
+        const ex = edgeXs[k];
+        const ey = edgeYs[k];
+        const cdx = ex - t.cx[k];
+        const cdy = ey - t.cy[k];
         const cLen = Math.hypot(cdx, cdy) || 1;
         const outNx = cdx / cLen;
         const outNy = cdy / cLen;
-        pts.push({
-          x: edgeX,
-          y: edgeY,
+        rawPts.push({
+          x: ex,
+          y: ey,
           outNx,
           outNy,
           tx: t.tx[k],
@@ -94,33 +113,74 @@ export class TireBarrierSystem {
         });
       }
 
-      if (pts.length === 0) continue;
+      if (rawPts.length < 2) continue;
 
-      // Resample continuous stacks along the whole kerb curve at snug tyre diameter intervals
-      const stackSpacing = 2.85; // Diameter of tyre (2.8m) + spacing
-      const baseMargin = 4.2;    // Runoff margin directly outside kerb edge
-      const sampledStacks = [pts[0]];
-      let prevPt = pts[0];
-      let distAcc = 0;
+      // Compute cumulative arc length along this kerb run
+      const cumD = [0];
+      for (let i = 1; i < rawPts.length; i++) {
+        const d = Math.hypot(rawPts[i].x - rawPts[i - 1].x, rawPts[i].y - rawPts[i - 1].y);
+        cumD.push(cumD[i - 1] + d);
+      }
+      const totalKerbLen = cumD[cumD.length - 1];
 
-      for (let i = 1; i < pts.length; i++) {
-        const curr = pts[i];
-        const d = Math.hypot(curr.x - prevPt.x, curr.y - prevPt.y);
-        distAcc += d;
-        if (distAcc >= stackSpacing) {
-          sampledStacks.push(curr);
-          distAcc = 0;
+      // Trim 10% from the start and 10% from the end of the kerbs
+      const trimStart = totalKerbLen * 0.10;
+      const trimEnd = totalKerbLen * 0.90;
+      const barrierLen = trimEnd - trimStart;
+
+      if (barrierLen < stackSpacing * 0.8) continue;
+
+      // Sample along trimmed range [trimStart, trimEnd] so adjacent stacks touch each other
+      const numStacks = Math.max(2, Math.round(barrierLen / stackSpacing));
+      const actualStep = barrierLen / numStacks;
+
+      const sampledStacks = [];
+      let pIdx = 0;
+
+      for (let sIdx = 0; sIdx <= numStacks; sIdx++) {
+        const targetDist = trimStart + sIdx * actualStep;
+        while (pIdx < cumD.length - 2 && cumD[pIdx + 1] < targetDist) {
+          pIdx++;
         }
-        prevPt = curr;
+        const segLen = cumD[pIdx + 1] - cumD[pIdx] || 1;
+        const factor = Math.max(0, Math.min(1, (targetDist - cumD[pIdx]) / segLen));
+
+        const p0 = rawPts[pIdx];
+        const p1 = rawPts[pIdx + 1];
+
+        const posX = p0.x + (p1.x - p0.x) * factor;
+        const posY = p0.y + (p1.y - p0.y) * factor;
+        const outNx = p0.outNx + (p1.outNx - p0.outNx) * factor;
+        const outNy = p0.outNy + (p1.outNy - p0.outNy) * factor;
+        const nLen = Math.hypot(outNx, outNy) || 1;
+        const normOutNx = outNx / nLen;
+        const normOutNy = outNy / nLen;
+
+        const tx = p0.tx + (p1.tx - p0.tx) * factor;
+        const ty = p0.ty + (p1.ty - p0.ty) * factor;
+        const tLen = Math.hypot(tx, ty) || 1;
+        const normTx = tx / tLen;
+        const normTy = ty / tLen;
+
+        sampledStacks.push({
+          x: posX,
+          y: posY,
+          outNx: normOutNx,
+          outNy: normOutNy,
+          tx: normTx,
+          ty: normTy,
+          yaw: Math.atan2(normOutNy, normOutNx) + Math.PI / 2,
+        });
       }
 
-      // Populate continuous 2-row tyre wall (4 to 7 tyres stacked per column)
+      // Build continuous 2-row touching barrier wall with 4-6 tyres per stack
       for (let sIdx = 0; sIdx < sampledStacks.length; sIdx++) {
         const st = sampledStacks[sIdx];
-        const stackTiers = 4 + Math.floor(rand() * 4); // 4, 5, 6, or 7 tyres high
 
         for (let row = 0; row < 2; row++) {
-          const rowOffset = row * 2.35;
+          // Exactly 4, 5, or 6 tyres high per individual stack
+          const stackTiers = 4 + Math.floor(rand() * 3);
+          const rowOffset = row * rowDepth;
           const staggerTang = (row === 1) ? stackSpacing * 0.5 : 0;
           const stackX = st.x + st.outNx * (baseMargin + rowOffset) + st.tx * staggerTang;
           const stackY = st.y + st.outNy * (baseMargin + rowOffset) + st.ty * staggerTang;
@@ -128,15 +188,16 @@ export class TireBarrierSystem {
           // Alternating FIA colors: Red / White with occasional graphite
           const colorGroup = (sIdx + row + c) % 2;
           const stackBaseColor = colors[colorGroup];
+          const stackId = id++;
 
           for (let tier = 0; tier < stackTiers; tier++) {
-            // Imperfect stacking: natural organic offset, slight tilt & yaw variation
-            const jitterX = (rand() - 0.5) * 0.16;
-            const jitterY = (rand() - 0.5) * 0.16;
-            const pitch = (rand() - 0.5) * 0.07;
-            const roll = (rand() - 0.5) * 0.07;
-            const yaw = st.yaw + (rand() - 0.5) * 0.35;
-            const z = 0.44 + tier * 0.86;
+            // Natural snug stacking with slight organic variations
+            const jitterX = (rand() - 0.5) * 0.08;
+            const jitterY = (rand() - 0.5) * 0.08;
+            const pitch = (rand() - 0.5) * 0.05;
+            const roll = (rand() - 0.5) * 0.05;
+            const yaw = st.yaw + (rand() - 0.5) * 0.25;
+            const z = 0.44 + tier * 0.88;
 
             const tireColor = tier === stackTiers - 1 && rand() < 0.20 ? colors[2] : stackBaseColor;
             const posX = stackX + jitterX;
@@ -144,6 +205,9 @@ export class TireBarrierSystem {
 
             this.tires.push({
               id: id++,
+              stackId: stackId,
+              stackBaseX: stackX,
+              stackBaseY: stackY,
               x: posX,
               y: posY,
               z: z,
@@ -162,7 +226,7 @@ export class TireBarrierSystem {
               baseYaw: yaw,
               basePitch: pitch,
               baseRoll: roll,
-              radius: 1.40,
+              radius: outerRadius,
               height: 0.88,
               mass: 1.0,
               color: tireColor,
