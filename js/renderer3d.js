@@ -5146,6 +5146,8 @@ export class Renderer3D {
     this._lastGantryCutLap = null;
     this._gantryRollLap = null;
     this._gantryCrossedLineTime = null;
+    this._lastActivePreset = null;
+    this._camTransition = null;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -5434,26 +5436,31 @@ export class Renderer3D {
       }
     }
 
+    // Destination camera pose & glide defaults computed by active preset
+    let destCamX = this.camera.position.x;
+    let destCamY = this.camera.position.y;
+    let destCamZ = this.camera.position.z;
+    let destTargetX = this.controls.target.x;
+    let destTargetY = this.controls.target.y;
+    let destTargetZ = this.controls.target.z;
+    let targetFov = 42;
+    let camGlide = 0.055;
+    let targetGlide = 0.075;
+
     // 2. Camera View & Preset Positioning
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {
-      this.controls.autoRotate = true;
-      this.controls.autoRotateSpeed = 0.55;
-      if (this.isAutoDirector && focusCar) {
-        const targetX = focusCar.x;
-        const targetY = -focusCar.y;
-        const targetZ = 3.0;
-        this.controls.target.x += (targetX - this.controls.target.x) * 0.05;
-        this.controls.target.y += (targetY - this.controls.target.y) * 0.05;
-        this.controls.target.z += (targetZ - this.controls.target.z) * 0.05;
-      }
-      if (Math.abs(this.camera.fov - 42) > 0.1) {
-        this.camera.fov += (42 - this.camera.fov) * 0.08;
-        this.camera.updateProjectionMatrix();
-      }
+      destTargetX = midX;
+      destTargetY = midY;
+      destTargetZ = 3.0 + battleElev;
+      // High cinematic orbit perspective
+      destCamX = midX + 115.0;
+      destCamY = midY - 85.0;
+      destCamZ = 48.0 + battleElev;
+      targetFov = 42;
+      camGlide = 0.05;
+      targetGlide = 0.05;
     } else if (cameraPreset === 'action' && focusCar) {
       // ACTION FRONT CAM: Smooth reverse camera floating ahead, looking back at P1 and P2
-      this.controls.autoRotate = false;
-
       if (typeof this._actionAngle !== 'number' || this._lastActionFocus !== p1) {
         this._actionAngle = refAngle;
         this._actionTargetX = midX;
@@ -5477,34 +5484,21 @@ export class Renderer3D {
 
       // Distance ahead & altitude dynamically adapt so both P1 and chasing P2 stay safely in viewport
       const leadDist = 36.0 + Math.min(45.0, effectiveSpan * 0.48);
-      const destCamX = this._actionTargetX + cosA * leadDist + nx * 2.5;
-      const destCamY = this._actionTargetY - sinA * leadDist + ny * 2.5;
-      const destCamZ = 6.2 + Math.min(20.0, effectiveSpan * 0.24) + battleElev;
+      destCamX = this._actionTargetX + cosA * leadDist + nx * 2.5;
+      destCamY = this._actionTargetY - sinA * leadDist + ny * 2.5;
+      destCamZ = 6.2 + Math.min(20.0, effectiveSpan * 0.24) + battleElev;
 
       // Look target is anchored on the battle midpoint: both cars are framed symmetrically
-      const destTargetX = midX;
-      const destTargetY = midY;
-      const destTargetZ = 1.8 + battleElev;
+      destTargetX = midX;
+      destTargetY = midY;
+      destTargetZ = 1.8 + battleElev;
 
       // Adaptive wide FOV keeps both cars comfortably in frame
-      const targetFov = Math.max(46, Math.min(68, 46 + (effectiveSpan / 65) * 18));
-      this.camera.fov += (targetFov - this.camera.fov) * 0.06;
-      this.camera.updateProjectionMatrix();
-
-      const camGlide = 0.055;
-      const targetGlide = 0.075;
-
-      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+      targetFov = Math.max(46, Math.min(68, 46 + (effectiveSpan / 65) * 18));
+      camGlide = 0.055;
+      targetGlide = 0.075;
     } else if (cameraPreset === 'action_rear' && focusCar) {
       // ACTION REAR CAM: Smooth pursuit angle behind the battle, looking forward at P1 & P2
-      this.controls.autoRotate = false;
-
       if (typeof this._actionRearAngle !== 'number' || this._lastActionRearFocus !== p1) {
         this._actionRearAngle = refAngle;
         this._actionRearTargetX = midX;
@@ -5527,93 +5521,51 @@ export class Renderer3D {
 
       // Position camera BEHIND trailing car looking forward along the battle line
       const trailDist = 28.0 + Math.min(48.0, effectiveSpan * 0.50);
-      const destCamX = this._actionRearTargetX - cosA * trailDist + nx * 3.5;
-      const destCamY = this._actionRearTargetY + sinA * trailDist + ny * 3.5;
-      const destCamZ = 5.2 + Math.min(22.0, effectiveSpan * 0.25) + battleElev;
+      destCamX = this._actionRearTargetX - cosA * trailDist + nx * 3.5;
+      destCamY = this._actionRearTargetY + sinA * trailDist + ny * 3.5;
+      destCamZ = 5.2 + Math.min(22.0, effectiveSpan * 0.25) + battleElev;
 
       // Look target centered on battle midpoint
-      const destTargetX = midX;
-      const destTargetY = midY;
-      const destTargetZ = 2.0 + battleElev;
+      destTargetX = midX;
+      destTargetY = midY;
+      destTargetZ = 2.0 + battleElev;
 
-      // Adaptive FOV keeps both cars framed
-      const targetFov = Math.max(42, Math.min(68, 42 + (effectiveSpan / 65) * 18));
-      this.camera.fov += (targetFov - this.camera.fov) * 0.06;
-      this.camera.updateProjectionMatrix();
-
-      const camGlide = 0.055;
-      const targetGlide = 0.075;
-
-      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+      targetFov = Math.max(42, Math.min(68, 42 + (effectiveSpan / 65) * 18));
+      camGlide = 0.055;
+      targetGlide = 0.075;
     } else if (cameraPreset === 'follow' && focusCar) {
       // CLASSIC BROADCAST FOLLOW CAM: Smooth high-altitude TV tracking centered on P1 and P2
-      this.controls.autoRotate = false;
-
-      const targetX = midX;
-      const targetY = midY;
-      const targetZ = 3.5 + battleElev;
-
-      const panSpeed = 0.06;
-      const dx = (targetX - this.controls.target.x) * panSpeed;
-      const dy = (targetY - this.controls.target.y) * panSpeed;
-      const dz = (targetZ - this.controls.target.z) * panSpeed;
-
-      this.controls.target.x += dx;
-      this.controls.target.y += dy;
-      this.controls.target.z += dz;
-
-      this.camera.position.x += dx;
-      this.camera.position.y += dy;
+      destTargetX = midX;
+      destTargetY = midY;
+      destTargetZ = 3.5 + battleElev;
 
       const canonicalCamZ = 95.0 + Math.min(60.0, effectiveSpan * 0.45) + battleElev;
-      this.camera.position.z += (canonicalCamZ - this.camera.position.z) * 0.05;
+      destCamX = midX - 120.0;
+      destCamY = midY + 65.0;
+      destCamZ = canonicalCamZ;
 
-      const targetFov = Math.max(45, Math.min(62, 45 + (effectiveSpan / 75) * 14));
-      if (Math.abs(this.camera.fov - targetFov) > 0.1) {
-        this.camera.fov += (targetFov - this.camera.fov) * 0.06;
-        this.camera.updateProjectionMatrix();
-      }
+      targetFov = Math.max(45, Math.min(62, 45 + (effectiveSpan / 75) * 14));
+      camGlide = 0.055;
+      targetGlide = 0.060;
     } else if (cameraPreset === 'onboard' && focusCar) {
       // ONBOARD T-CAM (Roll-hoop periscope camera elevated above cockpit & halo)
-      this.controls.autoRotate = false;
       const cosA = Math.cos(focusCar.angle);
       const sinA = Math.sin(focusCar.angle);
       const focusElev = this.getTerrainHeight(focusCar.x, -focusCar.y);
 
-      // Positioned atop the airbox roll-hoop mount with elevated forward sightline
-      const destCamX = focusCar.x - cosA * 2.0;
-      const destCamY = -focusCar.y + sinA * 2.0;
-      const destCamZ = 5.8 + focusElev;
+      destCamX = focusCar.x - cosA * 2.0;
+      destCamY = -focusCar.y + sinA * 2.0;
+      destCamZ = 5.8 + focusElev;
 
-      const destTargetX = focusCar.x + cosA * 52;
-      const destTargetY = -focusCar.y - sinA * 52;
-      const destTargetZ = 2.6 + focusElev;
+      destTargetX = focusCar.x + cosA * 52;
+      destTargetY = -focusCar.y - sinA * 52;
+      destTargetZ = 2.6 + focusElev;
 
-      const camGlide = 0.35;
-      const targetGlide = 0.35;
-
-      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
-
-      if (Math.abs(this.camera.fov - 44) > 0.1) {
-        this.camera.fov += (44 - this.camera.fov) * 0.08;
-        this.camera.updateProjectionMatrix();
-      }
+      targetFov = 44;
+      camGlide = 0.25;
+      targetGlide = 0.25;
     } else if (cameraPreset === 'heli' && focusCar) {
       // CINEMATIC AERIAL PURSUIT HELICOPTER: Sweeping sky perspective framing P1 and P2
-      this.controls.autoRotate = false;
-
       if (typeof this._heliAngle !== 'number' || this._lastHeliFocus !== p1) {
         this._heliAngle = refAngle;
         this._heliTargetX = midX;
@@ -5636,31 +5588,19 @@ export class Renderer3D {
 
       const trailDist = 65.0 + Math.min(60.0, effectiveSpan * 0.45);
       const lateralDist = 38.0 + Math.min(26.0, effectiveSpan * 0.20);
-      const destCamX = this._heliTargetX - cosA * trailDist + nx * lateralDist;
-      const destCamY = this._heliTargetY + sinA * trailDist + ny * lateralDist;
-      const destCamZ = 68.0 + Math.min(55.0, effectiveSpan * 0.45) + battleElev;
+      destCamX = this._heliTargetX - cosA * trailDist + nx * lateralDist;
+      destCamY = this._heliTargetY + sinA * trailDist + ny * lateralDist;
+      destCamZ = 68.0 + Math.min(55.0, effectiveSpan * 0.45) + battleElev;
 
-      const destTargetX = this._heliTargetX;
-      const destTargetY = this._heliTargetY;
-      const destTargetZ = 2.0 + battleElev;
+      destTargetX = this._heliTargetX;
+      destTargetY = this._heliTargetY;
+      destTargetZ = 2.0 + battleElev;
 
-      const targetFov = Math.max(40, Math.min(62, 40 + (effectiveSpan / 70) * 16));
-      this.camera.fov += (targetFov - this.camera.fov) * 0.05;
-      this.camera.updateProjectionMatrix();
-
-      const camGlide = 0.045;
-      const targetGlide = 0.065;
-
-      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+      targetFov = Math.max(40, Math.min(62, 40 + (effectiveSpan / 70) * 16));
+      camGlide = 0.045;
+      targetGlide = 0.065;
     } else if (cameraPreset === 'broadcast') {
       // TV GANTRY CAMERA (Start / Finish Gantry view)
-      this.controls.autoRotate = false;
       const cx = t.cx[0];
       const cy = -t.cy[0];
       const tx = t.tx[0];
@@ -5668,34 +5608,20 @@ export class Renderer3D {
       const nx = -ty;
       const ny = tx;
 
-      const destCamX = cx + tx * 80 + nx * 28;
-      const destCamY = cy + ty * 80 + ny * 28;
-      const destCamZ = 10.5;
+      destCamX = cx + tx * 80 + nx * 28;
+      destCamY = cy + ty * 80 + ny * 28;
+      destCamZ = 10.5;
 
       const incoming = (focusCar && focusCar.alive) ? focusCar : (leader && leader.alive ? leader : null);
-      const destTargetX = incoming ? incoming.x : cx - tx * 35;
-      const destTargetY = incoming ? -incoming.y : cy - ty * 35;
-      const destTargetZ = 3.2;
+      destTargetX = incoming ? incoming.x : cx - tx * 35;
+      destTargetY = incoming ? -incoming.y : cy - ty * 35;
+      destTargetZ = 3.2;
 
-      const camGlide = 0.06;
-      const targetGlide = 0.09;
-
-      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
-
-      if (Math.abs(this.camera.fov - 42) > 0.1) {
-        this.camera.fov += (42 - this.camera.fov) * 0.08;
-        this.camera.updateProjectionMatrix();
-      }
+      targetFov = 42;
+      camGlide = 0.06;
+      targetGlide = 0.09;
     } else {
       // DEFAULT: 'chase' preset (Dynamic Decoupled Smooth 3rd-person follow framing P1 & P2)
-      this.controls.autoRotate = false;
-
       if (hasFinisher && !opts.manual) {
         const cx = t.cx[0];
         const cy = -t.cy[0];
@@ -5704,25 +5630,18 @@ export class Renderer3D {
         const nx = -ty;
         const ny = tx;
 
-        const destCamX = cx + tx * 80 + nx * 28;
-        const destCamY = cy + ty * 80 + ny * 28;
-        const destCamZ = 10.5;
+        destCamX = cx + tx * 80 + nx * 28;
+        destCamY = cy + ty * 80 + ny * 28;
+        destCamZ = 10.5;
 
         const incomingFinisher = leader && leader.alive ? leader : null;
-        const destTargetX = incomingFinisher ? incomingFinisher.x : cx - tx * 35;
-        const destTargetY = incomingFinisher ? -incomingFinisher.y : cy - ty * 35;
-        const destTargetZ = 3.2;
+        destTargetX = incomingFinisher ? incomingFinisher.x : cx - tx * 35;
+        destTargetY = incomingFinisher ? -incomingFinisher.y : cy - ty * 35;
+        destTargetZ = 3.2;
 
-        const camGlide = 0.05;
-        const targetGlide = 0.08;
-
-        this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-        this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-        this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-        this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-        this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-        this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+        targetFov = 42;
+        camGlide = 0.05;
+        targetGlide = 0.08;
       } else if (focusCar) {
         if (typeof this._chaseAngle !== 'number' || this._lastFocusCar !== p1) {
           this._chaseAngle = refAngle;
@@ -5746,30 +5665,121 @@ export class Renderer3D {
 
         const distBehind = 38.0 + Math.min(48.0, effectiveSpan * 0.50);
         const heightAbove = 14.0 + Math.min(24.0, effectiveSpan * 0.30);
-        const destCamX = this._chaseTargetX - cosA * distBehind;
-        const destCamY = this._chaseTargetY + sinA * distBehind;
-        const destCamZ = heightAbove + battleElev;
+        destCamX = this._chaseTargetX - cosA * distBehind;
+        destCamY = this._chaseTargetY + sinA * distBehind;
+        destCamZ = heightAbove + battleElev;
 
         const lookAhead = 12.0;
-        const destTargetX = midX + cosA * lookAhead;
-        const destTargetY = midY - sinA * lookAhead;
-        const destTargetZ = 2.4 + battleElev;
+        destTargetX = midX + cosA * lookAhead;
+        destTargetY = midY - sinA * lookAhead;
+        destTargetZ = 2.4 + battleElev;
 
-        // Dynamic adaptive FOV zoom ensuring both P1 and P2 stay in the viewport
-        const targetFov = Math.max(42, Math.min(65, 42 + (effectiveSpan / 70) * 16));
+        targetFov = Math.max(42, Math.min(65, 42 + (effectiveSpan / 70) * 16));
+        camGlide = 0.055;
+        targetGlide = 0.075;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // FLAWLESS CINEMATIC CAMERA TRANSITION & MOTION ENGINE
+    // Synchronizes camera position, target, FOV, and terrain elevation
+    // with smooth quintic easing and a parabolic altitude arc.
+    // -------------------------------------------------------------
+    const now = performance.now();
+    const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
+
+    if (this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
+      // Initiate a seamless cinematic swoop transition between camera viewpoints
+      const startPos = this.camera.position.clone();
+      const startTarget = this.controls.target.clone();
+      const startFov = this.camera.fov;
+      const transDist = startPos.distanceTo(new THREE.Vector3(destCamX, destCamY, destCamZ));
+
+      let duration = 750;
+      let peakArcHeight = 5.0;
+
+      if (transDist > 300) {
+        // Distant / TV gantry cut across track: rapid 240ms transition to prevent map-wide smear
+        duration = 240;
+        peakArcHeight = 2.0;
+      } else {
+        // Fluid cinematic swoop: smooth parabolic clearance over cars and track barriers
+        duration = Math.max(580, Math.min(920, 500 + transDist * 2.2));
+        peakArcHeight = Math.min(18.0, Math.max(4.0, transDist * 0.12));
+      }
+
+      this._camTransition = {
+        active: true,
+        startTime: now,
+        duration,
+        startPos,
+        startTarget,
+        startFov,
+        peakArcHeight,
+      };
+    }
+    this._lastActivePreset = cameraPreset;
+
+    if (this._camTransition && this._camTransition.active) {
+      const elapsed = now - this._camTransition.startTime;
+      const progress = Math.min(1.0, elapsed / this._camTransition.duration);
+
+      // Quintic SmootherStep curve: continuous zero velocity and zero acceleration at endpoints
+      // s(t) = t^3 * (t * (6t - 15) + 10)
+      const s = progress * progress * progress * (progress * (progress * 6 - 15) + 10);
+
+      // Dynamically interpolate towards live moving destination
+      const curX = this._camTransition.startPos.x + (destCamX - this._camTransition.startPos.x) * s;
+      const curY = this._camTransition.startPos.y + (destCamY - this._camTransition.startPos.y) * s;
+      const arcZ = Math.sin(Math.PI * s) * this._camTransition.peakArcHeight;
+      let curZ = this._camTransition.startPos.z + (destCamZ - this._camTransition.startPos.z) * s + arcZ;
+
+      // Guaranteed terrain safety boundary: camera never clips through terrain
+      const groundElev = this.getTerrainHeight(curX, curY);
+      if (curZ < groundElev + 2.5) {
+        curZ = groundElev + 2.5;
+      }
+
+      const curTargetX = this._camTransition.startTarget.x + (destTargetX - this._camTransition.startTarget.x) * s;
+      const curTargetY = this._camTransition.startTarget.y + (destTargetY - this._camTransition.startTarget.y) * s;
+      const curTargetZ = this._camTransition.startTarget.z + (destTargetZ - this._camTransition.startTarget.z) * s;
+
+      const curFov = this._camTransition.startFov + (targetFov - this._camTransition.startFov) * s;
+
+      this.camera.position.set(curX, curY, curZ);
+      this.controls.target.set(curTargetX, curTargetY, curTargetZ);
+      this.camera.fov = curFov;
+      this.camera.updateProjectionMatrix();
+
+      if (progress >= 1.0) {
+        this._camTransition.active = false;
+      }
+    } else if (isOrbitActive) {
+      // In steady-state orbit mode, OrbitControls auto-rotates around target
+      this.controls.autoRotate = true;
+      this.controls.autoRotateSpeed = 0.55;
+      this.controls.target.x += (destTargetX - this.controls.target.x) * 0.05;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * 0.05;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * 0.05;
+
+      if (Math.abs(this.camera.fov - targetFov) > 0.1) {
+        this.camera.fov += (targetFov - this.camera.fov) * 0.08;
+        this.camera.updateProjectionMatrix();
+      }
+    } else {
+      // Normal steady-state smooth tracking
+      this.controls.autoRotate = false;
+      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
+      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
+      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+
+      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+
+      if (Math.abs(this.camera.fov - targetFov) > 0.05) {
         this.camera.fov += (targetFov - this.camera.fov) * 0.06;
         this.camera.updateProjectionMatrix();
-
-        const camGlide = 0.055;
-        const targetGlide = 0.075;
-
-        this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-        this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-        this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
-
-        this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-        this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-        this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
       }
     }
 
