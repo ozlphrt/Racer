@@ -4615,18 +4615,18 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeParticles = 1600;
+    this.maxSmokeParticles = 600;
     this.smokeParticles = [];
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
     this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
-    this.smokeRotArr = new Float32Array(this.maxSmokeParticles);
+    this.smokeCosSinArr = new Float32Array(this.maxSmokeParticles * 2);
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
-    geo.setAttribute('rotation', new THREE.BufferAttribute(this.smokeRotArr, 1));
+    geo.setAttribute('cosSin', new THREE.BufferAttribute(this.smokeCosSinArr, 2));
     geo.setDrawRange(0, 0);
 
     const smokeTex = this.createSmokeTexture();
@@ -4634,15 +4634,15 @@ export class Renderer3D {
     const vertShader = `
       attribute float size;
       attribute float alpha;
-      attribute float rotation;
+      attribute vec2 cosSin;
       varying float vAlpha;
-      varying float vRot;
+      varying vec2 vCosSin;
       void main() {
         vAlpha = alpha;
-        vRot = rotation;
+        vCosSin = cosSin;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        // Balanced perspective sprite scaling
-        gl_PointSize = clamp(size * (1050.0 / -mvPosition.z), 2.0, 180.0);
+        // Performance-tuned point size with clamp preventing GPU fill-rate chokes
+        gl_PointSize = clamp(size * (720.0 / -mvPosition.z), 2.0, 92.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -4650,18 +4650,16 @@ export class Renderer3D {
     const fragShader = `
       uniform sampler2D uSmokeTexture;
       varying float vAlpha;
-      varying float vRot;
+      varying vec2 vCosSin;
       void main() {
         vec2 p = gl_PointCoord - vec2(0.5);
-        float cosR = cos(vRot);
-        float sinR = sin(vRot);
         vec2 rotUv = vec2(
-          p.x * cosR - p.y * sinR + 0.5,
-          p.x * sinR + p.y * cosR + 0.5
+          p.x * vCosSin.x - p.y * vCosSin.y + 0.5,
+          p.x * vCosSin.y + p.y * vCosSin.x + 0.5
         );
         
         vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * vAlpha * 0.40;
+        float alpha = texColor.a * vAlpha * 0.38;
         if (alpha < 0.005) discard;
 
         // Rich motorsport white-grey tire friction vapor
@@ -4696,21 +4694,22 @@ export class Renderer3D {
     if (this.smokeParticles.length >= this.maxSmokeParticles) {
       this.smokeParticles.shift();
     }
-    // Eject smoke puff directly at the tyre contact patch with backward drift and vertical billow
+    // Eject smoke puff directly at tyre contact patch on tarmac surface (z = 0.04)
+    const angle = Math.random() * Math.PI * 2;
     this.smokeParticles.push({
-      x: x + (Math.random() - 0.5) * 0.5,
-      y: y + (Math.random() - 0.5) * 0.5,
-      z: z + Math.random() * 0.20,
-      vx: (carVx * 0.12) + (Math.random() - 0.5) * 2.2,
-      vy: (carVy * 0.12) + (Math.random() - 0.5) * 2.2,
-      vz: 2.2 + Math.random() * 2.6, // Billows upwards into the air
-      size: 6.5 + Math.random() * 2.5, // Well-proportioned tyre vapor size
-      growthRate: 12.0 + Math.random() * 5.0, // Billows out into continuous clouds
-      rotation: Math.random() * Math.PI * 2,
-      vRot: (Math.random() - 0.5) * 2.2,
-      alpha: Math.min(0.28, intensity * 0.28),
+      x: x + (Math.random() - 0.5) * 0.25,
+      y: y + (Math.random() - 0.5) * 0.25,
+      z: z, // Exactly on tarmac contact plane (0.04)
+      vx: (carVx * 0.08) + (Math.random() - 0.5) * 1.2,
+      vy: (carVy * 0.08) + (Math.random() - 0.5) * 1.2,
+      vz: 0.9 + Math.random() * 1.4, // Gentle realistic upward thermal rise
+      size: 4.8 + Math.random() * 1.8, // Initial contact patch size
+      growthRate: 5.5 + Math.random() * 2.5, // Natural gradual plume expansion
+      rot: angle,
+      vRot: (Math.random() - 0.5) * 1.2,
+      alpha: Math.min(0.24, intensity * 0.24), // Airy translucent vapor
       life: 1.0,
-      decay: 1.50 + Math.random() * 0.35,
+      decay: 0.42 + Math.random() * 0.12, // Long lingering duration (~2.2 to 2.8 seconds)
     });
   }
 
@@ -4735,11 +4734,11 @@ export class Renderer3D {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vx *= 0.94;
-      p.vy *= 0.94;
+      p.vx *= 0.95;
+      p.vy *= 0.95;
       p.vz *= 0.96;
       p.size += p.growthRate * dt;
-      p.rotation += p.vRot * dt;
+      p.rot += p.vRot * dt;
 
       const idx = writeIdx * 3;
       this.smokePosArr[idx] = p.x;
@@ -4747,22 +4746,20 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.6);
-      this.smokeRotArr[writeIdx] = p.rotation;
+      // Smooth gradual quadratic fade-out across lingering life
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 2.0);
+
+      const rIdx = writeIdx * 2;
+      this.smokeCosSinArr[rIdx] = Math.cos(p.rot);
+      this.smokeCosSinArr[rIdx + 1] = Math.sin(p.rot);
 
       writeIdx++;
     }
 
-    const posAttr = this.smokeMesh.geometry.attributes.position;
-    const sizeAttr = this.smokeMesh.geometry.attributes.size;
-    const alphaAttr = this.smokeMesh.geometry.attributes.alpha;
-    const rotAttr = this.smokeMesh.geometry.attributes.rotation;
-
-    if (posAttr) posAttr.needsUpdate = true;
-    if (sizeAttr) sizeAttr.needsUpdate = true;
-    if (alphaAttr) alphaAttr.needsUpdate = true;
-    if (rotAttr) rotAttr.needsUpdate = true;
-
+    this.smokeMesh.geometry.attributes.position.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.size.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.cosSin.needsUpdate = true;
     this.smokeMesh.geometry.setDrawRange(0, writeIdx);
   }
 
@@ -5040,22 +5037,16 @@ export class Renderer3D {
             this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1);
             this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1);
 
-            // Volumetric continuous tire smoke puffs interpolated along the tyre trajectory
-            if (curRearInt > 0.28) {
+            // Smoke ONLY when a rear skid mark is actively being laid onto tarmac
+            if (isRearMarking) {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-              if (camDist < 600 || car === sim.player || car === this._focusCar || car === this._actionCarA) {
+              const isRelevantCar = (car === sim.player || car === this._focusCar || car === this._actionCarA || camDist < 75);
+              if (isRelevantCar && dLR > 0.35) {
                 const carVx = car.vx || 0;
                 const carVy = -(car.vy || 0);
-                const numPuffs = Math.max(1, Math.min(3, Math.ceil(dLR / 1.4)));
-                for (let s = 1; s <= numPuffs; s++) {
-                  const frac = s / numPuffs;
-                  const pxL = track.rlx + (rlx - track.rlx) * frac;
-                  const pyL = track.rly + (rly - track.rly) * frac;
-                  const pxR = track.rrx + (rrx - track.rrx) * frac;
-                  const pyR = track.rry + (rry - track.rry) * frac;
-                  this.addTireSmokePuff(pxL, pyL, 0.40, carVx, carVy, curRearInt);
-                  this.addTireSmokePuff(pxR, pyR, 0.40, carVx, carVy, curRearInt);
-                }
+                // Smoke originates directly at tyre tarmac contact surface (z = 0.04)
+                this.addTireSmokePuff(rlx, rly, 0.04, carVx, carVy, curRearInt);
+                this.addTireSmokePuff(rrx, rry, 0.04, carVx, carVy, curRearInt);
               }
             }
             track.prevRearAlpha = isRearMarking ? curRearAlpha : 0.0;
@@ -5087,22 +5078,16 @@ export class Renderer3D {
             this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1);
             this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1);
 
-            // Volumetric continuous tire smoke puffs for front sliding / lockups
-            if (curFrontInt > 0.28) {
+            // Smoke ONLY when a front skid mark is actively being laid onto tarmac (understeer, lockup)
+            if (isFrontMarking) {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-              if (camDist < 600 || car === sim.player || car === this._focusCar || car === this._actionCarA) {
+              const isRelevantCar = (car === sim.player || car === this._focusCar || car === this._actionCarA || camDist < 75);
+              if (isRelevantCar && dLF > 0.35) {
                 const carVx = car.vx || 0;
                 const carVy = -(car.vy || 0);
-                const numPuffs = Math.max(1, Math.min(3, Math.ceil(dLF / 1.4)));
-                for (let s = 1; s <= numPuffs; s++) {
-                  const frac = s / numPuffs;
-                  const pxL = track.flx + (flx - track.flx) * frac;
-                  const pyL = track.fly + (fly - track.fly) * frac;
-                  const pxR = track.frx + (frx - track.frx) * frac;
-                  const pyR = track.fry + (fry - track.fry) * frac;
-                  this.addTireSmokePuff(pxL, pyL, 0.40, carVx, carVy, curFrontInt);
-                  this.addTireSmokePuff(pxR, pyR, 0.40, carVx, carVy, curFrontInt);
-                }
+                // Smoke originates directly at tyre tarmac contact surface (z = 0.04)
+                this.addTireSmokePuff(flx, fly, 0.04, carVx, carVy, curFrontInt);
+                this.addTireSmokePuff(frx, fry, 0.04, carVx, carVy, curFrontInt);
               }
             }
             track.prevFrontAlpha = isFrontMarking ? curFrontAlpha : 0.0;
