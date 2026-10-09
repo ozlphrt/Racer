@@ -3096,8 +3096,8 @@ export class Renderer3D {
         child.castShadow = true;
         child.receiveShadow = true;
 
-        const isFrontWingMesh = child.name === 'Object_8';
-        const isRearWingMesh = child.name === 'Object_10';
+        const isFrontWheelsMesh = child.name === 'Object_8';
+        const isRearWheelsMesh = child.name === 'Object_10';
 
         const origMap = child.material?.map || this.f1Texture;
         const origRoughness = child.material?.roughness ?? 0.5;
@@ -3118,44 +3118,23 @@ export class Renderer3D {
           const z = posAttr.getZ(i);
           const absZ = Math.abs(z);
 
-          // 1. TYRES / WHEELS (Only present in Object_8 front and Object_10 rear)
-          let isTire = false;
-          if (isFrontWingMesh) {
-            isTire = (absZ > 0.48 && Math.abs(x - 1.58) < 0.45 && y < 0.58);
-          } else if (isRearWingMesh) {
-            isTire = (absZ > 0.48 && Math.abs(x - (-1.48)) < 0.50 && y < 0.58);
-          }
-
-          if (isTire) {
+          // 1. WHEELS / TYRES: Object_8 is 100% Front Wheels; Object_10 is 100% Rear Wheels
+          if (isFrontWheelsMesh || isRearWheelsMesh) {
             isTireArr[i] = 1.0;
             isBodyArr[i] = 0.0;
             liveryColorArr[i * 3] = 1.0;
             liveryColorArr[i * 3 + 1] = 1.0;
             liveryColorArr[i * 3 + 2] = 1.0;
-          } else if (isFrontWingMesh) {
-            // Front Wing aerodynamic flap cascade and endplate tips -> Secondary team color (cSec)
-            isTireArr[i] = 0.0;
-            isBodyArr[i] = 1.0;
-            const c = cSec;
-            liveryColorArr[i * 3] = c.r;
-            liveryColorArr[i * 3 + 1] = c.g;
-            liveryColorArr[i * 3 + 2] = c.b;
-          } else if (isRearWingMesh) {
-            // Rear Wing aerodynamic upper flap / DRS / endplates -> Accent team color (cAcc)
-            isTireArr[i] = 0.0;
-            isBodyArr[i] = 1.0;
-            const c = cAcc;
-            liveryColorArr[i * 3] = c.r;
-            liveryColorArr[i * 3 + 1] = c.g;
-            liveryColorArr[i * 3 + 2] = c.b;
           } else {
             // Main Bodywork Mesh (Object_6):
             isTireArr[i] = 0.0;
 
             // True underfloor skidblock & rear diffuser -> Matte dark carbon fiber
             const isUnderfloor = (y < 0.105) || (x < -1.1 && y < 0.16 && absZ < 0.40);
+            // Front & rear wheel wake deflectors / mud guards -> Matte dark carbon fiber (NOT body color)
+            const isWheelDeflector = (Math.abs(x - 1.58) < 0.55 && absZ > 0.42 && y >= 0.09 && y <= 0.85);
 
-            if (isUnderfloor) {
+            if (isUnderfloor || isWheelDeflector) {
               isBodyArr[i] = 0.0;
               liveryColorArr[i * 3] = 0.08;
               liveryColorArr[i * 3 + 1] = 0.08;
@@ -3164,14 +3143,8 @@ export class Renderer3D {
               isBodyArr[i] = 1.0;
               let c;
 
-              // A. Front mud protectors / tire wake deflectors over front wheels:
-              const isMudProtector = (Math.abs(x - 1.58) < 0.55 && y >= 0.58 && absZ > 0.42);
-
-              if (isMudProtector) {
-                // Front Mud Protectors -> Secondary team color (cSec) matching nose cone & front wing
-                c = cSec;
-              } else if (x > 1.75) {
-                // Nose Tip & Front Nose Cone -> Secondary Color (cSec)
+              if (x > 1.75) {
+                // Nose Tip & Front Wing -> Secondary Color (cSec)
                 c = cSec;
               } else if (
                 (x < -0.15 && x > -1.25 && y > 0.56 && absZ < 0.12) ||
@@ -3180,7 +3153,7 @@ export class Renderer3D {
                 // Halo Safety Ring & Shark Fin Aero Spine -> Accent Color (cAcc)
                 c = cAcc;
               } else if (absZ >= 0.22 && absZ <= 0.58 && x >= -0.45 && x <= 0.75 && y >= 0.13 && y <= 0.50) {
-                // Sculpted Sidepod Radiator Inlets & Flanks (the sides of the cars) -> Quad Color (cQuad)
+                // Sculpted Sidepod Radiator Inlets & Flanks -> Quad Color (cQuad)
                 c = cQuad;
               } else if (absZ > 0.50 && Math.abs(x - (-1.48)) < 0.50 && y >= 0.12 && y <= 0.45) {
                 // Rear brake duct winglets / deflectors -> Accent Color (cAcc)
