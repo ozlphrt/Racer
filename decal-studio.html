@@ -885,45 +885,38 @@
     const decalMeshes = {};
     let numberTexture = null;
 
-    // Helper: Create High-Res Number CanvasTexture
+    // Helper: Create High-Res Number CanvasTexture with 50% Translucent White Background
     function createNumberTexture(num) {
       const c = document.createElement('canvas');
-      c.width = 256;
-      c.height = 256;
+      c.width = 512;
+      c.height = 512;
       const ctx = c.getContext('2d');
-      ctx.clearRect(0, 0, 256, 256);
+      ctx.clearRect(0, 0, 512, 512);
 
-      // Outer Glow & Border
-      ctx.beginPath();
-      ctx.arc(128, 128, 108, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(10, 15, 26, 0.78)';
-      ctx.fill();
-      ctx.lineWidth = 10;
-      ctx.strokeStyle = '#ffffff';
-      ctx.stroke();
-
-      // Inner Accent Ring
-      ctx.beginPath();
-      ctx.arc(128, 128, 92, 0, Math.PI * 2);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
-      ctx.stroke();
-
-      // Bold Typography
       const str = `${num}`;
-      const fSize = str.length === 1 ? 120 : str.length === 2 ? 100 : 76;
+      const fSize = str.length >= 3 ? 200 : str.length === 2 ? 260 : 310;
+
+      // 1. Motorsport White Roundel Disc - 50% Translucent
+      ctx.beginPath();
+      ctx.arc(256, 256, 230, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.50)';
+      ctx.fill();
+
+      // 2. Bold Black Outer Border
+      ctx.lineWidth = 24;
+      ctx.strokeStyle = '#000000';
+      ctx.stroke();
+
+      // 3. Crisp Bold Black Number
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `900 ${fSize}px "Outfit", "Arial Black", Impact, sans-serif`;
-
-      ctx.shadowColor = 'rgba(0,0,0,0.9)';
-      ctx.shadowBlur = 12;
-      ctx.shadowOffsetY = 4;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(str, 128, 130);
+      ctx.font = `900 ${fSize}px "Outfit", "JetBrains Mono", Impact, "Arial Black", sans-serif`;
+      ctx.fillStyle = '#000000';
+      ctx.fillText(str, 256, 260);
 
       const tex = new THREE.CanvasTexture(c);
       tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
       tex.generateMipmaps = false;
       return tex;
     }
