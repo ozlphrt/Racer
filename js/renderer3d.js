@@ -4575,43 +4575,60 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeParticles = 600;
-    this.smokeParticles = [];
-    this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
-    this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
-    this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
+    this.maxSmokeQuads = 1200;
+    this.smokeQuads = [];
+    const maxVerts = this.maxSmokeQuads * 4;
+    const maxIndices = this.maxSmokeQuads * 6;
+
+    this.smokePosArr = new Float32Array(maxVerts * 3);
+    this.smokeAlphaArr = new Float32Array(maxVerts);
+    this.smokeUvArr = new Float32Array(maxVerts * 2);
+    const indices = new Uint32Array(maxIndices);
+
+    for (let i = 0; i < this.maxSmokeQuads; i++) {
+      const v0 = i * 4;
+      const i0 = i * 6;
+      indices[i0] = v0;
+      indices[i0 + 1] = v0 + 1;
+      indices[i0 + 2] = v0 + 2;
+      indices[i0 + 3] = v0 + 2;
+      indices[i0 + 4] = v0 + 1;
+      indices[i0 + 5] = v0 + 3;
+    }
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
+    geo.setAttribute('uv', new THREE.BufferAttribute(this.smokeUvArr, 2));
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.setDrawRange(0, 0);
 
     const vertShader = `
-      attribute float size;
       attribute float alpha;
       varying float vAlpha;
+      varying vec2 vUv;
       void main() {
         vAlpha = alpha;
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (260.0 / -mvPosition.z);
-        gl_Position = projectionMatrix * mvPosition;
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `;
 
     const fragShader = `
       varying float vAlpha;
-      void main() {
-        vec2 coord = gl_PointCoord - vec2(0.5);
-        float r2 = dot(coord, coord);
-        if (r2 > 0.25) discard;
-        
-        // Smooth continuous Gaussian bell-curve falloff (soft wispy vapor, no cotton ball rings)
-        float x = max(0.0, 1.0 - 4.0 * r2);
-        float soft = x * x;
+      varying vec2 vUv;
 
+      void main() {
+        // Continuous soft Gaussian edge falloff across ribbon width (u in [0, 1])
+        float uDist = abs(vUv.x - 0.5) * 2.0;
+        float softEdge = exp(-uDist * uDist * 3.8);
+
+        // Fast analytic longitudinal wisps (no heavy GPU noise loops)
+        float wisp = 0.72 + 0.28 * sin(vUv.y * 22.0 + vUv.x * 5.0);
+
+        // Translucent motorsport white-grey tire friction vapor
         vec3 smokeColor = vec3(0.92, 0.94, 0.96);
-        float alpha = soft * vAlpha * 0.45;
+        float alpha = softEdge * vAlpha * wisp * 0.65;
 
         gl_FragColor = vec4(smokeColor, alpha);
       }
@@ -4623,41 +4640,42 @@ export class Renderer3D {
       transparent: true,
       depthWrite: false,
       blending: THREE.NormalBlending,
+      side: THREE.DoubleSide,
     });
 
-    this.smokeMesh = new THREE.Points(geo, mat);
+    this.smokeMesh = new THREE.Mesh(geo, mat);
     this.smokeMesh.frustumCulled = false;
     this.smokeMesh.renderOrder = 450;
     this.scene.add(this.smokeMesh);
   }
 
   clearTireSmoke() {
-    this.smokeParticles = [];
+    this.smokeQuads = [];
     if (this.smokeMesh) this.smokeMesh.geometry.setDrawRange(0, 0);
   }
 
-  addTireSmokePuff(x, y, z, carVx, carVy, intensity) {
-    if (this.smokeParticles.length >= this.maxSmokeParticles) {
-      this.smokeParticles.shift();
+  addTireSmokeQuad(p0x, p0y, p1x, p1y, nx, ny, intensity) {
+    if (this.smokeQuads.length >= this.maxSmokeQuads) {
+      this.smokeQuads.shift();
     }
-    // Eject smoke puff directly at the tyre contact patch with backward drift and vertical billow
-    this.smokeParticles.push({
-      x: x + (Math.random() - 0.5) * 0.4,
-      y: y + (Math.random() - 0.5) * 0.4,
-      z: z + Math.random() * 0.15,
-      vx: (carVx * 0.12) + (Math.random() - 0.5) * 1.8,
-      vy: (carVy * 0.12) + (Math.random() - 0.5) * 1.8,
-      vz: 1.8 + Math.random() * 2.4, // Billows upwards into the air
-      size: 2.4 + Math.random() * 1.4,
-      growthRate: 5.2 + Math.random() * 2.6,
+    this.smokeQuads.push({
+      p0x, p0y,
+      p1x, p1y,
+      nx, ny,
+      w0: 1.35,
+      w1: 1.35,
+      z0: 0.15,
+      z1: 0.15,
       alpha: Math.min(0.85, intensity * 0.85),
       life: 1.0,
-      decay: 1.25 + Math.random() * 0.35,
+      decay: 1.15 + Math.random() * 0.25,
+      growthRate: 3.6,
+      riseRate: 0.65,
     });
   }
 
   updateTireSmoke() {
-    if (!this.smokeParticles || this.smokeParticles.length === 0) {
+    if (!this.smokeQuads || this.smokeQuads.length === 0) {
       if (this.smokeMesh) this.smokeMesh.geometry.setDrawRange(0, 0);
       return;
     }
@@ -4665,43 +4683,67 @@ export class Renderer3D {
     const dt = 1 / 60;
     let writeIdx = 0;
 
-    for (let i = this.smokeParticles.length - 1; i >= 0; i--) {
-      const p = this.smokeParticles[i];
-      p.life -= p.decay * dt;
-      if (p.life <= 0) {
-        this.smokeParticles.splice(i, 1);
+    for (let i = this.smokeQuads.length - 1; i >= 0; i--) {
+      const q = this.smokeQuads[i];
+      q.life -= q.decay * dt;
+      if (q.life <= 0) {
+        this.smokeQuads.splice(i, 1);
         continue;
       }
 
-      // Physics: drift, rise into the air, expand, and drag deceleration
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.z += p.vz * dt;
-      p.vx *= 0.94;
-      p.vy *= 0.94;
-      p.vz *= 0.96;
-      p.size += p.growthRate * dt;
+      // Continuous ribbon expands in width and lifts gently as it dissipates
+      q.w0 += q.growthRate * dt;
+      q.w1 += q.growthRate * dt;
+      q.z0 += q.riseRate * dt;
+      q.z1 += q.riseRate * dt;
 
-      const idx = writeIdx * 3;
-      this.smokePosArr[idx] = p.x;
-      this.smokePosArr[idx + 1] = p.y;
-      this.smokePosArr[idx + 2] = p.z;
+      const vOffset = writeIdx * 4;
+      const a = q.alpha * Math.pow(q.life, 1.25);
 
-      this.smokeSizeArr[writeIdx] = p.size;
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.4);
+      // v0: previous left
+      this.smokePosArr[vOffset * 3] = q.p0x - q.nx * q.w0;
+      this.smokePosArr[vOffset * 3 + 1] = q.p0y - q.ny * q.w0;
+      this.smokePosArr[vOffset * 3 + 2] = q.z0;
+      this.smokeAlphaArr[vOffset] = a;
+      this.smokeUvArr[vOffset * 2] = 0.0;
+      this.smokeUvArr[vOffset * 2 + 1] = 0.0;
+
+      // v1: previous right
+      this.smokePosArr[(vOffset + 1) * 3] = q.p0x + q.nx * q.w0;
+      this.smokePosArr[(vOffset + 1) * 3 + 1] = q.p0y + q.ny * q.w0;
+      this.smokePosArr[(vOffset + 1) * 3 + 2] = q.z0;
+      this.smokeAlphaArr[vOffset + 1] = a;
+      this.smokeUvArr[(vOffset + 1) * 2] = 1.0;
+      this.smokeUvArr[(vOffset + 1) * 2 + 1] = 0.0;
+
+      // v2: current left
+      this.smokePosArr[(vOffset + 2) * 3] = q.p1x - q.nx * q.w1;
+      this.smokePosArr[(vOffset + 2) * 3 + 1] = q.p1y - q.ny * q.w1;
+      this.smokePosArr[(vOffset + 2) * 3 + 2] = q.z1;
+      this.smokeAlphaArr[vOffset + 2] = a;
+      this.smokeUvArr[(vOffset + 2) * 2] = 0.0;
+      this.smokeUvArr[(vOffset + 2) * 2 + 1] = 1.0;
+
+      // v3: current right
+      this.smokePosArr[(vOffset + 3) * 3] = q.p1x + q.nx * q.w1;
+      this.smokePosArr[(vOffset + 3) * 3 + 1] = q.p1y + q.ny * q.w1;
+      this.smokePosArr[(vOffset + 3) * 3 + 2] = q.z1;
+      this.smokeAlphaArr[vOffset + 3] = a;
+      this.smokeUvArr[(vOffset + 3) * 2] = 1.0;
+      this.smokeUvArr[(vOffset + 3) * 2 + 1] = 1.0;
 
       writeIdx++;
     }
 
     const posAttr = this.smokeMesh.geometry.attributes.position;
-    const sizeAttr = this.smokeMesh.geometry.attributes.size;
     const alphaAttr = this.smokeMesh.geometry.attributes.alpha;
+    const uvAttr = this.smokeMesh.geometry.attributes.uv;
 
     if (posAttr) posAttr.needsUpdate = true;
-    if (sizeAttr) sizeAttr.needsUpdate = true;
     if (alphaAttr) alphaAttr.needsUpdate = true;
+    if (uvAttr) uvAttr.needsUpdate = true;
 
-    this.smokeMesh.geometry.setDrawRange(0, writeIdx);
+    this.smokeMesh.geometry.setDrawRange(0, writeIdx * 6);
   }
 
   setupSkidmarks() {
@@ -4978,6 +5020,16 @@ export class Renderer3D {
             this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1);
             this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1);
 
+            // Continuous extruded tire smoke vapor ribbons for nearby / focused cars
+            if (curRearInt > 0.30) {
+              const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+              if (camDist < 600 || car === sim.player || car === this._focusCar || car === this._actionCarA) {
+                const normX = nx / hw;
+                const normY = ny / hw;
+                this.addTireSmokeQuad(track.rlx, track.rly, rlx, rly, normX, normY, curRearInt);
+                this.addTireSmokeQuad(track.rrx, track.rry, rrx, rry, normX, normY, curRearInt);
+              }
+            }
             track.prevRearAlpha = isRearMarking ? curRearAlpha : 0.0;
             track.rearActive = isRearMarking;
             added = true;
@@ -5007,6 +5059,16 @@ export class Renderer3D {
             this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1);
             this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1);
 
+            // Continuous extruded tire smoke vapor ribbons for front slides
+            if (curFrontInt > 0.30) {
+              const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+              if (camDist < 600 || car === sim.player || car === this._focusCar || car === this._actionCarA) {
+                const normX = nx / hw;
+                const normY = ny / hw;
+                this.addTireSmokeQuad(track.flx, track.fly, flx, fly, normX, normY, curFrontInt);
+                this.addTireSmokeQuad(track.frx, track.fry, frx, fry, normX, normY, curFrontInt);
+              }
+            }
             track.prevFrontAlpha = isFrontMarking ? curFrontAlpha : 0.0;
             track.frontActive = isFrontMarking;
             added = true;
@@ -5014,19 +5076,6 @@ export class Renderer3D {
         } else {
           track.frontActive = false;
           track.prevFrontAlpha = 0;
-        }
-
-        // Continuous tire smoke puff emission on heavier slides
-        const maxSlide = Math.max(curRearInt, curFrontInt);
-        if (maxSlide > 0.35) {
-          const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-          if (camDistSq < 600 || car === sim.player) {
-            const carVx = car.vx || 0;
-            const carVy = -(car.vy || 0);
-            const smokeAlpha = (maxSlide - 0.35) / 0.65;
-            this.addTireSmokePuff(rlx, rly, 0.40, carVx, carVy, smokeAlpha);
-            this.addTireSmokePuff(rrx, rry, 0.40, carVx, carVy, smokeAlpha);
-          }
         }
       } else {
         track.rearActive = false;
