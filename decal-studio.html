@@ -706,7 +706,8 @@
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
       "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/controls/OrbitControls.js",
-      "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/loaders/GLTFLoader.js"
+      "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/loaders/GLTFLoader.js",
+      "three/examples/jsm/geometries/DecalGeometry.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/geometries/DecalGeometry.js"
     }
   }
   </script>
@@ -715,6 +716,7 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+    import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 
     // Default calibrated decal transforms
     // Default calibrated decal transforms (World: -X=Front, +X=Rear, -Y=Left, +Y=Right, +Z=Up)
@@ -928,7 +930,19 @@
 
     numberTexture = createNumberTexture(currentNumber);
 
-    // Initialize Decal Meshes
+    // Mesh list for DecalGeometry wrapping and raycasting
+    let carMeshes = [];
+    function updateCarMeshesList() {
+      carMeshes = [];
+      if (!carModel) return;
+      carModel.traverse((child) => {
+        if (child.isMesh && child.visible && !child.name?.includes('Plane') && !child.name?.includes('Sphere') && !child.name?.includes('Object_12') && !child.name?.includes('Object_4')) {
+          carMeshes.push(child);
+        }
+      });
+    }
+
+    // Initialize Decal Meshes with non-flicker polygonOffset
     function setupDecalMeshes() {
       Object.keys(DEFAULT_DECALS).forEach((key) => {
         const geo = new THREE.PlaneGeometry(1, 1);
@@ -939,7 +953,8 @@
           depthTest: true,
           depthWrite: false,
           polygonOffset: true,
-          polygonOffsetFactor: -1
+          polygonOffsetFactor: -4,
+          polygonOffsetUnits: -4,
         });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.renderOrder = 999;
@@ -949,13 +964,50 @@
       applyAllDecalTransforms();
     }
 
-
-    // Apply Decal Transform from data
+    // Apply Decal Transform: Wraps conformally onto the 3D car body surface using DecalGeometry
     function applyDecalTransform(key) {
       const data = decals[key];
       const mesh = decalMeshes[key];
       if (!data || !mesh) return;
 
+      mesh.material.opacity = (key === activeDecalKey) ? 1.0 : 0.88;
+
+      if (carMeshes.length > 0) {
+        carRoot.updateMatrixWorld(true);
+        const pos = new THREE.Vector3(data.posX, data.posY, data.posZ);
+        const euler = new THREE.Euler(
+          THREE.MathUtils.degToRad(data.rotX),
+          THREE.MathUtils.degToRad(data.rotY),
+          THREE.MathUtils.degToRad(data.rotZ),
+          'ZYX'
+        );
+        // Generous projection volume along the surface normal (depth = 3.8)
+        const size = new THREE.Vector3(data.scaleX, data.scaleY, 3.8);
+
+        // Project directly onto the car surface triangles
+        let wrapped = false;
+        for (const m of carMeshes) {
+          try {
+            const decalGeo = new DecalGeometry(m, pos, euler, size);
+            if (decalGeo.attributes.position && decalGeo.attributes.position.count > 0) {
+              mesh.geometry.dispose();
+              mesh.geometry = decalGeo;
+              mesh.position.set(0, 0, 0);
+              mesh.rotation.set(0, 0, 0);
+              mesh.scale.set(1, 1, 1);
+              mesh.visible = true;
+              wrapped = true;
+              break;
+            }
+          } catch (e) {}
+        }
+
+        if (wrapped) return;
+      }
+
+      // Conformal Fallback: Place surface plane aligned to pos/rot
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.PlaneGeometry(1, 1);
       mesh.position.set(data.posX, data.posY, data.posZ);
       mesh.scale.set(data.scaleX, data.scaleY, 1);
       mesh.rotation.order = 'ZYX';
@@ -964,13 +1016,7 @@
         THREE.MathUtils.degToRad(data.rotY),
         THREE.MathUtils.degToRad(data.rotZ)
       );
-
-      // Outline highlight on active decal
-      if (key === activeDecalKey) {
-        mesh.material.opacity = 1.0;
-      } else {
-        mesh.material.opacity = 0.85;
-      }
+      mesh.visible = true;
     }
 
     function applyAllDecalTransforms() {
@@ -1010,7 +1056,10 @@
           });
 
           carRoot.add(carModel);
+          carRoot.updateMatrixWorld(true);
+          updateCarMeshesList();
           updateCarLiveryColor(currentCarColor);
+          applyAllDecalTransforms();
         },
         undefined,
         (err) => {
@@ -1061,9 +1110,57 @@
 
       carRoot.add(group);
       carModel = group;
+      carRoot.updateMatrixWorld(true);
+      updateCarMeshesList();
+      applyAllDecalTransforms();
     }
 
     loadF1Car();
+
+    // Click on 3D Car Surface to Snap & Wrap Active Decal Directly
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let isClickDrag = false;
+    let clickStartX = 0;
+    let clickStartY = 0;
+
+    canvas.addEventListener('pointerdown', (e) => {
+      clickStartX = e.clientX;
+      clickStartY = e.clientY;
+      isClickDrag = false;
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY) > 6) {
+        isClickDrag = true;
+      }
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      if (isClickDrag) return;
+
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      if (carMeshes.length > 0) {
+        const hits = raycaster.intersectObjects(carMeshes, true);
+        if (hits.length > 0) {
+          const hit = hits[0];
+          // Convert hit point to carRoot local space
+          const localHit = carRoot.worldToLocal(hit.point.clone());
+          decals[activeDecalKey].posX = parseFloat(localHit.x.toFixed(2));
+          decals[activeDecalKey].posY = parseFloat(localHit.y.toFixed(2));
+          decals[activeDecalKey].posZ = parseFloat(localHit.z.toFixed(2));
+
+          syncUiFromData(activeDecalKey);
+          applyDecalTransform(activeDecalKey);
+          saveDecalsToStorage();
+          showToast(`Wrapped to surface at (${decals[activeDecalKey].posX}, ${decals[activeDecalKey].posY})`);
+        }
+      }
+    });
 
     function updateCarLiveryColor(hex) {
       currentCarColor = hex;
