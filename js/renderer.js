@@ -980,22 +980,22 @@ export class Renderer {
 
       // Smooth, progressive skid intensity modeling (no harsh binary on/off)
       const slipMag = Math.abs(car.slipAngle || 0);
-      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.030) / 0.15));
-      const slipInt = Math.pow(slipNorm, 1.6) * 0.78;
+      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.015) / 0.09));
+      const slipInt = Math.pow(slipNorm, 1.1) * 0.90;
 
-      const brakeNorm = (car.throttle < -0.08 && car.speed > 22)
-        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.08) / 0.82))
+      const brakeNorm = (car.throttle < -0.05 && car.speed > 16)
+        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.70))
         : 0;
-      const brakeInt = Math.pow(brakeNorm, 1.8) * 0.72;
+      const brakeInt = Math.pow(brakeNorm, 1.3) * 0.88;
 
-      const spinNorm = (car.throttle > 0.62 && car.speed < 88 && !car.crashed)
-        ? Math.max(0, Math.min(1.0, (car.throttle - 0.62) / 0.38 * (1.0 - car.speed / 88)))
+      const spinNorm = (car.throttle > 0.50 && car.speed < 110 && !car.crashed)
+        ? Math.max(0, Math.min(1.0, (car.throttle - 0.50) / 0.45 * (1.0 - car.speed / 110)))
         : 0;
-      const spinInt = Math.pow(spinNorm, 1.5) * 0.70;
+      const spinInt = Math.pow(spinNorm, 1.2) * 0.85;
 
-      const crashInt = (car.crashed && car.speed > 5) ? Math.min(0.78, car.speed / 75) : 0;
+      const crashInt = (car.crashed && car.speed > 4) ? Math.min(0.92, car.speed / 50) : 0;
 
-      const targetIntensity = Math.min(0.85, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      const targetIntensity = Math.min(0.92, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
       let track = this.carPrevTires.get(car);
       if (!track) {
@@ -1004,7 +1004,7 @@ export class Renderer {
       }
 
       const prevInt = track.smoothInt || 0;
-      const rate = targetIntensity > prevInt ? 0.30 : 0.10;
+      const rate = targetIntensity > prevInt ? 0.80 : 0.25;
       const curInt = prevInt + (targetIntensity - prevInt) * rate;
       track.smoothInt = curInt;
 
@@ -1016,13 +1016,13 @@ export class Renderer {
       const rx = car.x - cos * 8.0 + sin * 5.2;
       const ry = car.y - sin * 8.0 - cos * 5.2;
 
-      const SKID_THRESH = 0.018;
-      const isMarking = curInt > SKID_THRESH || (track.active && prevInt > SKID_THRESH);
+      const SKID_THRESH = 0.020;
+      const isMarking = curInt > SKID_THRESH;
 
-      if (track.initialized && isMarking) {
+      if (track.initialized && (isMarking || track.active)) {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
         if (dL > 0.25 && dL < 35) {
-          const alpha = Math.max(prevInt, curInt) * 0.75;
+          const alpha = isMarking ? (0.28 + curInt * 0.64) : 0.15;
           this.skidmarks.push({
             x0: track.lx, y0: track.ly,
             x1: lx, y1: ly,
@@ -1036,6 +1036,8 @@ export class Renderer {
           if (this.skidmarks.length > maxSkidSegments) {
             this.skidmarks.splice(0, this.skidmarks.length - maxSkidSegments);
           }
+
+          track.active = isMarking;
 
           // Emit continuous ribbon quad smoke on heavier scrubbing
           if (curInt > 0.30) {
@@ -1082,7 +1084,7 @@ export class Renderer {
     if (!this.skidmarks || this.skidmarks.length === 0) return;
     const ctx = this.ctx;
     ctx.save();
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     for (let i = 0; i < this.skidmarks.length; i++) {
       const s = this.skidmarks[i];

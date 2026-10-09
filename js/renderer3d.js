@@ -4831,12 +4831,12 @@ export class Renderer3D {
       varying vec2 vUv;
       void main() {
         // Deep pitch-black burnt tire rubber compound
-        vec3 rubber = vec3(0.010, 0.010, 0.015);
-        // Soft lateral tire feathering: solid center contact patch, smooth outer shoulder roll-off
-        float lateral = smoothstep(0.0, 0.16, vUv.x) * smoothstep(1.0, 0.84, vUv.x);
-        // Dual-shoulder tire pressure concentration
-        float shoulder = 0.86 + 0.14 * sin(vUv.x * 3.14159265);
-        float alpha = vAlpha * lateral * shoulder * 0.90;
+        vec3 rubber = vec3(0.012, 0.012, 0.016);
+        // Soft lateral tire feathering with solid dark center contact patch
+        float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
+        float lateral = 0.55 + 0.45 * edge;
+        float alpha = clamp(vAlpha * lateral, 0.0, 0.95);
+        if (alpha < 0.01) discard;
         gl_FragColor = vec4(rubber, alpha);
       }
     `;
@@ -4848,6 +4848,7 @@ export class Renderer3D {
       depthWrite: false,
       depthTest: true,
       side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
       polygonOffset: true,
       polygonOffsetFactor: -4.0,
       polygonOffsetUnits: -4.0,
@@ -4873,8 +4874,8 @@ export class Renderer3D {
   addSkidQuad(v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y, alpha0, alpha1) {
     const quadIdx = this.skidHead;
     const vOffset = quadIdx * 4;
-    // Elevated above asphalt slab (0.05) and white lines (0.12) to stay clearly visible
-    const z = 0.145;
+    // Elevated safely above asphalt slab (0.05) and white lines (0.12) to stay clearly visible
+    const z = 0.16;
 
     // v0 (prev outer edge)
     this.skidPosArr[vOffset * 3] = v0x;
@@ -4908,7 +4909,7 @@ export class Renderer3D {
     if (!sim || !sim.cars) return;
     const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
-    const SKID_THRESH = 0.035;
+    const SKID_THRESH = 0.020;
 
     for (let i = 0; i < candidateCars.length; i++) {
       const car = candidateCars[i];
@@ -4920,26 +4921,26 @@ export class Renderer3D {
       // Smooth, progressive skid intensity modeling (no harsh binary on/off)
       // 1. Lateral cornering slip: starts with a soft trace and smoothly darkens as slip increases
       const slipMag = Math.abs(car.slipAngle || 0);
-      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.022) / 0.10));
-      const slipInt = Math.pow(slipNorm, 1.3) * 0.88;
+      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.015) / 0.09));
+      const slipInt = Math.pow(slipNorm, 1.1) * 0.90;
 
       // 2. Trail braking & heavy lockup: smooth progressive build-up
-      const brakeNorm = (car.throttle < -0.05 && car.speed > 18)
-        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.75))
+      const brakeNorm = (car.throttle < -0.05 && car.speed > 16)
+        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.70))
         : 0;
-      const brakeInt = Math.pow(brakeNorm, 1.5) * 0.85;
+      const brakeInt = Math.pow(brakeNorm, 1.3) * 0.88;
 
       // 3. Launch wheelspin / burnout
-      const spinNorm = (car.throttle > 0.55 && car.speed < 95 && !car.crashed)
-        ? Math.max(0, Math.min(1.0, (car.throttle - 0.55) / 0.40 * (1.0 - car.speed / 95)))
+      const spinNorm = (car.throttle > 0.50 && car.speed < 110 && !car.crashed)
+        ? Math.max(0, Math.min(1.0, (car.throttle - 0.50) / 0.45 * (1.0 - car.speed / 110)))
         : 0;
-      const spinInt = Math.pow(spinNorm, 1.3) * 0.82;
+      const spinInt = Math.pow(spinNorm, 1.2) * 0.85;
 
       // 4. Off-track crash slide
-      const crashInt = (car.crashed && car.speed > 5) ? Math.min(0.90, car.speed / 60) : 0;
+      const crashInt = (car.crashed && car.speed > 4) ? Math.min(0.92, car.speed / 50) : 0;
 
-      // Combined instantaneous target intensity (0.00 .. 0.90)
-      const targetIntensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      // Combined instantaneous target intensity (0.00 .. 0.92)
+      const targetIntensity = Math.min(0.92, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
       let track = this.carPrevTires.get(car);
       if (!track) {
@@ -4958,21 +4959,22 @@ export class Renderer3D {
       // Fast attack so rubber marks appear immediately when tires scrub, with smooth decay on exit
       // Eliminates high-frequency frame jitter / dashed line artifacts while keeping skids bold & responsive
       const prevInt = track.smoothInt || 0;
-      const rate = targetIntensity > prevInt ? 0.75 : 0.22;
+      const rate = targetIntensity > prevInt ? 0.80 : 0.25;
       const curInt = prevInt + (targetIntensity - prevInt) * rate;
       track.smoothInt = curInt;
 
       const cos = Math.cos(car.angle);
       const sin = Math.sin(car.angle);
       // Contact patch of Left and Right rear tires (aligned with 3D F1 rear axle)
-      const lx = car.x - cos * 5.6 - sin * 4.6;
+      // Car heading in 3D is -car.angle, rear axle backward is (-cos, sin), lateral left is (sin, cos)
+      const lx = car.x - cos * 5.6 + sin * 4.6;
       const ly = -car.y + sin * 5.6 + cos * 4.6;
-      const rx = car.x - cos * 5.6 + sin * 4.6;
+      const rx = car.x - cos * 5.6 - sin * 4.6;
       const ry = -car.y + sin * 5.6 - cos * 4.6;
 
-      const hw = 1.05; // half width of tire contact patch (~2.1m wide contact patch)
-      const nx = -sin * hw;
-      const ny = -cos * hw;
+      const hw = 1.1; // half width of tire contact patch (~2.2m wide contact patch)
+      const nx = sin * hw;
+      const ny = cos * hw;
 
       const curL0x = lx - nx;
       const curL0y = ly - ny;
@@ -4984,13 +4986,14 @@ export class Renderer3D {
       const curR1x = rx + nx;
       const curR1y = ry + ny;
 
-      const isMarking = curInt > SKID_THRESH || (track.active && prevInt > SKID_THRESH);
+      const isMarking = curInt > SKID_THRESH;
+      const curAlpha = isMarking ? (0.28 + curInt * 0.64) : 0.0;
 
-      if (track.initialized && isMarking) {
+      if (track.initialized && (isMarking || track.active)) {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
         if (dL > 0.25 && dL < 35) {
           // If already actively drawing, reuse the exact previous quad endpoints to ensure a continuous gapless ribbon;
-          // if starting a new ribbon, start from previous tire position with soft alpha for a smooth, gradual fade-in
+          // if starting a new ribbon, start from previous tire position with soft entry alpha for a smooth, gradual fade-in
           const pL0x = track.active ? track.l0x : (track.lx - nx);
           const pL0y = track.active ? track.l0y : (track.ly - ny);
           const pL1x = track.active ? track.l1x : (track.lx + nx);
@@ -5001,8 +5004,8 @@ export class Renderer3D {
           const pR1x = track.active ? track.r1x : (track.rx + nx);
           const pR1y = track.active ? track.r1y : (track.ry + ny);
 
-          const alpha0 = track.active ? track.prevAlpha : (curInt * 0.35);
-          const alpha1 = curInt > SKID_THRESH ? curInt : 0.0;
+          const alpha0 = track.active ? track.prevAlpha : (curAlpha * 0.40);
+          const alpha1 = isMarking ? curAlpha : 0.0;
 
           // Left tire skid quad
           this.addSkidQuad(
@@ -5023,13 +5026,13 @@ export class Renderer3D {
           );
 
           // Continuous tire smoke puff emission on heavier slides
-          if (curInt > 0.28) {
+          if (curInt > 0.25) {
             const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
             if (camDistSq < 600 || car === sim.player) {
               const carVx = car.vx || 0;
               const carVy = -(car.vy || 0);
               const numPuffs = Math.max(1, Math.min(3, Math.ceil(dL / 1.4)));
-              const smokeAlpha = (curInt - 0.28) / 0.72;
+              const smokeAlpha = (curInt - 0.25) / 0.75;
               for (let s = 1; s <= numPuffs; s++) {
                 const frac = s / numPuffs;
                 const pxL = track.lx + (lx - track.lx) * frac;
@@ -5042,8 +5045,8 @@ export class Renderer3D {
             }
           }
 
-          track.prevAlpha = alpha1;
-          track.active = curInt > SKID_THRESH;
+          track.prevAlpha = isMarking ? curAlpha : 0.0;
+          track.active = isMarking;
           added = true;
         }
       } else {
@@ -5070,6 +5073,7 @@ export class Renderer3D {
     if (added && this.skidMesh) {
       this.skidMesh.geometry.attributes.position.needsUpdate = true;
       this.skidMesh.geometry.attributes.alpha.needsUpdate = true;
+      this.skidMesh.geometry.attributes.uv.needsUpdate = true;
       this.skidMesh.geometry.setDrawRange(0, this.skidCount * 6);
     }
   }
