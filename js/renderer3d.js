@@ -5297,7 +5297,7 @@ export class Renderer3D {
         for (let i = 0; i < pool.length; i++) {
           const c = pool[i];
           if (c !== prevA && (c.alive || c.finished) && !c.crashed) {
-            const d = Math.hypot(prevA.x - c.x, prevA.y - c.y);
+            const d = Math.hypot(prevA.x - c.x, -prevA.y - (-c.y));
             if (d < closestD) {
               closestD = d;
               partnerB = c;
@@ -5308,7 +5308,11 @@ export class Renderer3D {
       return { carA: prevA, carB: partnerB || null };
     }
 
-    let bestScore = -1;
+    // Reference position of current camera view / previous focus car
+    const curRefX = prevA ? prevA.x : (this.controls?.target ? this.controls.target.x : 0);
+    const curRefY = prevA ? -prevA.y : (this.controls?.target ? this.controls.target.y : 0);
+
+    let bestScore = -Infinity;
     let bestPair = null;
 
     for (let i = 0; i < pool.length; i++) {
@@ -5362,16 +5366,29 @@ export class Renderer3D {
         const avgRank = (rank1 + rank2) * 0.5;
         score += Math.max(0, 14 - avgRank * 1.2);
 
-        // 6. Manual driving player focus
-        if (isManual && (c1 === player || c2 === player)) {
-          score += 35;
+        // 6. Spatial Transition Distance: heavily prioritize nearby action to prevent jarring cross-track camera jumps
+        const pairMidX = (c1.x + c2.x) * 0.5;
+        const pairMidY = (-c1.y + -c2.y) * 0.5;
+        const travelDist = Math.hypot(pairMidX - curRefX, pairMidY - curRefY);
+
+        if (travelDist < 60) {
+          score += 70; // In immediate visual sector
+        } else if (travelDist < 160) {
+          score += (160 - travelDist) * 0.45; // Adjacent sector
+        } else if (travelDist > 250) {
+          score -= Math.min(220, (travelDist - 250) * 0.40); // Heavy discount on far-away battles
         }
 
-        // 7. Hysteresis / Stability bonus: keeps camera focused on active battle without flip-flopping
+        // 7. Manual driving player focus
+        if (isManual && (c1 === player || c2 === player)) {
+          score += 45;
+        }
+
+        // 8. Hysteresis / Stability bonus: keeps camera focused on active battle without flip-flopping
         if (this._currentActionPair &&
             ((this._currentActionPair.carA === c1 && this._currentActionPair.carB === c2) ||
              (this._currentActionPair.carA === c2 && this._currentActionPair.carB === c1))) {
-          score += 45;
+          score += 50;
         }
 
         if (score > bestScore) {
@@ -5382,9 +5399,37 @@ export class Renderer3D {
     }
 
     if (!bestPair) {
-      const leaderCar = rankedCars[0] || pool[0];
-      const secondCar = pool.find((c) => c !== leaderCar) || null;
-      bestPair = { carA: leaderCar, carB: secondCar };
+      // Smart Fallback: Pick active car closest to current view for seamless transition (with modest rank consideration)
+      let bestFallbackCar = null;
+      let bestFallbackScore = -Infinity;
+
+      for (let i = 0; i < pool.length; i++) {
+        const c = pool[i];
+        const distToRef = Math.hypot(c.x - curRefX, -c.y - curRefY);
+        const rank = this._carRankMap ? (this._carRankMap.get(c) || 99) : (i + 1);
+        const proxScore = Math.max(0, 200 - distToRef * 0.5);
+        const rankBonus = Math.max(0, 30 - rank * 2);
+        const fbScore = proxScore + rankBonus;
+        if (fbScore > bestFallbackScore) {
+          bestFallbackScore = fbScore;
+          bestFallbackCar = c;
+        }
+      }
+
+      const primary = bestFallbackCar || rankedCars[0] || pool[0];
+      let partner = null;
+      let minNeighborD = Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        const c = pool[i];
+        if (c !== primary) {
+          const d = Math.hypot(primary.x - c.x, -primary.y - (-c.y));
+          if (d < minNeighborD) {
+            minNeighborD = d;
+            partner = c;
+          }
+        }
+      }
+      bestPair = { carA: primary, carB: partner };
     }
 
     if (bestPair.carB && this._carRankMap) {
@@ -5564,16 +5609,37 @@ export class Renderer3D {
           this._lastPresetSwitchTime = now;
           this._autoNextSwitch = now + 20000;
         } else {
-          // General rotating pool (TV Gantry 'broadcast' is excluded so it ONLY triggers on 2-3s approach)
-          const weightedPool = [
-            { preset: 'heli', weight: 35 },        // Camera 6 (Helicopter) - Highly Prioritized
-            { preset: 'orbit', weight: 25 },       // Camera 8 (Free Orbit) - Prioritized
-            { preset: 'action_rear', weight: 25 }, // Camera 3 (Action Rear) - Prioritized
-            { preset: 'chase', weight: 12 },       // Camera 1 (Chase Cam) - Standard
-            { preset: 'action', weight: 12 },      // Camera 2 (Action Front) - Standard
-            { preset: 'follow', weight: 12 },      // Camera 5 (Broadcast Follow) - Standard
-            { preset: 'onboard', weight: 4 },      // Camera 4 (Onboard T-Cam) - Deprioritized
-          ];
+          // Dynamic cinematic preset sequencing (picks natural, comfortable transitions)
+          let weightedPool;
+          if (this._autoPreset === 'heli') {
+            weightedPool = [
+              { preset: 'action_rear', weight: 40 },
+              { preset: 'orbit', weight: 35 },
+              { preset: 'follow', weight: 15 },
+              { preset: 'chase', weight: 10 },
+            ];
+          } else if (this._autoPreset === 'action_rear' || this._autoPreset === 'chase') {
+            weightedPool = [
+              { preset: 'heli', weight: 45 },
+              { preset: 'orbit', weight: 30 },
+              { preset: 'follow', weight: 15 },
+              { preset: 'action', weight: 10 },
+            ];
+          } else if (this._autoPreset === 'orbit') {
+            weightedPool = [
+              { preset: 'heli', weight: 40 },
+              { preset: 'action_rear', weight: 35 },
+              { preset: 'follow', weight: 15 },
+              { preset: 'chase', weight: 10 },
+            ];
+          } else {
+            weightedPool = [
+              { preset: 'heli', weight: 35 },
+              { preset: 'orbit', weight: 25 },
+              { preset: 'action_rear', weight: 25 },
+              { preset: 'follow', weight: 15 },
+            ];
+          }
 
           const eligible = weightedPool.filter((item) => item.preset !== this._autoPreset);
           const totalWeight = eligible.reduce((sum, item) => sum + item.weight, 0);
@@ -5666,11 +5732,10 @@ export class Renderer3D {
       targetGlide = 0.05;
     } else if (cameraPreset === 'action' && focusCar) {
       // ACTION FRONT CAM: Smooth reverse camera floating ahead, looking back at P1 and P2
-      if (typeof this._actionAngle !== 'number' || this._lastActionFocus !== p1) {
+      if (typeof this._actionAngle !== 'number' || typeof this._actionTargetX !== 'number') {
         this._actionAngle = refAngle;
         this._actionTargetX = midX;
         this._actionTargetY = midY;
-        this._lastActionFocus = p1;
       } else {
         let diffAngle = refAngle - this._actionAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
@@ -5681,6 +5746,7 @@ export class Renderer3D {
         this._actionTargetX += (midX - this._actionTargetX) * 0.06;
         this._actionTargetY += (midY - this._actionTargetY) * 0.06;
       }
+      this._lastActionFocus = p1;
 
       const cosA = Math.cos(this._actionAngle);
       const sinA = Math.sin(this._actionAngle);
@@ -5704,11 +5770,10 @@ export class Renderer3D {
       targetGlide = 0.075;
     } else if (cameraPreset === 'action_rear' && focusCar) {
       // ACTION REAR CAM: Smooth pursuit angle behind the battle, looking forward at P1 & P2
-      if (typeof this._actionRearAngle !== 'number' || this._lastActionRearFocus !== p1) {
+      if (typeof this._actionRearAngle !== 'number' || typeof this._actionRearTargetX !== 'number') {
         this._actionRearAngle = refAngle;
         this._actionRearTargetX = midX;
         this._actionRearTargetY = midY;
-        this._lastActionRearFocus = p1;
       } else {
         let diffAngle = refAngle - this._actionRearAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
@@ -5718,6 +5783,7 @@ export class Renderer3D {
         this._actionRearTargetX += (midX - this._actionRearTargetX) * 0.06;
         this._actionRearTargetY += (midY - this._actionRearTargetY) * 0.06;
       }
+      this._lastActionRearFocus = p1;
 
       const cosA = Math.cos(this._actionRearAngle);
       const sinA = Math.sin(this._actionRearAngle);
@@ -5771,11 +5837,10 @@ export class Renderer3D {
       targetGlide = 0.25;
     } else if (cameraPreset === 'heli' && focusCar) {
       // CINEMATIC AERIAL PURSUIT HELICOPTER: Sweeping sky perspective framing P1 and P2
-      if (typeof this._heliAngle !== 'number' || this._lastHeliFocus !== p1) {
+      if (typeof this._heliAngle !== 'number' || typeof this._heliTargetX !== 'number') {
         this._heliAngle = refAngle;
         this._heliTargetX = midX;
         this._heliTargetY = midY;
-        this._lastHeliFocus = p1;
       } else {
         let diffAngle = refAngle - this._heliAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
@@ -5785,6 +5850,7 @@ export class Renderer3D {
         this._heliTargetX += (midX - this._heliTargetX) * 0.055;
         this._heliTargetY += (midY - this._heliTargetY) * 0.055;
       }
+      this._lastHeliFocus = p1;
 
       const cosA = Math.cos(this._heliAngle);
       const sinA = Math.sin(this._heliAngle);
@@ -5848,11 +5914,10 @@ export class Renderer3D {
         camGlide = 0.05;
         targetGlide = 0.08;
       } else if (focusCar) {
-        if (typeof this._chaseAngle !== 'number' || this._lastFocusCar !== p1) {
+        if (typeof this._chaseAngle !== 'number' || typeof this._chaseTargetX !== 'number') {
           this._chaseAngle = refAngle;
           this._chaseTargetX = midX;
           this._chaseTargetY = midY;
-          this._lastFocusCar = p1;
         } else {
           const posFollowK = 0.06;
           this._chaseTargetX += (midX - this._chaseTargetX) * posFollowK;
@@ -5864,6 +5929,7 @@ export class Renderer3D {
 
           this._chaseAngle += diffAngle * 0.025; // Smooth low-pass: ignores steering twitches
         }
+        this._lastFocusCar = p1;
 
         const cosA = Math.cos(this._chaseAngle);
         const sinA = Math.sin(this._chaseAngle);
