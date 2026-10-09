@@ -454,8 +454,8 @@ export class SpatialAudioEngine {
       return;
     }
 
-    // 1. Determine active camera position and binaural pan vector
-    let camX = 0, camY = 0, camZ = 350;
+    // 1. Determine active camera position and binaural pan vector in simulation space
+    let camSimX = 0, camSimY = 0, camSimZ = 350;
     let rightX = 1, rightY = 0;
 
     if (state.view3d && renderer3d && renderer3d.camera) {
@@ -464,46 +464,52 @@ export class SpatialAudioEngine {
         ? renderer3d.controls.target
         : { x: 0, y: 0, z: 0 };
 
-      camX = cam.position.x;
-      camY = cam.position.y;
-      camZ = cam.position.z;
+      // In Three.js: world X is sim.x, world Y is -sim.y, world Z is elevation
+      camSimX = cam.position.x;
+      camSimY = -cam.position.y;
+      camSimZ = cam.position.z;
 
-      const fwdX = target.x - camX;
-      const fwdY = target.y - camY;
+      const targetSimX = target.x;
+      const targetSimY = -target.y;
+
+      const fwdX = targetSimX - camSimX;
+      const fwdY = targetSimY - camSimY;
       const fwdLen = Math.hypot(fwdX, fwdY) || 1;
       const normFwdX = fwdX / fwdLen;
       const normFwdY = fwdY / fwdLen;
 
+      // In sim 2D plane (where Y is positive downwards):
+      // A 90-degree clockwise (right) rotation maps (x, y) -> (-y, x)
       rightX = -normFwdY;
       rightY = normFwdX;
     } else if (renderer) {
       if (renderer.cam) {
-        camX = renderer.cam.x || 0;
-        camY = renderer.cam.y || 0;
+        camSimX = renderer.cam.x || 0;
+        camSimY = renderer.cam.y || 0;
       } else if (renderer.track) {
-        camX = renderer.track.cx || 0;
-        camY = renderer.track.cy || 0;
+        camSimX = renderer.track.cx || 0;
+        camSimY = renderer.track.cy || 0;
       }
-      camZ = 450;
+      camSimZ = 450;
       rightX = 1;
       rightY = 0;
     }
 
-    // 2. Primary Follow Car (Voice 0)
-    const focusCar = (state.manual && sim.player && sim.player.alive)
+    // 2. Primary Follow Car (Voice 0) - Locked to camera focused car or manual player
+    const focusCar = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
       ? sim.player
-      : (activeFocus && activeFocus.alive ? activeFocus : (sim.leader && sim.leader.alive ? sim.leader : null));
+      : (activeFocus && (activeFocus.alive || activeFocus.finished) ? activeFocus : (sim.leader && (sim.leader.alive || sim.leader.finished) ? sim.leader : null));
 
     if (focusCar) {
-      const dx = focusCar.x - camX;
-      const dy = focusCar.y - camY;
-      const dz = 0 - camZ;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const dx = focusCar.x - camSimX;
+      const dy = focusCar.y - camSimY;
+      const dz = (focusCar.elev || 0) - camSimZ;
+      const dist = Math.hypot(dx, dy, dz);
 
-      const toCarX = focusCar.x - camX;
-      const toCarY = focusCar.y - camY;
+      const toCarX = focusCar.x - camSimX;
+      const toCarY = focusCar.y - camSimY;
       const toCarLen = Math.hypot(toCarX, toCarY) || 1;
-      const pan = ((toCarX / toCarLen) * rightX) + ((toCarY / toCarLen) * rightY);
+      const pan = Math.max(-1, Math.min(1, ((toCarX / toCarLen) * rightX) + ((toCarY / toCarLen) * rightY)));
 
       this.voices[0].update(focusCar, dist, pan, this.maxAudibleDist, true);
     } else {
@@ -515,11 +521,11 @@ export class SpatialAudioEngine {
     if (sim.cars) {
       for (let i = 0; i < sim.cars.length; i++) {
         const c = sim.cars[i];
-        if (c && c.alive && c !== focusCar) {
-          const dx = c.x - camX;
-          const dy = c.y - camY;
-          const dz = 0 - camZ;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (c && (c.alive || c.finished) && c !== focusCar) {
+          const dx = c.x - camSimX;
+          const dy = c.y - camSimY;
+          const dz = (c.elev || 0) - camSimZ;
+          const dist = Math.hypot(dx, dy, dz);
           if (dist <= this.maxAudibleDist) {
             otherCandidates.push({ car: c, dist });
           }
@@ -541,10 +547,10 @@ export class SpatialAudioEngine {
         const car = item.car;
         const dist = item.dist;
 
-        const toCarX = car.x - camX;
-        const toCarY = car.y - camY;
+        const toCarX = car.x - camSimX;
+        const toCarY = car.y - camSimY;
         const toCarLen = Math.hypot(toCarX, toCarY) || 1;
-        const pan = ((toCarX / toCarLen) * rightX) + ((toCarY / toCarLen) * rightY);
+        const pan = Math.max(-1, Math.min(1, ((toCarX / toCarLen) * rightX) + ((toCarY / toCarLen) * rightY)));
 
         voice.update(car, dist, pan, this.maxAudibleDist, false);
       } else {

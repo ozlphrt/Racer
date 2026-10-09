@@ -327,6 +327,7 @@ export class Renderer {
     const m = CONFIG.world.margin;
     const fit = Math.min(this.w / (b.w + 2 * m), this.h / (b.h + 2 * m));
     const focus = opts.manual && sim.player ? sim.player : leader;
+    this.focusedCar = focus;
     const target = opts.follow && focus
       ? { x: focus.x, y: focus.y, s: Math.max(fit * 1.5, Math.min(1.4, fit * 2.5)) }
       : { x: b.cx, y: b.cy, s: fit };

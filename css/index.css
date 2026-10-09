@@ -1171,6 +1171,42 @@ h1 {
   color: #fbbf24;
   border: 1px solid rgba(251, 191, 36, 0.6);
   box-shadow: 0 0 5px rgba(251, 191, 36, 0.25);
+  transition: all 0.18s ease;
+}
+
+.pos-badge.pos-p1 {
+  background: rgba(36, 24, 4, 0.9);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow: 0 0 5px rgba(251, 191, 36, 0.25);
+}
+
+.pos-badge.pos-p2 {
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  border-color: rgba(226, 232, 240, 0.5);
+  box-shadow: 0 0 5px rgba(226, 232, 240, 0.2);
+}
+
+.pos-badge.pos-p3 {
+  background: rgba(43, 20, 5, 0.9);
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.5);
+  box-shadow: 0 0 5px rgba(251, 146, 60, 0.2);
+}
+
+.pos-badge.pos-field {
+  background: rgba(15, 23, 42, 0.85);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 5px rgba(56, 189, 248, 0.15);
+}
+
+.pos-badge.is-player {
+  background: rgba(12, 38, 18, 0.9);
+  color: #a3e635;
+  border-color: rgba(163, 230, 53, 0.6);
+  box-shadow: 0 0 6px rgba(163, 230, 53, 0.3);
 }
 
 /* Speed & Position Row */

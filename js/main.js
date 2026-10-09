@@ -2363,7 +2363,9 @@ function updateHud(leader) {
     toast('⚠️ 30s Reached: Collision Avoidance & Contact Physics ACTIVE!', 'warning');
   }
 
-  const car = state.manual && sim.player ? sim.player : leader;
+  const car = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
+    ? sim.player
+    : (leader && (leader.alive || leader.finished) ? leader : (sim.leader || null));
   $('leader-dot')?.classList.toggle('player', state.manual);
   if (car) {
     setTxt('leader-speed', car.speed.toFixed(0));
@@ -2397,9 +2399,20 @@ function updateHud(leader) {
         }
       }
     }
-    setTxt('leader-pos-badge', `P.${rank}`);
+    const badgeEl = $('leader-pos-badge');
+    if (badgeEl) {
+      const isPlayerCar = car === sim.player;
+      badgeEl.textContent = `P.${rank}`;
+      badgeEl.className = `pos-badge ${
+        isPlayerCar ? 'is-player' : (rank === 1 ? 'pos-p1' : rank === 2 ? 'pos-p2' : rank === 3 ? 'pos-p3' : 'pos-field')
+      }`;
+    }
   } else {
-    setTxt('leader-pos-badge', 'P.1');
+    const badgeEl = $('leader-pos-badge');
+    if (badgeEl) {
+      badgeEl.textContent = 'P.1';
+      badgeEl.className = 'pos-badge pos-p1';
+    }
     setTxt('stat-leader-contacts', '0 (Clean ✨)');
   }
   if (state.manual) setTxt('player-best-lap', fmtTime(sim.playerBestLap));
@@ -2413,8 +2426,10 @@ const elCockpitWheel = $('cockpit-wheel');
 const elPedalBrakeFill = $('pedal-brake-fill');
 const elPedalGasFill = $('pedal-gas-fill');
 
-function updateCockpitAnimation() {
-  const car = state.manual && sim.player ? sim.player : sim.leader;
+function updateCockpitAnimation(focusCar) {
+  const car = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
+    ? sim.player
+    : (focusCar && (focusCar.alive || focusCar.finished) ? focusCar : (sim.leader || null));
   if (!car) return;
 
   const targetSteer = car.steer || 0;
@@ -2497,23 +2512,30 @@ function frame(now) {
     renderer.render(sim, state, activeFocus);
   }
 
+  // Derive the active car in focus (from 3D director, 2D follower, or manual player)
+  const currentFocus = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
+    ? sim.player
+    : (state.view3d && renderer3d?.focusedCar && (renderer3d.focusedCar.alive || renderer3d.focusedCar.finished))
+      ? renderer3d.focusedCar
+      : ((renderer?.focusedCar && (renderer.focusedCar.alive || renderer.focusedCar.finished)) ? renderer.focusedCar : activeFocus);
+
   // Real-time camera pill status (displays active shot and green auto-director icon)
   updateCameraPill();
 
   // Update F1 Live Leaderboard Tower with smooth overtake animations (throttled to 15Hz to eliminate layout reflows)
   if (now - leaderboardTimer >= 66) {
-    leaderboard.update(sim, activeFocus);
+    leaderboard.update(sim, currentFocus);
     leaderboardTimer = now;
   }
 
   // Update Spatial Car Audio Engine (engine pitch, spatial panning, distance attenuation, skids)
-  audio.update(sim, state, activeFocus, renderer3d, renderer);
+  audio.update(sim, state, currentFocus, renderer3d, renderer);
 
   if (panelEl?.classList.contains('is-open')) {
-    nnViz.draw(activeFocus?.brain ?? null);
+    nnViz.draw(currentFocus?.brain ?? null);
   }
   if (hyperModal && !hyperModal.hidden && currentHubTab === 'analytics') {
-    hubNnViz?.draw(activeFocus?.brain ?? null);
+    hubNnViz?.draw(currentFocus?.brain ?? null);
   }
 
   // FPS calculation
@@ -2535,11 +2557,11 @@ function frame(now) {
     stepCounter = 0;
     rateStart = now;
   }
-  // 60FPS smooth continuous cockpit telemetry animation
-  updateCockpitAnimation();
+  // 60FPS smooth continuous cockpit telemetry animation following the car in focus
+  updateCockpitAnimation(currentFocus);
 
   if (now - hudTimer > 80) {
-    updateHud(activeFocus);
+    updateHud(currentFocus);
     hudTimer = now;
   }
   requestAnimationFrame(frame);

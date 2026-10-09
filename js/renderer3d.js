@@ -5218,6 +5218,24 @@ export class Renderer3D {
     if (pool.length === 0) {
       return { carA: focusCar || null, carB: null };
     }
+    if (isManual && player) {
+      // In manual driving mode, the player's car is ALWAYS carA (primary focus)
+      let closestOpponent = null;
+      let closestDist = Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        const c = pool[i];
+        if (c !== player) {
+          const d = Math.hypot(player.x - c.x, player.y - c.y);
+          if (d < closestDist) {
+            closestDist = d;
+            closestOpponent = c;
+          }
+        }
+      }
+      const pair = { carA: player, carB: closestOpponent };
+      this._currentActionPair = pair;
+      return pair;
+    }
     if (pool.length === 1) {
       return { carA: pool[0], carB: null };
     }
@@ -5511,6 +5529,7 @@ export class Renderer3D {
     const actionPair = this.findActionFocusPair(sim, rankedCars, focusCar, opts);
     const p1 = actionPair.carA || focusCar;
     const p2 = actionPair.carB;
+    this.focusedCar = p1;
 
     const p1X = p1 ? p1.x : 0;
     const p1Y = p1 ? -p1.y : 0;
