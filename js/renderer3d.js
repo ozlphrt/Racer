@@ -4691,7 +4691,6 @@ export class Renderer3D {
     this.smokeMesh = new THREE.Points(geo, mat);
     this.smokeMesh.frustumCulled = false;
     this.smokeMesh.renderOrder = 450;
-    this.smokeMesh.visible = false; // Smoke effect disabled for now
     this.scene.add(this.smokeMesh);
   }
 
@@ -4701,17 +4700,76 @@ export class Renderer3D {
   }
 
   addTireSmokePuff(x, y, z, carVx, carVy, intensity, extraSpread = 0) {
-    // Smoke effect removed for now per user request
-    return;
+    if (this.smokeParticles.length >= this.maxSmokeParticles) {
+      this.smokeParticles.shift();
+    }
+    const angle = Math.random() * Math.PI * 2;
+    const spread = 0.9 + extraSpread;
+    this.smokeParticles.push({
+      x: x + (Math.random() - 0.5) * spread,
+      y: y + (Math.random() - 0.5) * spread,
+      z: z + Math.random() * 0.06,
+      vx: (carVx * 0.10) + (Math.random() - 0.5) * 2.2,
+      vy: (carVy * 0.10) + (Math.random() - 0.5) * 2.2,
+      vz: 1.1 + Math.random() * 1.6, // Natural upward thermal plume rise
+      size: 5.6 + Math.random() * 2.4, // Volumetric footprint
+      growthRate: 8.5 + Math.random() * 4.0, // Billows out rapidly to merge clouds
+      rot: angle,
+      vRot: (Math.random() - 0.5) * 1.4,
+      alpha: Math.min(0.36, 0.15 + intensity * 0.28), // Airy translucent vapor
+      life: 1.0,
+      decay: 0.48 + Math.random() * 0.14, // Lingers ~2.0 seconds
+    });
   }
 
   updateTireSmoke() {
-    // Smoke effect removed for now per user request
-    if (this.smokeMesh && this.smokeMesh.visible) {
-      this.smokeMesh.visible = false;
-      this.smokeMesh.geometry.setDrawRange(0, 0);
+    if (!this.smokeParticles || this.smokeParticles.length === 0) {
+      if (this.smokeMesh) this.smokeMesh.geometry.setDrawRange(0, 0);
+      return;
     }
-    return;
+
+    const dt = 1 / 60;
+    let writeIdx = 0;
+
+    for (let i = this.smokeParticles.length - 1; i >= 0; i--) {
+      const p = this.smokeParticles[i];
+      p.life -= p.decay * dt;
+      if (p.life <= 0) {
+        this.smokeParticles.splice(i, 1);
+        continue;
+      }
+
+      // Physics: drift, rise into the air, expand, rotate and drag deceleration
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vx *= 0.95;
+      p.vy *= 0.95;
+      p.vz *= 0.96;
+      p.size += p.growthRate * dt;
+      p.rot += p.vRot * dt;
+
+      const idx = writeIdx * 3;
+      this.smokePosArr[idx] = p.x;
+      this.smokePosArr[idx + 1] = p.y;
+      this.smokePosArr[idx + 2] = p.z;
+
+      this.smokeSizeArr[writeIdx] = p.size;
+      // Smooth gradual fade-out across lingering life
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.4);
+
+      const rIdx = writeIdx * 2;
+      this.smokeCosSinArr[rIdx] = Math.cos(p.rot);
+      this.smokeCosSinArr[rIdx + 1] = Math.sin(p.rot);
+
+      writeIdx++;
+    }
+
+    this.smokeMesh.geometry.attributes.position.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.size.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.cosSin.needsUpdate = true;
+    this.smokeMesh.geometry.setDrawRange(0, writeIdx);
   }
 
   setupSkidmarks() {
@@ -4919,6 +4977,7 @@ export class Renderer3D {
           smoothRearInt: 0,
           prevRearAlpha: 0,
           rearActive: false,
+          oversteerSmokeDist: 0,
           // Front axle
           flx: 0, fly: 0, frx: 0, fry: 0,
           fl0x: 0, fl0y: 0, fl1x: 0, fl1y: 0,
@@ -4926,6 +4985,7 @@ export class Renderer3D {
           smoothFrontInt: 0,
           prevFrontAlpha: 0,
           frontActive: false,
+          understeerSmokeDist: 0,
           initialized: false,
         };
         this.carPrevTires.set(car, track);
@@ -4999,6 +5059,29 @@ export class Renderer3D {
             this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1);
             this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1);
 
+            // Display smoke strictly when car is actively oversteering
+            if (oversteerInt > SKID_THRESH) {
+              const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+              if (camDist < 500) {
+                track.oversteerSmokeDist = (track.oversteerSmokeDist || 0) + dLR;
+                if (track.oversteerSmokeDist >= 0.70) {
+                  track.oversteerSmokeDist = 0;
+                  const carVx = car.vx || 0;
+                  const carVy = -(car.vy || 0);
+                  // Left tire contact patch
+                  this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, oversteerInt, 0.8);
+                  // Right tire contact patch
+                  this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, oversteerInt, 0.8);
+                  // Central diffuser wake plume
+                  const rcx = (rlx + rrx) * 0.5;
+                  const rcy = (rly + rry) * 0.5;
+                  this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, oversteerInt * 1.1, 1.8);
+                }
+              }
+            } else {
+              track.oversteerSmokeDist = 0;
+            }
+
             track.prevRearAlpha = isRearMarking ? curRearAlpha : 0.0;
             track.rearActive = isRearMarking;
             added = true;
@@ -5006,6 +5089,7 @@ export class Renderer3D {
         } else {
           track.rearActive = false;
           track.prevRearAlpha = 0;
+          track.oversteerSmokeDist = 0;
         }
 
         // --- 2. FRONT TIRES (Understeer, Brake Locks, Crash) ---
@@ -5028,6 +5112,29 @@ export class Renderer3D {
             this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1);
             this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1);
 
+            // Display smoke strictly when car is actively understeering
+            if (understeerInt > SKID_THRESH) {
+              const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+              if (camDist < 500) {
+                track.understeerSmokeDist = (track.understeerSmokeDist || 0) + dLF;
+                if (track.understeerSmokeDist >= 0.70) {
+                  track.understeerSmokeDist = 0;
+                  const carVx = car.vx || 0;
+                  const carVy = -(car.vy || 0);
+                  // Left front contact patch
+                  this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, understeerInt, 0.6);
+                  // Right front contact patch
+                  this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, understeerInt, 0.6);
+                  // Front center airflow wake
+                  const fcx = (flx + frx) * 0.5;
+                  const fcy = (fly + fry) * 0.5;
+                  this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, understeerInt * 0.9, 1.4);
+                }
+              }
+            } else {
+              track.understeerSmokeDist = 0;
+            }
+
             track.prevFrontAlpha = isFrontMarking ? curFrontAlpha : 0.0;
             track.frontActive = isFrontMarking;
             added = true;
@@ -5035,12 +5142,15 @@ export class Renderer3D {
         } else {
           track.frontActive = false;
           track.prevFrontAlpha = 0;
+          track.understeerSmokeDist = 0;
         }
       } else {
         track.rearActive = false;
         track.prevRearAlpha = 0;
+        track.oversteerSmokeDist = 0;
         track.frontActive = false;
         track.prevFrontAlpha = 0;
+        track.understeerSmokeDist = 0;
       }
 
       // Maintain persistent tracking across frames
