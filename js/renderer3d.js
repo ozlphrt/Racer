@@ -5689,7 +5689,7 @@ export class Renderer3D {
     const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
 
     if (this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
-      // Initiate a seamless, relaxed cinematic swoop transition between camera viewpoints
+      // Capture departing target and offset relative to target
       const startTarget = this.controls.target.clone();
       const startOffset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
       const startFov = this.camera.fov;
@@ -5699,18 +5699,36 @@ export class Renderer3D {
         destCamY - destTargetY,
         destCamZ - destTargetZ
       );
-      const transDist = startOffset.distanceTo(liveDestOffset);
 
-      // Relaxed, cinematic transition timing: 1.7s to 2.3s so motion is smooth, elegant, and never rushed
-      const duration = Math.max(1700, Math.min(2300, 1700 + transDist * 4.0));
-      const peakArcHeight = Math.min(16.0, Math.max(5.0, transDist * 0.15));
+      // Polar / cylindrical coordinate parameters for a smooth circular orbital sweep around cars
+      const r0 = Math.hypot(startOffset.x, startOffset.y);
+      const r1 = Math.hypot(liveDestOffset.x, liveDestOffset.y);
+      let phi0 = r0 > 0.5 ? Math.atan2(startOffset.y, startOffset.x) : 0;
+      let phi1 = r1 > 0.5 ? Math.atan2(liveDestOffset.y, liveDestOffset.x) : phi0;
+      if (r0 <= 0.5) phi0 = phi1;
+
+      let diffPhi = phi1 - phi0;
+      while (diffPhi > Math.PI) diffPhi -= Math.PI * 2;
+      while (diffPhi < -Math.PI) diffPhi += Math.PI * 2;
+
+      const z0 = startOffset.z;
+      const z1 = liveDestOffset.z;
+
+      // Generous, majestic 2.2s cinematic sweep
+      const duration = 2200;
+      const peakArcHeight = Math.min(14.0, Math.max(4.0, Math.abs(diffPhi) * 3.5));
 
       this._camTransition = {
         active: true,
         startTime: now,
         duration,
         startTarget,
-        startOffset,
+        r0,
+        r1,
+        phi0,
+        diffPhi,
+        z0,
+        z1,
         startFov,
         peakArcHeight,
       };
@@ -5721,33 +5739,30 @@ export class Renderer3D {
       const elapsed = now - this._camTransition.startTime;
       const progress = Math.min(1.0, elapsed / this._camTransition.duration);
 
-      // Quintic SmootherStep curve: continuous zero velocity and zero acceleration at endpoints
+      // Quintic SmootherStep curve: s'(0)=0, s''(0)=0, s'(1)=0, s''(1)=0 (infinite smoothness)
       // s(t) = t^3 * (t * (6t - 15) + 10)
       const s = progress * progress * progress * (progress * (progress * 6 - 15) + 10);
 
-      // 1. Smoothly interpolate look target (glides with moving cars)
+      // 1. Look target: smoothly glides from startTarget to destTarget
       const curTargetX = this._camTransition.startTarget.x + (destTargetX - this._camTransition.startTarget.x) * s;
       const curTargetY = this._camTransition.startTarget.y + (destTargetY - this._camTransition.startTarget.y) * s;
       const curTargetZ = this._camTransition.startTarget.z + (destTargetZ - this._camTransition.startTarget.z) * s;
 
-      // 2. Smoothly interpolate relative offset from target (camera moves WITH the cars, eliminating any catch-up rush)
-      const destOffsetX = destCamX - destTargetX;
-      const destOffsetY = destCamY - destTargetY;
-      const destOffsetZ = destCamZ - destTargetZ;
-
-      const curOffsetX = this._camTransition.startOffset.x + (destOffsetX - this._camTransition.startOffset.x) * s;
-      const curOffsetY = this._camTransition.startOffset.y + (destOffsetY - this._camTransition.startOffset.y) * s;
-
-      // 3. Parabolic clearance arc on Z (lifts camera gracefully over cars & barriers)
+      // 2. Circular / cylindrical orbital sweep around target (constant radius arc, NEVER cuts through car!)
+      const curPhi = this._camTransition.phi0 + this._camTransition.diffPhi * s;
+      const curRadius = this._camTransition.r0 + (this._camTransition.r1 - this._camTransition.r0) * s;
       const arcZ = Math.sin(Math.PI * s) * this._camTransition.peakArcHeight;
-      const curOffsetZ = this._camTransition.startOffset.z + (destOffsetZ - this._camTransition.startOffset.z) * s + arcZ;
+      const curZOffset = this._camTransition.z0 + (this._camTransition.z1 - this._camTransition.z0) * s + arcZ;
 
-      // 4. Combine into final camera coordinates
+      const curOffsetX = Math.cos(curPhi) * curRadius;
+      const curOffsetY = Math.sin(curPhi) * curRadius;
+
+      // 3. Final camera world coordinates
       const curX = curTargetX + curOffsetX;
       const curY = curTargetY + curOffsetY;
-      let curZ = curTargetZ + curOffsetZ;
+      let curZ = curTargetZ + curZOffset;
 
-      // Guaranteed terrain safety boundary: camera never clips through terrain
+      // Strict terrain elevation guard: camera never clips through hills or mounds
       const groundElev = this.getTerrainHeight(curX, curY);
       if (curZ < groundElev + 3.0) {
         curZ = groundElev + 3.0;
