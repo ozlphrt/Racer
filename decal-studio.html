@@ -933,7 +933,6 @@
       applyAllDecalTransforms();
     }
 
-    setupDecalMeshes();
 
     // Apply Decal Transform from data
     function applyDecalTransform(key) {
@@ -1094,6 +1093,7 @@
       pillActiveDecal.textContent = d.name.toUpperCase();
     }
 
+    setupDecalMeshes();
     syncUiFromData(activeDecalKey);
 
     // Attach Input Event Listeners
@@ -1242,6 +1242,8 @@
 
     // Copy Code / Export
     function updateExportCode() {
+      const box = document.getElementById('code-export-box');
+      if (!box) return;
       const exportObj = {};
       Object.keys(decals).forEach((k) => {
         const d = decals[k];
@@ -1256,14 +1258,17 @@
           rotZ: Math.round(d.rotZ),
         };
       });
-      codeExportBox.textContent = `// F1 Number Decals Configuration\nexport const F1_DECAL_CONFIG = ${JSON.stringify(exportObj, null, 2)};`;
+      box.textContent = `// F1 Number Decals Configuration\nexport const F1_DECAL_CONFIG = ${JSON.stringify(exportObj, null, 2)};`;
     }
 
     document.getElementById('btn-copy-code').addEventListener('click', () => {
       updateExportCode();
-      navigator.clipboard.writeText(codeExportBox.textContent).then(() => {
-        showToast('✓ Coordinates copied to clipboard!');
-      });
+      const box = document.getElementById('code-export-box');
+      if (box) {
+        navigator.clipboard.writeText(box.textContent).then(() => {
+          showToast('✓ Coordinates copied to clipboard!');
+        });
+      }
     });
 
     function saveDecalsToStorage() {
