@@ -4820,13 +4820,13 @@ export class Renderer3D {
       varying float vAlpha;
       varying vec2 vUv;
       void main() {
-        // Authentic deep asphalt rubber compound mark
-        vec3 rubber = vec3(0.035, 0.035, 0.042);
-        // Soft feathered lateral tire profile across contact patch (fades smoothly to 0 at edges)
-        float lateral = smoothstep(0.0, 0.32, vUv.x) * smoothstep(1.0, 0.68, vUv.x);
-        // Subtle dual-shoulder tire contact pressure profile
-        float shoulder = 0.88 + 0.12 * sin(vUv.x * 3.14159265);
-        float alpha = vAlpha * lateral * shoulder * 0.76;
+        // Deep pitch-black burnt tire rubber compound
+        vec3 rubber = vec3(0.010, 0.010, 0.015);
+        // Soft lateral tire feathering: solid center contact patch, smooth outer shoulder roll-off
+        float lateral = smoothstep(0.0, 0.16, vUv.x) * smoothstep(1.0, 0.84, vUv.x);
+        // Dual-shoulder tire pressure concentration
+        float shoulder = 0.86 + 0.14 * sin(vUv.x * 3.14159265);
+        float alpha = vAlpha * lateral * shoulder * 0.90;
         gl_FragColor = vec4(rubber, alpha);
       }
     `;
@@ -4906,7 +4906,7 @@ export class Renderer3D {
     if (!sim || !sim.cars) return;
     const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
-    const SKID_THRESH = 0.018;
+    const SKID_THRESH = 0.035;
 
     for (let i = 0; i < candidateCars.length; i++) {
       const car = candidateCars[i];
@@ -4916,28 +4916,28 @@ export class Renderer3D {
       }
 
       // Smooth, progressive skid intensity modeling (no harsh binary on/off)
-      // 1. Lateral cornering slip: starts with a very soft, faint trace and smoothly darkens as slip increases
+      // 1. Lateral cornering slip: starts with a soft trace and smoothly darkens as slip increases
       const slipMag = Math.abs(car.slipAngle || 0);
-      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.030) / 0.15));
-      const slipInt = Math.pow(slipNorm, 1.6) * 0.78;
+      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.022) / 0.10));
+      const slipInt = Math.pow(slipNorm, 1.3) * 0.88;
 
       // 2. Trail braking & heavy lockup: smooth progressive build-up
-      const brakeNorm = (car.throttle < -0.08 && car.speed > 22)
-        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.08) / 0.82))
+      const brakeNorm = (car.throttle < -0.05 && car.speed > 18)
+        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.75))
         : 0;
-      const brakeInt = Math.pow(brakeNorm, 1.8) * 0.72;
+      const brakeInt = Math.pow(brakeNorm, 1.5) * 0.85;
 
       // 3. Launch wheelspin / burnout
-      const spinNorm = (car.throttle > 0.62 && car.speed < 88 && !car.crashed)
-        ? Math.max(0, Math.min(1.0, (car.throttle - 0.62) / 0.38 * (1.0 - car.speed / 88)))
+      const spinNorm = (car.throttle > 0.55 && car.speed < 95 && !car.crashed)
+        ? Math.max(0, Math.min(1.0, (car.throttle - 0.55) / 0.40 * (1.0 - car.speed / 95)))
         : 0;
-      const spinInt = Math.pow(spinNorm, 1.5) * 0.70;
+      const spinInt = Math.pow(spinNorm, 1.3) * 0.82;
 
       // 4. Off-track crash slide
-      const crashInt = (car.crashed && car.speed > 5) ? Math.min(0.78, car.speed / 75) : 0;
+      const crashInt = (car.crashed && car.speed > 5) ? Math.min(0.90, car.speed / 60) : 0;
 
-      // Combined instantaneous target intensity (0.00 .. 0.85)
-      const targetIntensity = Math.min(0.85, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      // Combined instantaneous target intensity (0.00 .. 0.90)
+      const targetIntensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
       let track = this.carPrevTires.get(car);
       if (!track) {
@@ -4946,16 +4946,17 @@ export class Renderer3D {
           l0x: 0, l0y: 0, l1x: 0, l1y: 0,
           r0x: 0, r0y: 0, r1x: 0, r1y: 0,
           smoothInt: 0,
+          prevAlpha: 0,
           active: false,
           initialized: false,
         };
         this.carPrevTires.set(car, track);
       }
 
-      // Smooth intensity filter (responsive attack on slide initiation, gradual decay on exit)
-      // Eliminates high-frequency frame jitter / dashed line artifacts from steering micro-corrections
+      // Fast attack so rubber marks appear immediately when tires scrub, with smooth decay on exit
+      // Eliminates high-frequency frame jitter / dashed line artifacts while keeping skids bold & responsive
       const prevInt = track.smoothInt || 0;
-      const rate = targetIntensity > prevInt ? 0.30 : 0.10;
+      const rate = targetIntensity > prevInt ? 0.75 : 0.22;
       const curInt = prevInt + (targetIntensity - prevInt) * rate;
       track.smoothInt = curInt;
 
@@ -4987,7 +4988,7 @@ export class Renderer3D {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
         if (dL > 0.25 && dL < 35) {
           // If already actively drawing, reuse the exact previous quad endpoints to ensure a continuous gapless ribbon;
-          // if starting a new ribbon, start from previous tire position with 0 alpha for a smooth, gradual fade-in
+          // if starting a new ribbon, start from previous tire position with soft alpha for a smooth, gradual fade-in
           const pL0x = track.active ? track.l0x : (track.lx - nx);
           const pL0y = track.active ? track.l0y : (track.ly - ny);
           const pL1x = track.active ? track.l1x : (track.lx + nx);
@@ -4998,7 +4999,7 @@ export class Renderer3D {
           const pR1x = track.active ? track.r1x : (track.rx + nx);
           const pR1y = track.active ? track.r1y : (track.ry + ny);
 
-          const alpha0 = track.active ? prevInt : 0.0;
+          const alpha0 = track.active ? track.prevAlpha : (curInt * 0.35);
           const alpha1 = curInt > SKID_THRESH ? curInt : 0.0;
 
           // Left tire skid quad
@@ -5020,13 +5021,13 @@ export class Renderer3D {
           );
 
           // Continuous tire smoke puff emission on heavier slides
-          if (curInt > 0.30) {
+          if (curInt > 0.28) {
             const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
             if (camDistSq < 600 || car === sim.player) {
               const carVx = car.vx || 0;
               const carVy = -(car.vy || 0);
               const numPuffs = Math.max(1, Math.min(3, Math.ceil(dL / 1.4)));
-              const smokeAlpha = (curInt - 0.30) / 0.70;
+              const smokeAlpha = (curInt - 0.28) / 0.72;
               for (let s = 1; s <= numPuffs; s++) {
                 const frac = s / numPuffs;
                 const pxL = track.lx + (lx - track.lx) * frac;
@@ -5039,11 +5040,13 @@ export class Renderer3D {
             }
           }
 
+          track.prevAlpha = alpha1;
           track.active = curInt > SKID_THRESH;
           added = true;
         }
       } else {
         track.active = false;
+        track.prevAlpha = 0;
       }
 
       // Maintain persistent tracking across frames
