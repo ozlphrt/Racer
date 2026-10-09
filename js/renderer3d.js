@@ -4767,7 +4767,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 2400;
+    this.maxSkidQuads = 24000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -4891,6 +4891,7 @@ export class Renderer3D {
 
     this.skidHead = (this.skidHead + 1) % this.maxSkidQuads;
     if (this.skidCount < this.maxSkidQuads) this.skidCount++;
+    this._frameSkidQuadsAdded = (this._frameSkidQuadsAdded || 0) + 1;
   }
 
   updateSkidmarks(sim) {
@@ -4898,6 +4899,8 @@ export class Renderer3D {
     const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
     const SKID_THRESH = 0.020;
+    const startHead = this.skidHead;
+    this._frameSkidQuadsAdded = 0;
 
     for (let i = 0; i < candidateCars.length; i++) {
       const car = candidateCars[i];
@@ -5059,8 +5062,18 @@ export class Renderer3D {
     }
 
     if (added && this.skidMesh) {
-      this.skidMesh.geometry.attributes.position.needsUpdate = true;
-      this.skidMesh.geometry.attributes.alpha.needsUpdate = true;
+      const quadsAdded = this._frameSkidQuadsAdded || 0;
+      const posAttr = this.skidMesh.geometry.attributes.position;
+      const alphaAttr = this.skidMesh.geometry.attributes.alpha;
+      if (quadsAdded > 0 && startHead + quadsAdded <= this.maxSkidQuads) {
+        posAttr.updateRange = { offset: startHead * 4 * 3, count: quadsAdded * 4 * 3 };
+        alphaAttr.updateRange = { offset: startHead * 4, count: quadsAdded * 4 };
+      } else {
+        posAttr.updateRange = { offset: 0, count: -1 };
+        alphaAttr.updateRange = { offset: 0, count: -1 };
+      }
+      posAttr.needsUpdate = true;
+      alphaAttr.needsUpdate = true;
       this.skidMesh.geometry.setDrawRange(0, this.skidCount * 6);
     }
   }

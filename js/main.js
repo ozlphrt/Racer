@@ -554,6 +554,7 @@ function resetAllLearning(fromRunningModal = false) {
   if (confirm('Are you sure you want to reset all learning progress?\n\nThis will erase all learned neural network weights, best lap records, and restart fresh from Generation 1.')) {
     storage.clearTrainingState();
     sim.reset();
+    renderer3d?.clearSkidmarks();
     storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
     chart.draw(sim.history, sim.bestLapEver);
     hyperChart?.draw(sim.history, sim.bestLapEver);

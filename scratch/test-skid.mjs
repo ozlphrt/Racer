@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 console.log('Testing 3D skidmark buffer geometry...');
 
-const maxQuads = 1200;
+const maxQuads = 24000;
 const maxVerts = maxQuads * 4;
 const maxIndices = maxQuads * 6;
 
