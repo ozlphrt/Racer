@@ -513,21 +513,21 @@
 
       <!-- Camera Angles Presets Bar -->
       <div class="camera-angles-bar" role="toolbar" aria-label="Camera Presets">
+        <button class="btn-cam active" data-angle="front">🏎️ Front</button>
         <button class="btn-cam" data-angle="top">🔝 Top</button>
-        <button class="btn-cam" data-angle="front">🏎️ Front</button>
         <button class="btn-cam" data-angle="rear">🏁 Rear</button>
         <button class="btn-cam" data-angle="left">◀️ Left</button>
         <button class="btn-cam" data-angle="right">▶️ Right</button>
-        <button class="btn-cam active" data-angle="free">🌐 Free 3D</button>
+        <button class="btn-cam" data-angle="free">🌐 Free 3D</button>
       </div>
 
       <!-- Bottom Viewport Status Pill -->
       <div class="viewport-bottom-bar">
         <div class="tool-pill">
-          ACTIVE DECAL: <span class="val" id="pill-active-decal">TOP (NOSE CONE)</span>
+          ACTIVE DECAL: <span class="val" id="pill-active-decal">FRONT (NOSE TIP)</span>
         </div>
         <div class="tool-pill">
-          CAMERA: <span class="val" id="pill-camera-mode">FREE ORBIT</span>
+          CAMERA: <span class="val" id="pill-camera-mode">FRONT</span>
         </div>
       </div>
     </div>
@@ -541,8 +541,8 @@
           <span>Select Decal Position</span>
         </div>
         <div class="decal-tabs" id="decal-tabs">
-          <button class="btn-decal-tab active" data-decal="top">Top</button>
-          <button class="btn-decal-tab" data-decal="front">Front</button>
+          <button class="btn-decal-tab active" data-decal="front">Front</button>
+          <button class="btn-decal-tab" data-decal="top">Top</button>
           <button class="btn-decal-tab" data-decal="rear">Rear</button>
           <button class="btn-decal-tab" data-decal="left">Left</button>
           <button class="btn-decal-tab" data-decal="right">Right</button>
@@ -717,79 +717,91 @@
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
     // Default calibrated decal transforms
+    // Default calibrated decal transforms (World: +X=Front, +Z=Up, +Y=Left)
     const DEFAULT_DECALS = {
+      front: {
+        name: 'Front (Nose Tip)',
+        posX: 12.20,
+        posY: 0.00,
+        posZ: 1.10,
+        scaleX: 1.60,
+        scaleY: 1.60,
+        rotX: 70,
+        rotY: 0,
+        rotZ: 90,
+      },
       top: {
         name: 'Top (Nose Cone)',
         posX: 6.20,
         posY: 0.00,
-        posZ: 2.22,
+        posZ: 2.15,
         scaleX: 2.20,
         scaleY: 2.20,
-        rotX: -12,
-        rotY: 0,
-        rotZ: -90,
-      },
-      front: {
-        name: 'Front (Nose Tip)',
-        posX: 10.60,
-        posY: 0.00,
-        posZ: 1.15,
-        scaleX: 1.60,
-        scaleY: 1.60,
-        rotX: 35,
-        rotY: 0,
-        rotZ: -90,
+        rotX: 0,
+        rotY: -10,
+        rotZ: 90,
       },
       rear: {
         name: 'Rear (Rear Wing Flap)',
-        posX: -8.85,
+        posX: -7.50,
         posY: 0.00,
-        posZ: 3.82,
+        posZ: 3.50,
         scaleX: 2.40,
         scaleY: 1.40,
-        rotX: 0,
-        rotY: 180,
+        rotX: 90,
+        rotY: 0,
         rotZ: -90,
       },
       left: {
         name: 'Left (Sidepod / Fin)',
-        posX: -1.60,
-        posY: -2.35,
-        posZ: 1.95,
+        posX: -0.80,
+        posY: 2.30,
+        posZ: 1.85,
         scaleX: 1.80,
         scaleY: 1.80,
-        rotX: 0,
-        rotY: 90,
+        rotX: -90,
+        rotY: 180,
         rotZ: 0,
       },
       right: {
         name: 'Right (Sidepod / Fin)',
-        posX: -1.60,
-        posY: 2.35,
-        posZ: 1.95,
+        posX: -0.80,
+        posY: -2.30,
+        posZ: 1.85,
         scaleX: 1.80,
         scaleY: 1.80,
-        rotX: 0,
-        rotY: -90,
+        rotX: 90,
+        rotY: 0,
         rotZ: 0,
       }
     };
 
-    // Load saved or use defaults
-    let decals = JSON.parse(localStorage.getItem('f1_decal_studio_config')) || JSON.parse(JSON.stringify(DEFAULT_DECALS));
-    let activeDecalKey = 'top';
+    // Load saved or use defaults (version-checked to discard previous inverted v1 cache)
+    const CONFIG_VERSION = 'v2_upright_f1';
+    let savedDecals = null;
+    try {
+      if (localStorage.getItem('f1_decal_studio_version') === CONFIG_VERSION) {
+        savedDecals = JSON.parse(localStorage.getItem('f1_decal_studio_config'));
+      } else {
+        localStorage.removeItem('f1_decal_studio_config');
+        localStorage.setItem('f1_decal_studio_version', CONFIG_VERSION);
+      }
+    } catch (e) {}
+
+    let decals = savedDecals || JSON.parse(JSON.stringify(DEFAULT_DECALS));
+    let activeDecalKey = 'front';
     let currentNumber = '1';
     let currentCarColor = '#dc2626';
     let isTurntableActive = false;
 
-    // Camera preset coordinates
+    // Camera preset coordinates (World: +X=Front, -X=Rear, +Z=Up, +Y=Left, -Y=Right)
     const CAMERA_PRESETS = {
-      top:   { x: 0,  y: 0,  z: 22, targetX: 0, targetY: 0, targetZ: 1.5 },
-      front: { x: 22, y: 0,  z: 3.5, targetX: 4, targetY: 0, targetZ: 1.5 },
-      rear:  { x: -22, y: 0, z: 4.5, targetX: -4, targetY: 0, targetZ: 2.0 },
-      left:  { x: 0, y: -22, z: 3.8, targetX: 0, targetY: 0, targetZ: 1.8 },
-      right: { x: 0, y: 22,  z: 3.8, targetX: 0, targetY: 0, targetZ: 1.8 },
-      free:  { x: 14, y: -16, z: 10, targetX: 0, targetY: 0, targetZ: 1.5 }
+      front: { x: 21, y: 0,   z: 2.2, targetX: 5.5, targetY: 0, targetZ: 1.6 },
+      rear:  { x: -21, y: 0,  z: 3.2, targetX: -4,  targetY: 0, targetZ: 2.2 },
+      left:  { x: 0,  y: 22,  z: 2.5, targetX: 0,   targetY: 0, targetZ: 1.8 },
+      right: { x: 0,  y: -22, z: 2.5, targetX: 0,   targetY: 0, targetZ: 1.8 },
+      top:   { x: 0.05, y: 0.01, z: 24, targetX: 0, targetY: 0, targetZ: 1.5 },
+      free:  { x: 15, y: -15, z: 9,   targetX: 0,   targetY: 0, targetZ: 1.8 }
     };
 
     // Three.js Core
@@ -807,15 +819,19 @@
     scene.fog = new THREE.FogExp2(0x070a14, 0.015);
 
     const camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
-    camera.position.set(14, -16, 10);
+    // Crucial: Set Z as UP axis in camera and orbit controls
+    camera.up.set(0, 0, 1);
+    camera.position.set(21, 0, 2.2);
 
     const controls = new OrbitControls(camera, canvas);
+    controls.object.up.set(0, 0, 1);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.maxPolarAngle = Math.PI / 2 - 0.02; // Keep above floor
-    controls.minDistance = 4;
+    controls.minDistance = 3;
     controls.maxDistance = 50;
-    controls.target.set(0, 0, 1.5);
+    controls.target.set(5.5, 0, 1.6);
+    controls.update();
 
     // Studio Lighting
     const hemiLight = new THREE.HemisphereLight(0xddeeff, 0x111122, 0.85);
@@ -975,8 +991,8 @@
           const s = 6.0;
           carModel.scale.set(s, s, s);
           // Standard F1 Orientation: Front points +X, Roof points +Z
-          carModel.rotation.set(Math.PI / 2, Math.PI, 0);
-          carModel.position.set(0.6, 0, 0);
+          carModel.rotation.set(Math.PI / 2, 0, 0);
+          carModel.position.set(0, 0, 0);
 
           carModel.traverse((child) => {
             if (child.name && (child.name.includes('Plane') || child.name.includes('Sphere') || child.name.includes('Object_12') || child.name.includes('Object_4'))) {
@@ -1192,6 +1208,7 @@
           startTy + (ty - startTy) * ease,
           startTz + (tz - startTz) * ease
         );
+        controls.update();
 
         if (t < 1) {
           cameraTween = requestAnimationFrame(step);
