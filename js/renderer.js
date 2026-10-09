@@ -1022,7 +1022,7 @@ export class Renderer {
       if (track.initialized && (isMarking || track.active)) {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
         if (dL > 0.25 && dL < 35) {
-          const alpha = isMarking ? (0.28 + curInt * 0.64) : 0.15;
+          const alpha = isMarking ? (0.16 + curInt * 0.44) : 0.08;
           this.skidmarks.push({
             x0: track.lx, y0: track.ly,
             x1: lx, y1: ly,
@@ -1084,11 +1084,11 @@ export class Renderer {
     if (!this.skidmarks || this.skidmarks.length === 0) return;
     const ctx = this.ctx;
     ctx.save();
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 1.8;
     ctx.lineCap = 'round';
     for (let i = 0; i < this.skidmarks.length; i++) {
       const s = this.skidmarks[i];
-      ctx.strokeStyle = `rgba(15, 18, 24, ${s.alpha})`;
+      ctx.strokeStyle = `rgba(24, 28, 36, ${s.alpha})`;
       ctx.beginPath();
       ctx.moveTo(s.x0, s.y0);
       ctx.lineTo(s.x1, s.y1);

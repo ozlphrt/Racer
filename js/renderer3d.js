@@ -4830,12 +4830,12 @@ export class Renderer3D {
       varying float vAlpha;
       varying vec2 vUv;
       void main() {
-        // Deep pitch-black burnt tire rubber compound
-        vec3 rubber = vec3(0.012, 0.012, 0.016);
+        // Authentic motorsport dark graphite rubber compound
+        vec3 rubber = vec3(0.042, 0.045, 0.055);
         // Soft lateral tire feathering with solid dark center contact patch
         float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
-        float lateral = 0.55 + 0.45 * edge;
-        float alpha = clamp(vAlpha * lateral, 0.0, 0.95);
+        float lateral = 0.50 + 0.50 * edge;
+        float alpha = clamp(vAlpha * lateral, 0.0, 0.65);
         if (alpha < 0.01) discard;
         gl_FragColor = vec4(rubber, alpha);
       }
@@ -4987,7 +4987,7 @@ export class Renderer3D {
       const curR1y = ry + ny;
 
       const isMarking = curInt > SKID_THRESH;
-      const curAlpha = isMarking ? (0.28 + curInt * 0.64) : 0.0;
+      const curAlpha = isMarking ? (0.16 + curInt * 0.44) : 0.0;
 
       if (track.initialized && (isMarking || track.active)) {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
@@ -5004,7 +5004,7 @@ export class Renderer3D {
           const pR1x = track.active ? track.r1x : (track.rx + nx);
           const pR1y = track.active ? track.r1y : (track.ry + ny);
 
-          const alpha0 = track.active ? track.prevAlpha : (curAlpha * 0.40);
+          const alpha0 = track.active ? track.prevAlpha : (curAlpha * 0.35);
           const alpha1 = isMarking ? curAlpha : 0.0;
 
           // Left tire skid quad
