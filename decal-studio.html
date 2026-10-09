@@ -717,55 +717,44 @@
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
     // Default calibrated decal transforms
-    // Default calibrated decal transforms (World: +X=Front, +Z=Up, +Y=Left)
+    // Default calibrated decal transforms (World: -X=Front, +X=Rear, -Y=Left, +Y=Right, +Z=Up)
     const DEFAULT_DECALS = {
       front: {
         name: 'Front (Nose Tip)',
-        posX: 12.20,
+        posX: -12.20,
         posY: 0.00,
         posZ: 1.10,
         scaleX: 1.60,
         scaleY: 1.60,
         rotX: 70,
         rotY: 0,
-        rotZ: 90,
+        rotZ: -90,
       },
       top: {
         name: 'Top (Nose Cone)',
-        posX: 6.20,
+        posX: -6.20,
         posY: 0.00,
         posZ: 2.15,
         scaleX: 2.20,
         scaleY: 2.20,
         rotX: 0,
-        rotY: -10,
-        rotZ: 90,
+        rotY: 10,
+        rotZ: -90,
       },
       rear: {
         name: 'Rear (Rear Wing Flap)',
-        posX: -7.50,
+        posX: 7.50,
         posY: 0.00,
         posZ: 3.50,
         scaleX: 2.40,
         scaleY: 1.40,
         rotX: 90,
         rotY: 0,
-        rotZ: -90,
+        rotZ: 90,
       },
       left: {
         name: 'Left (Sidepod / Fin)',
-        posX: -0.80,
-        posY: 2.30,
-        posZ: 1.85,
-        scaleX: 1.80,
-        scaleY: 1.80,
-        rotX: -90,
-        rotY: 180,
-        rotZ: 0,
-      },
-      right: {
-        name: 'Right (Sidepod / Fin)',
-        posX: -0.80,
+        posX: 0.80,
         posY: -2.30,
         posZ: 1.85,
         scaleX: 1.80,
@@ -773,11 +762,22 @@
         rotX: 90,
         rotY: 0,
         rotZ: 0,
+      },
+      right: {
+        name: 'Right (Sidepod / Fin)',
+        posX: 0.80,
+        posY: 2.30,
+        posZ: 1.85,
+        scaleX: 1.80,
+        scaleY: 1.80,
+        rotX: -90,
+        rotY: 180,
+        rotZ: 0,
       }
     };
 
-    // Load saved or use defaults (version-checked to discard previous inverted v1 cache)
-    const CONFIG_VERSION = 'v2_upright_f1';
+    // Load saved or use defaults (version-checked to update cache on calibration changes)
+    const CONFIG_VERSION = 'v3_aligned_f1';
     let savedDecals = null;
     try {
       if (localStorage.getItem('f1_decal_studio_version') === CONFIG_VERSION) {
@@ -794,14 +794,14 @@
     let currentCarColor = '#dc2626';
     let isTurntableActive = false;
 
-    // Camera preset coordinates (World: +X=Front, -X=Rear, +Z=Up, +Y=Left, -Y=Right)
+    // Camera preset coordinates (World: -X=Front, +X=Rear, -Y=Left, +Y=Right, +Z=Up)
     const CAMERA_PRESETS = {
-      front: { x: 21, y: 0,   z: 2.2, targetX: 5.5, targetY: 0, targetZ: 1.6 },
-      rear:  { x: -21, y: 0,  z: 3.2, targetX: -4,  targetY: 0, targetZ: 2.2 },
-      left:  { x: 0,  y: 22,  z: 2.5, targetX: 0,   targetY: 0, targetZ: 1.8 },
-      right: { x: 0,  y: -22, z: 2.5, targetX: 0,   targetY: 0, targetZ: 1.8 },
-      top:   { x: 0.05, y: 0.01, z: 24, targetX: 0, targetY: 0, targetZ: 1.5 },
-      free:  { x: 15, y: -15, z: 9,   targetX: 0,   targetY: 0, targetZ: 1.8 }
+      front: { x: -21, y: 0,   z: 2.2, targetX: -5.5, targetY: 0, targetZ: 1.6 },
+      rear:  { x: 21,  y: 0,   z: 3.2, targetX: 4,    targetY: 0, targetZ: 2.2 },
+      left:  { x: 0,   y: -22, z: 2.5, targetX: 0,    targetY: 0, targetZ: 1.8 },
+      right: { x: 0,   y: 22,  z: 2.5, targetX: 0,    targetY: 0, targetZ: 1.8 },
+      top:   { x: -0.05, y: -0.01, z: 24, targetX: 0, targetY: 0, targetZ: 1.5 },
+      free:  { x: -15, y: -15, z: 9,   targetX: 0,    targetY: 0, targetZ: 1.8 }
     };
 
     // Three.js Core
@@ -821,7 +821,7 @@
     const camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
     // Crucial: Set Z as UP axis in camera and orbit controls
     camera.up.set(0, 0, 1);
-    camera.position.set(21, 0, 2.2);
+    camera.position.set(-21, 0, 2.2);
 
     const controls = new OrbitControls(camera, canvas);
     controls.object.up.set(0, 0, 1);
@@ -830,7 +830,7 @@
     controls.maxPolarAngle = Math.PI / 2 - 0.02; // Keep above floor
     controls.minDistance = 3;
     controls.maxDistance = 50;
-    controls.target.set(5.5, 0, 1.6);
+    controls.target.set(-5.5, 0, 1.6);
     controls.update();
 
     // Studio Lighting
