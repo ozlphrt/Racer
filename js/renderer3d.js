@@ -314,7 +314,7 @@ export class Renderer3D {
     this.camera.up.set(0, 0, 1); // Z is the vertical altitude axis in our world
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.w, this.h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -424,12 +424,12 @@ export class Renderer3D {
     // Bright, crisp warm golden-white afternoon sunlight
     this.dirLight = new THREE.DirectionalLight(0xfff6e8, 2.05);
     this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.width = 2048;
-    this.dirLight.shadow.mapSize.height = 2048;
+    this.dirLight.shadow.mapSize.width = 1024;
+    this.dirLight.shadow.mapSize.height = 1024;
     this.dirLight.shadow.camera.near = 100;
     this.dirLight.shadow.camera.far = 8000;
     this.dirLight.shadow.bias = -0.0001;
-    this.dirLight.shadow.normalBias = 0.02;
+    this.dirLight.shadow.normalBias = 0.03;
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
@@ -645,21 +645,15 @@ export class Renderer3D {
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
     diffuseMap.repeat.set(120, 120);
     diffuseMap.generateMipmaps = true;
-    diffuseMap.anisotropy = maxAniso;
+    diffuseMap.anisotropy = Math.min(maxAniso, 4);
 
     const normalMap = new THREE.CanvasTexture(nCanvas);
     normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
     normalMap.repeat.set(120, 120);
     normalMap.generateMipmaps = true;
-    normalMap.anisotropy = maxAniso;
+    normalMap.anisotropy = Math.min(maxAniso, 2);
 
-    const roughnessMap = new THREE.CanvasTexture(rCanvas);
-    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-    roughnessMap.repeat.set(120, 120);
-    roughnessMap.generateMipmaps = true;
-    roughnessMap.anisotropy = maxAniso;
-
-    this._terrainDetailMaps = { diffuseMap, normalMap, roughnessMap };
+    this._terrainDetailMaps = { diffuseMap, normalMap };
     return this._terrainDetailMaps;
   }
 
@@ -826,19 +820,14 @@ export class Renderer3D {
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
     diffuseMap.colorSpace = THREE.SRGBColorSpace;
     diffuseMap.generateMipmaps = true;
-    diffuseMap.anisotropy = maxAniso;
+    diffuseMap.anisotropy = Math.min(maxAniso, 4);
 
     const normalMap = new THREE.CanvasTexture(nCanvas);
     normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
     normalMap.generateMipmaps = true;
-    normalMap.anisotropy = maxAniso;
+    normalMap.anisotropy = Math.min(maxAniso, 2);
 
-    const roughnessMap = new THREE.CanvasTexture(rCanvas);
-    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-    roughnessMap.generateMipmaps = true;
-    roughnessMap.anisotropy = maxAniso;
-
-    this._asphaltTextures = { diffuseMap, normalMap, roughnessMap };
+    this._asphaltTextures = { diffuseMap, normalMap };
     return this._asphaltTextures;
   }
 
@@ -1434,8 +1423,7 @@ export class Renderer3D {
       map: asphalt.diffuseMap,
       normalMap: asphalt.normalMap,
       normalScale: new THREE.Vector2(0.60, 0.60),
-      roughnessMap: asphalt.roughnessMap,
-      roughness: 0.90,
+      roughness: 0.88,
       metalness: 0.08,
       polygonOffset: true,
       polygonOffsetFactor: -1,
@@ -5762,7 +5750,7 @@ export class Renderer3D {
         const targetY = -car.y;
         const targetAngle = -car.angle;
 
-        const targetZ = this.getTerrainHeight(targetX, targetY);
+        const targetZ = (car.crashed && car.alive) ? this.getTerrainHeight(targetX, targetY) : 0;
 
         if (typeof mesh.userData.curX !== 'number' || Math.hypot(targetX - mesh.userData.curX, targetY - mesh.userData.curY) > 60) {
           mesh.userData.curX = targetX;
@@ -5866,7 +5854,7 @@ export class Renderer3D {
       this.playerCar.visible = true;
       const targetX = sim.player.x;
       const targetY = -sim.player.y;
-      const targetZ = this.getTerrainHeight(targetX, targetY);
+      const targetZ = (sim.player.crashed) ? this.getTerrainHeight(targetX, targetY) : 0;
       const targetAngle = -sim.player.angle;
 
       if (typeof this.playerCar.userData.curX !== 'number' || Math.hypot(targetX - this.playerCar.userData.curX, targetY - this.playerCar.userData.curY) > 60) {
@@ -5984,14 +5972,14 @@ export class Renderer3D {
     const Lmax = CONFIG.sensors.length;
     const ox = car.x;
     const oy = -car.y;
-    const oz = 4.2 + this.getTerrainHeight(ox, oy);
+    const oz = 4.2;
 
     for (let r = 0; r < RAY_ANGLES.length; r++) {
       const a = car.angle + RAY_ANGLES[r];
       const d = car.rayDist[r];
       const ex = ox + Math.cos(a) * d;
       const ey = oy - Math.sin(a) * d;
-      const ez = 4.2 + this.getTerrainHeight(ex, ey);
+      const ez = 4.2;
 
       const line = this.rayLines[r];
       const pos = line.geometry.attributes.position.array;

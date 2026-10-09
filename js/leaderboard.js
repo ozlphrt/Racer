@@ -185,7 +185,7 @@ export class LeaderboardTower {
   }
 
   update(sim, leaderCar) {
-    if (!this.listEl || !sim) return;
+    if (!this.listEl || !sim || this.isCollapsed) return;
 
     // 1. Gather all active candidate cars
     const active = [];

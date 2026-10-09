@@ -2442,6 +2442,7 @@ let stepCounter = 0;
 let rateStart = last;
 let effSpeed = 1;
 let hudTimer = 0;
+let leaderboardTimer = 0;
 let frameCount = 0;
 let fpsTimer = last;
 let currentFps = 60;
@@ -2498,8 +2499,11 @@ function frame(now) {
   // Real-time camera pill status (displays active shot and green auto-director icon)
   updateCameraPill();
 
-  // Update F1 Live Leaderboard Tower with smooth overtake animations
-  leaderboard.update(sim, activeFocus);
+  // Update F1 Live Leaderboard Tower with smooth overtake animations (throttled to 15Hz to eliminate layout reflows)
+  if (now - leaderboardTimer >= 66) {
+    leaderboard.update(sim, activeFocus);
+    leaderboardTimer = now;
+  }
 
   // Update Spatial Car Audio Engine (engine pitch, spatial panning, distance attenuation, skids)
   audio.update(sim, state, activeFocus, renderer3d, renderer);
