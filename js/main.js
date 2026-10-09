@@ -269,9 +269,8 @@ sim.onGeneration = () => {
   hubChart?.draw(sim.history, sim.bestLapEver);
   if (renderer) {
     renderer.cam = null;
-    renderer.clearSkidmarks?.();
   }
-  renderer3d?.clearSkidmarks();
+  // Keep skid marks permanently on the track; clear only dynamic airborne tire smoke
   renderer3d?.clearTireSmoke();
   updateHighestGenAndLiveSnapshot();
   updateBurstButtonUi();
