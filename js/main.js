@@ -2,11 +2,11 @@ import { CONFIG } from './config.js';
 import { Track, TRACK_PRESETS } from './track.js';
 import { Simulation } from './simulation.js';
 import { Renderer } from './renderer.js';
-import { Renderer3D } from './renderer3d.js';
+import { Renderer3D, TEAM_PALETTE } from './renderer3d.js';
 import { NetworkViz } from './networkViz.js';
 import { FitnessChart, compact } from './chart.js';
 import { drawSparkline, analyzeTrainingProgress, renderAllTileGraphics } from './trainingTelemetry.js';
-import { LeaderboardTower } from './leaderboard.js';
+import { LeaderboardTower, generateCarSideviewSvg } from './leaderboard.js';
 import { EliminationModalManager } from './eliminationModal.js';
 import { audio } from './audio.js';
 import * as storage from './storage.js';
@@ -2404,19 +2404,49 @@ function updateHud(leader) {
         }
       }
     }
+    const isPlayerCar = car === sim.player;
     const badgeEl = $('leader-pos-badge');
     if (badgeEl) {
-      const isPlayerCar = car === sim.player;
       badgeEl.textContent = `P.${rank}`;
       badgeEl.className = `pos-badge ${
         isPlayerCar ? 'is-player' : (rank === 1 ? 'pos-p1' : rank === 2 ? 'pos-p2' : rank === 3 ? 'pos-p3' : 'pos-field')
       }`;
+    }
+
+    // Car Decal Number & Team Livery Side View
+    const carIdx = (sim.cars && car) ? sim.cars.indexOf(car) : 0;
+    const carNum = isPlayerCar ? 7 : (car.carNumber || (typeof car.gridSlot === 'number' ? car.gridSlot + 1 : (carIdx >= 0 ? carIdx + 1 : 1)));
+    const teamIdx = isPlayerCar ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (carIdx >= 0 ? carIdx % (TEAM_PALETTE?.length || 10) : 0));
+
+    const numBadgeEl = $('leader-number-badge');
+    if (numBadgeEl) {
+      numBadgeEl.textContent = `#${carNum}`;
+      numBadgeEl.className = `car-number-badge ${isPlayerCar ? 'is-player' : ''}`;
+    }
+
+    const previewEl = $('cockpit-car-preview');
+    if (previewEl) {
+      const previewKey = `${isPlayerCar ? 'p' : 'c'}_${teamIdx}_${carNum}`;
+      if (previewEl.dataset.key !== previewKey) {
+        previewEl.dataset.key = previewKey;
+        previewEl.innerHTML = generateCarSideviewSvg(teamIdx, isPlayerCar, carNum);
+      }
     }
   } else {
     const badgeEl = $('leader-pos-badge');
     if (badgeEl) {
       badgeEl.textContent = 'P.1';
       badgeEl.className = 'pos-badge pos-p1';
+    }
+    const numBadgeEl = $('leader-number-badge');
+    if (numBadgeEl) {
+      numBadgeEl.textContent = '#1';
+      numBadgeEl.className = 'car-number-badge';
+    }
+    const previewEl = $('cockpit-car-preview');
+    if (previewEl && previewEl.dataset.key !== 'default') {
+      previewEl.dataset.key = 'default';
+      previewEl.innerHTML = generateCarSideviewSvg(0, false, 1);
     }
     setTxt('stat-leader-contacts', '0 (Clean ✨)');
   }

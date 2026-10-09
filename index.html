@@ -101,14 +101,20 @@
 
         <!-- Cockpit Telemetry Card Panel -->
         <div class="leader-card glass" id="leader-card">
-          <!-- Speed & Position Indicator Row -->
+          <!-- Speed, Position & Decal Indicator Row -->
           <div class="cockpit-speed-row">
-            <span class="pos-badge" id="leader-pos-badge">P.1</span>
+            <div class="cockpit-badges-group">
+              <span class="pos-badge" id="leader-pos-badge">P.1</span>
+              <span class="car-number-badge" id="leader-number-badge">#1</span>
+            </div>
             <div class="cockpit-speed-box">
               <span class="cockpit-speed-val" id="leader-speed">0</span>
               <span class="cockpit-speed-unit">KM/H</span>
             </div>
           </div>
+
+          <!-- Focused Car Side View Profile & Livery -->
+          <div class="cockpit-car-preview" id="cockpit-car-preview" title="Focused Car Profile & Livery"></div>
 
           <!-- Telemetry Controls: Steering Wheel & Brake/Gas Pedals -->
           <div class="cockpit-telemetry">

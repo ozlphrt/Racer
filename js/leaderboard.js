@@ -7,7 +7,7 @@ function toHexColor(hexNum, defaultHex = '#38bdf8') {
   return hexNum || defaultHex;
 }
 
-export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false) {
+export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false, carNumber = null) {
   let priColor, secColor, accColor, quadColor;
 
   if (isPlayer) {
@@ -24,6 +24,10 @@ export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false) {
   }
 
   const uid = `${isPlayer ? 'p' : 't' + teamIdx}_${(Math.random() * 100000 | 0)}`;
+  const numStr = carNumber != null ? String(carNumber) : '';
+  const fontSize = numStr.length >= 3 ? 3.3 : (numStr.length === 2 ? 4.0 : 4.5);
+  const rectWidth = numStr.length >= 3 ? 12.5 : 10.5;
+  const rectX = 53 - rectWidth / 2;
 
   return `
     <svg class="car-sideview-svg" viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -54,6 +58,12 @@ export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false) {
       <!-- Sidepod Aerodynamic Undercut & Intake -->
       <path d="M 36,12 Q 54,12 66,16 L 36,16 Z" fill="${secColor}" opacity="0.95" />
       <path d="M 33,10 L 37,10 L 38,15 L 34,15 Z" fill="#090d16" />
+
+      <!-- Decal Number on Sidepod Flank -->
+      ${numStr ? `
+        <rect x="${rectX.toFixed(1)}" y="11" width="${rectWidth.toFixed(1)}" height="5.5" rx="1.2" fill="#090d16" opacity="0.85" stroke="rgba(255,255,255,0.22)" stroke-width="0.35" />
+        <text x="53" y="15.2" fill="#ffffff" font-family="'JetBrains Mono', 'Roboto Mono', monospace, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="900" font-style="italic" text-anchor="middle" letter-spacing="-0.02em">${numStr}</text>
+      ` : ''}
 
       <!-- Nosecone & Front Wing Assembly -->
       <path d="M 64,13.5 L 88,17.5 L 96,21 L 64,17.5 Z" fill="${secColor}" />
@@ -151,7 +161,7 @@ export class LeaderboardTower {
 
       const carNum = isPlayer ? 7 : (carIdx + 1);
       const displayName = isPlayer ? 'YOU' : (car.genLabel ? `${car.genLabel} · #${carNum}` : `#${carNum}`);
-      const svgHtml = generateCarSideviewSvg(teamIdx, isPlayer);
+      const svgHtml = generateCarSideviewSvg(teamIdx, isPlayer, carNum);
 
       // Create row DOM: [Rank] [Sideview SVG] [Name] [Status/Gap]
       const row = document.createElement('div');
