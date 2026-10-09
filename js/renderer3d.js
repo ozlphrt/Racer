@@ -4627,7 +4627,7 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeParticles = 1600;
+    this.maxSmokeParticles = 600;
     this.smokeParticles = [];
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
@@ -4779,7 +4779,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 32000;
+    this.maxSkidQuads = 2400;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -5073,7 +5073,6 @@ export class Renderer3D {
     if (added && this.skidMesh) {
       this.skidMesh.geometry.attributes.position.needsUpdate = true;
       this.skidMesh.geometry.attributes.alpha.needsUpdate = true;
-      this.skidMesh.geometry.attributes.uv.needsUpdate = true;
       this.skidMesh.geometry.setDrawRange(0, this.skidCount * 6);
     }
   }
@@ -5784,32 +5783,42 @@ export class Renderer3D {
           while (diff < -Math.PI) diff += Math.PI * 2;
           mesh.userData.curAngle += diff * kRot;
 
-          // Terrain slope gradient & surface conformal rotation
-          const delta = 4.0;
-          const cx = mesh.userData.curX;
-          const cy = mesh.userData.curY;
-          const hE = this.getTerrainHeight(cx + delta, cy);
-          const hW = this.getTerrainHeight(cx - delta, cy);
-          const hN = this.getTerrainHeight(cx, cy + delta);
-          const hS = this.getTerrainHeight(cx, cy - delta);
-          const dzdx = (hE - hW) / (2 * delta);
-          const dzdy = (hN - hS) / (2 * delta);
+          // Terrain slope gradient & surface conformal rotation (only off-track hills have elevation)
+          if (targetZ > 0.05) {
+            const delta = 4.0;
+            const cx = mesh.userData.curX;
+            const cy = mesh.userData.curY;
+            const hE = this.getTerrainHeight(cx + delta, cy);
+            const hW = this.getTerrainHeight(cx - delta, cy);
+            const hN = this.getTerrainHeight(cx, cy + delta);
+            const hS = this.getTerrainHeight(cx, cy - delta);
+            const dzdx = (hE - hW) / (2 * delta);
+            const dzdy = (hN - hS) / (2 * delta);
 
-          const yaw = mesh.userData.curAngle;
-          const cosY = Math.cos(yaw);
-          const sinY = Math.sin(yaw);
-          const forwardSlope = dzdx * cosY + dzdy * sinY;
-          const lateralSlope = -dzdx * sinY + dzdy * cosY;
+            const yaw = mesh.userData.curAngle;
+            const cosY = Math.cos(yaw);
+            const sinY = Math.sin(yaw);
+            const forwardSlope = dzdx * cosY + dzdy * sinY;
+            const lateralSlope = -dzdx * sinY + dzdy * cosY;
 
-          const targetPitch = -Math.atan(forwardSlope);
-          const targetRoll = Math.atan(lateralSlope);
+            const targetPitch = -Math.atan(forwardSlope);
+            const targetRoll = Math.atan(lateralSlope);
 
-          if (typeof mesh.userData.curPitch !== 'number') {
-            mesh.userData.curPitch = targetPitch;
-            mesh.userData.curRoll = targetRoll;
+            if (typeof mesh.userData.curPitch !== 'number') {
+              mesh.userData.curPitch = targetPitch;
+              mesh.userData.curRoll = targetRoll;
+            } else {
+              mesh.userData.curPitch += (targetPitch - mesh.userData.curPitch) * 0.40;
+              mesh.userData.curRoll += (targetRoll - mesh.userData.curRoll) * 0.40;
+            }
           } else {
-            mesh.userData.curPitch += (targetPitch - mesh.userData.curPitch) * 0.40;
-            mesh.userData.curRoll += (targetRoll - mesh.userData.curRoll) * 0.40;
+            // Track surface is 100% flat at Z=0; pitch and roll smoothly return to 0 with zero CPU overhead
+            if (mesh.userData.curPitch !== 0 || mesh.userData.curRoll !== 0) {
+              mesh.userData.curPitch = (mesh.userData.curPitch || 0) * 0.70;
+              mesh.userData.curRoll = (mesh.userData.curRoll || 0) * 0.70;
+              if (Math.abs(mesh.userData.curPitch) < 0.001) mesh.userData.curPitch = 0;
+              if (Math.abs(mesh.userData.curRoll) < 0.001) mesh.userData.curRoll = 0;
+            }
           }
         }
 
@@ -5879,32 +5888,41 @@ export class Renderer3D {
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.playerCar.userData.curAngle += diff * kRot;
 
-        // Terrain slope gradient & surface conformal rotation
-        const delta = 4.0;
-        const cx = this.playerCar.userData.curX;
-        const cy = this.playerCar.userData.curY;
-        const hE = this.getTerrainHeight(cx + delta, cy);
-        const hW = this.getTerrainHeight(cx - delta, cy);
-        const hN = this.getTerrainHeight(cx, cy + delta);
-        const hS = this.getTerrainHeight(cx, cy - delta);
-        const dzdx = (hE - hW) / (2 * delta);
-        const dzdy = (hN - hS) / (2 * delta);
+        // Terrain slope gradient & surface conformal rotation (only off-track hills have elevation)
+        if (targetZ > 0.05) {
+          const delta = 4.0;
+          const cx = this.playerCar.userData.curX;
+          const cy = this.playerCar.userData.curY;
+          const hE = this.getTerrainHeight(cx + delta, cy);
+          const hW = this.getTerrainHeight(cx - delta, cy);
+          const hN = this.getTerrainHeight(cx, cy + delta);
+          const hS = this.getTerrainHeight(cx, cy - delta);
+          const dzdx = (hE - hW) / (2 * delta);
+          const dzdy = (hN - hS) / (2 * delta);
 
-        const yaw = this.playerCar.userData.curAngle;
-        const cosY = Math.cos(yaw);
-        const sinY = Math.sin(yaw);
-        const forwardSlope = dzdx * cosY + dzdy * sinY;
-        const lateralSlope = -dzdx * sinY + dzdy * cosY;
+          const yaw = this.playerCar.userData.curAngle;
+          const cosY = Math.cos(yaw);
+          const sinY = Math.sin(yaw);
+          const forwardSlope = dzdx * cosY + dzdy * sinY;
+          const lateralSlope = -dzdx * sinY + dzdy * cosY;
 
-        const targetPitch = -Math.atan(forwardSlope);
-        const targetRoll = Math.atan(lateralSlope);
+          const targetPitch = -Math.atan(forwardSlope);
+          const targetRoll = Math.atan(lateralSlope);
 
-        if (typeof this.playerCar.userData.curPitch !== 'number') {
-          this.playerCar.userData.curPitch = targetPitch;
-          this.playerCar.userData.curRoll = targetRoll;
+          if (typeof this.playerCar.userData.curPitch !== 'number') {
+            this.playerCar.userData.curPitch = targetPitch;
+            this.playerCar.userData.curRoll = targetRoll;
+          } else {
+            this.playerCar.userData.curPitch += (targetPitch - this.playerCar.userData.curPitch) * 0.40;
+            this.playerCar.userData.curRoll += (targetRoll - this.playerCar.userData.curRoll) * 0.40;
+          }
         } else {
-          this.playerCar.userData.curPitch += (targetPitch - this.playerCar.userData.curPitch) * 0.40;
-          this.playerCar.userData.curRoll += (targetRoll - this.playerCar.userData.curRoll) * 0.40;
+          if (this.playerCar.userData.curPitch !== 0 || this.playerCar.userData.curRoll !== 0) {
+            this.playerCar.userData.curPitch = (this.playerCar.userData.curPitch || 0) * 0.70;
+            this.playerCar.userData.curRoll = (this.playerCar.userData.curRoll || 0) * 0.70;
+            if (Math.abs(this.playerCar.userData.curPitch) < 0.001) this.playerCar.userData.curPitch = 0;
+            if (Math.abs(this.playerCar.userData.curRoll) < 0.001) this.playerCar.userData.curRoll = 0;
+          }
         }
       }
 
