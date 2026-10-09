@@ -4797,6 +4797,16 @@ export class Renderer3D {
       indices[i0 + 3] = v0 + 2;
       indices[i0 + 4] = v0 + 1;
       indices[i0 + 5] = v0 + 3;
+
+      // Pre-populate static UV coordinates for all quads
+      this.skidUvArr[v0 * 2] = 0.0;
+      this.skidUvArr[v0 * 2 + 1] = 0.0;
+      this.skidUvArr[(v0 + 1) * 2] = 1.0;
+      this.skidUvArr[(v0 + 1) * 2 + 1] = 0.0;
+      this.skidUvArr[(v0 + 2) * 2] = 0.0;
+      this.skidUvArr[(v0 + 2) * 2 + 1] = 1.0;
+      this.skidUvArr[(v0 + 3) * 2] = 1.0;
+      this.skidUvArr[(v0 + 3) * 2 + 1] = 1.0;
     }
 
     const geo = new THREE.BufferGeometry();
@@ -4871,32 +4881,24 @@ export class Renderer3D {
     this.skidPosArr[vOffset * 3 + 1] = v0y;
     this.skidPosArr[vOffset * 3 + 2] = z;
     this.skidAlphaArr[vOffset] = alpha0;
-    this.skidUvArr[vOffset * 2] = 0.0;
-    this.skidUvArr[vOffset * 2 + 1] = 0.0;
 
     // v1 (prev inner edge)
     this.skidPosArr[(vOffset + 1) * 3] = v1x;
     this.skidPosArr[(vOffset + 1) * 3 + 1] = v1y;
     this.skidPosArr[(vOffset + 1) * 3 + 2] = z;
-    this.skidAlphaArr[vOffset + 1] = alpha0;
-    this.skidUvArr[(vOffset + 1) * 2] = 1.0;
-    this.skidUvArr[(vOffset + 1) * 2 + 1] = 0.0;
+    this.skidAlphaArr[(vOffset + 1)] = alpha0;
 
     // v2 (current outer edge)
     this.skidPosArr[(vOffset + 2) * 3] = v2x;
     this.skidPosArr[(vOffset + 2) * 3 + 1] = v2y;
     this.skidPosArr[(vOffset + 2) * 3 + 2] = z;
-    this.skidAlphaArr[vOffset + 2] = alpha1;
-    this.skidUvArr[(vOffset + 2) * 2] = 0.0;
-    this.skidUvArr[(vOffset + 2) * 2 + 1] = 1.0;
+    this.skidAlphaArr[(vOffset + 2)] = alpha1;
 
     // v3 (current inner edge)
     this.skidPosArr[(vOffset + 3) * 3] = v3x;
     this.skidPosArr[(vOffset + 3) * 3 + 1] = v3y;
     this.skidPosArr[(vOffset + 3) * 3 + 2] = z;
-    this.skidAlphaArr[vOffset + 3] = alpha1;
-    this.skidUvArr[(vOffset + 3) * 2] = 1.0;
-    this.skidUvArr[(vOffset + 3) * 2 + 1] = 1.0;
+    this.skidAlphaArr[(vOffset + 3)] = alpha1;
 
     this.skidHead = (this.skidHead + 1) % this.maxSkidQuads;
     if (this.skidCount < this.maxSkidQuads) this.skidCount++;
