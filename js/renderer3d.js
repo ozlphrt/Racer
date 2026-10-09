@@ -696,99 +696,92 @@ export class Renderer3D {
       return ((n ^ (n >>> 16)) >>> 0) / 4294967296.0;
     }
 
-    // Precomputed 1D tables for performance & seamless toroidal wrapping
-    const macroX1 = new Float32Array(size);
-    const macroX2 = new Float32Array(size);
-    const grooveX = new Float32Array(size);
-    const cX8Arr = new Int32Array(size);
-    const cX4Arr = new Int32Array(size);
-    const dx8Arr = new Float32Array(size);
-    const dx4Arr = new Float32Array(size);
-
-    for (let x = 0; x < size; x++) {
-      const xNorm = x / size;
-      macroX1[x] = Math.sin(xNorm * 6.283185 * 2) * 0.07;
-      macroX2[x] = Math.sin(xNorm * 6.283185 * 4 + 1.2) * 0.04;
-      grooveX[x] = Math.sin(xNorm * 6.283185 * 64) * 0.032;
-      cX8Arr[x] = Math.floor(x / 8);
-      cX4Arr[x] = Math.floor(x / 4);
-      dx8Arr[x] = (x % 8) - 3.5;
-      dx4Arr[x] = (x % 4) - 1.5;
+    // Seamless continuous periodic Value Noise on torus [0, 1) x [0, 1)
+    function periodicNoise(u, v, freq, seed) {
+      const px = u * freq;
+      const py = v * freq;
+      const x0 = Math.floor(px);
+      const y0 = Math.floor(py);
+      const fx = px - x0;
+      const fy = py - y0;
+      // Quintic smootherstep curve: 6t^5 - 15t^4 + 10t^3
+      const sx = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+      const sy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+      const i0 = ((x0 % freq) + freq) % freq;
+      const j0 = ((y0 % freq) + freq) % freq;
+      const i1 = (i0 + 1) % freq;
+      const j1 = (j0 + 1) % freq;
+      const v00 = hash2D(i0, j0, seed);
+      const v10 = hash2D(i1, j0, seed);
+      const v01 = hash2D(i0, j1, seed);
+      const v11 = hash2D(i1, j1, seed);
+      return (v00 + sx * (v10 - v00)) + sy * ((v01 + sx * (v11 - v01)) - (v00 + sx * (v10 - v00)));
     }
+
+    const octaves = [
+      { freq: 8, weight: 0.32 },
+      { freq: 16, weight: 0.34 },
+      { freq: 32, weight: 0.22 },
+      { freq: 64, weight: 0.12 },
+    ];
 
     const heights = new Float32Array(totalPixels);
 
-    // Pass 1: Heightmap, Diffuse Albedo, and Roughness
+    // Pass 1: Multi-scale organic fractal noise with continuous domain warping
+    // Completely eliminates grid-like cell repetition or linear stripe patterns
     for (let y = 0; y < size; y++) {
-      const yNorm = y / size;
-      const my1 = Math.cos(yNorm * 6.283185 * 2);
-      const my2 = Math.cos(yNorm * 6.283185 * 3);
-      const cY8 = Math.floor(y / 8);
-      const cY4 = Math.floor(y / 4);
-      const dy8 = (y % 8) - 3.5;
-      const dy4 = (y % 4) - 1.5;
+      const v = y / size;
       const yOffset = y * size;
 
       for (let x = 0; x < size; x++) {
+        const u = x / size;
         const idx = yOffset + x;
 
-        // Macro weathering variation across the tarmac
-        const macro = macroX1[x] * my1 + macroX2[x] * my2;
+        // Continuous organic domain warp breaking any rectilinear lattice alignment
+        const warpU = (periodicNoise(u, v, 4, 101) - 0.5) * 0.08 + (periodicNoise(u, v, 8, 203) - 0.5) * 0.04;
+        const warpV = (periodicNoise(u, v, 4, 307) - 0.5) * 0.08 + (periodicNoise(u, v, 8, 409) - 0.5) * 0.04;
+        const wu = ((u + warpU) % 1.0 + 1.0) % 1.0;
+        const wv = ((v + warpV) % 1.0 + 1.0) % 1.0;
 
-        // Medium gravel aggregate chips (~8px cells, ~64 stones across tile)
-        const cX8 = cX8Arr[x];
-        const pVal8 = hash2D(cX8, cY8, 42);
-        const jx8 = (hash2D(cX8, cY8, 101) - 0.5) * 2.2;
-        const jy8 = (hash2D(cX8, cY8, 202) - 0.5) * 2.2;
-        const d8X = dx8Arr[x] - jx8;
-        const d8Y = dy8 - jy8;
-        const dist8 = Math.sqrt(d8X * d8X + d8Y * d8Y) * 0.263;
-        const pebble8 = pVal8 > 0.38 ? Math.max(0, 1.0 - dist8) * (pVal8 - 0.38) * 1.7 : 0;
+        let noiseSum = 0;
+        for (let o = 0; o < octaves.length; o++) {
+          noiseSum += periodicNoise(wu, wv, octaves[o].freq, o * 53 + 17) * octaves[o].weight;
+        }
 
-        // Fine gravel grit (~4px cells, ~128 grit chips across tile)
-        const cX4 = cX4Arr[x];
-        const pVal4 = hash2D(cX4, cY4, 789);
-        const d4X = dx4Arr[x];
-        const dist4 = Math.sqrt(d4X * d4X + dy4 * dy4) * 0.5;
-        const pebble4 = pVal4 > 0.35 ? Math.max(0, 1.0 - dist4) * (pVal4 - 0.35) * 1.5 : 0;
+        // Per-pixel stochastic mineral grit (zero grid frequency)
+        const grit1 = hash2D(x, y, 777);
+        const grit2 = hash2D(x * 2 + 13, y * 2 + 37, 888);
+        const mineralGrit = (grit1 - 0.5) * 0.14 + (grit2 - 0.5) * 0.08;
 
-        // High frequency micro mineral grit
-        const grit = hash2D(x, y, 999);
-
-        // Longitudinal micro-grooving parallel to track direction
-        const groove = grooveX[x];
-
-        // Combined surface elevation
-        const h = Math.max(0, Math.min(1, 0.42 + macro + pebble8 * 0.34 + pebble4 * 0.22 + (grit - 0.5) * 0.16 + groove));
+        const h = Math.max(0, Math.min(1.0, noiseSum + mineralGrit));
         heights[idx] = h;
 
-        // Color & Tonality
-        const isQuartzite = (pVal8 > 0.90 && dist8 < 0.6) || (grit > 0.965);
-        let r, g, b;
+        // Authentic dark motorsport asphalt color:
+        // Centered around C.asphalt = 0x242832 (R:36, G:40, B:50)
+        // Bitumen crevices: ~26, 30, 38
+        // Median tarmac: ~36, 40, 50
+        // Aggregate mineral flecks: ~46, 50, 60
+        const hRel = h - 0.5;
+        const isSpeck = grit1 > 0.982;
 
-        if (isQuartzite) {
-          // Quartzite & silica crystalline flecks
-          const qTone = 74 + grit * 26;
-          r = qTone * 0.94;
-          g = qTone * 0.97;
-          b = qTone * 1.08;
-        } else {
-          // Asphalt base: deep bitumen ~ 32, stone aggregates ~ 48-66
-          const baseTone = 32 + h * 30;
-          const stoneTint = (pVal8 - 0.5) * 7;
-          r = Math.max(0, (baseTone + stoneTint) * 0.94);
-          g = Math.max(0, (baseTone + stoneTint) * 0.98);
-          b = Math.max(0, (baseTone + stoneTint) * 1.05); // Authentic motorsport slate
+        let baseR = 35 + hRel * 16;
+        let baseG = 39 + hRel * 17;
+        let baseB = 49 + hRel * 20;
+
+        if (isSpeck) {
+          baseR += 16;
+          baseG += 18;
+          baseB += 24;
         }
 
         const cIdx = idx * 4;
-        dData[cIdx] = Math.round(r);
-        dData[cIdx + 1] = Math.round(g);
-        dData[cIdx + 2] = Math.round(b);
+        dData[cIdx] = Math.round(Math.max(18, Math.min(75, baseR)));
+        dData[cIdx + 1] = Math.round(Math.max(22, Math.min(80, baseG)));
+        dData[cIdx + 2] = Math.round(Math.max(28, Math.min(95, baseB)));
         dData[cIdx + 3] = 255;
 
-        // Specular roughness: stone crowns polished (0.72), bitumen valleys matte (0.95)
-        const rough = Math.round(Math.max(165, Math.min(245, (0.95 - h * 0.23) * 255)));
+        // Realistic matte bitumen roughness (0.84 - 0.92)
+        const rough = Math.round(Math.max(210, Math.min(245, (0.92 - h * 0.10) * 255)));
         rData[cIdx] = rough;
         rData[cIdx + 1] = rough;
         rData[cIdx + 2] = rough;
@@ -797,7 +790,7 @@ export class Renderer3D {
     }
 
     // Pass 2: Sobel Normal Map (seamless toroidal finite differences)
-    const bump = 3.6;
+    const bump = 2.2;
     for (let y = 0; y < size; y++) {
       const ym = (y - 1 + size) % size;
       const yp = (y + 1) % size;
@@ -831,6 +824,7 @@ export class Renderer3D {
 
     const diffuseMap = new THREE.CanvasTexture(dCanvas);
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
+    diffuseMap.colorSpace = THREE.SRGBColorSpace;
     diffuseMap.generateMipmaps = true;
     diffuseMap.anisotropy = maxAniso;
 
@@ -1392,8 +1386,9 @@ export class Renderer3D {
 
     const asphalt = this.createAsphaltTextures();
 
-    // Metric, distortion-free UV mapping matching asphalt tile size (~6m x 6m)
-    const targetTileSize = 6.0;
+    // Metric UV mapping matching wide asphalt tile size (~24m x 24m)
+    // 24m tile size prevents high-frequency wallpaper tiling across the 84m wide track (~3.5 tiles wide)
+    const targetTileSize = 24.0;
     const totalTiles = Math.max(1, Math.round(t.length / targetTileSize));
     const effTileSize = t.length / totalTiles;
     const uMax = t.width / effTileSize;
@@ -1438,9 +1433,9 @@ export class Renderer3D {
       color: 0xffffff,
       map: asphalt.diffuseMap,
       normalMap: asphalt.normalMap,
-      normalScale: new THREE.Vector2(0.85, 0.85),
+      normalScale: new THREE.Vector2(0.60, 0.60),
       roughnessMap: asphalt.roughnessMap,
-      roughness: 0.88,
+      roughness: 0.90,
       metalness: 0.08,
       polygonOffset: true,
       polygonOffsetFactor: -1,
