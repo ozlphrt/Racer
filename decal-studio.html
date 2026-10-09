@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>F1 Car Decal & Livery Studio · AI Racer</title>
+  <meta name="description" content="Interactive 3D Studio to position, scale, rotate, and customize Formula 1 number decals from Top, Front, Rear, Left, and Right camera angles.">
+  <meta name="theme-color" content="#070a14">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #070a14;
+      --panel-bg: rgba(12, 17, 28, 0.88);
+      --card-bg: rgba(18, 25, 42, 0.75);
+      --border: rgba(56, 189, 248, 0.20);
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.35);
+      --gold: #fbbf24;
+      --red: #ef4444;
+      --green: #22c55e;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --font: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Studio Bar */
+    header {
+      height: 56px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(7, 10, 20, 0.90);
+      backdrop-filter: blur(16px);
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-f1 {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 2px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.1em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-header {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-header:hover {
+      background: rgba(56, 189, 248, 0.20);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .btn-header.primary {
+      background: var(--accent);
+      color: #070a14;
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+    .btn-header.primary:hover {
+      background: #7dd3fc;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    /* Main Studio Layout */
+    .studio-container {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 3D Viewport */
+    #viewport-container {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 45%, #131d33 0%, #060913 85%);
+    }
+
+    #webgl-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Floating Camera Angle Selector Bar */
+    .camera-angles-bar {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      background: rgba(12, 17, 28, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 8px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+      z-index: 50;
+    }
+
+    .btn-cam {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-cam:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-cam.active {
+      background: var(--accent);
+      color: #070a14;
+      font-weight: 700;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    /* Viewport Overlay Controls (Bottom) */
+    .viewport-bottom-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      display: flex;
+      gap: 10px;
+      z-index: 50;
+    }
+
+    .tool-pill {
+      background: rgba(12, 17, 28, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(10px);
+    }
+
+    .tool-pill span.val {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* Sidebar Studio Control Panel */
+    .studio-sidebar {
+      width: 380px;
+      background: var(--panel-bg);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(20px);
+      z-index: 60;
+      overflow-y: auto;
+    }
+
+    .sidebar-section {
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .sidebar-section:last-child {
+      border-bottom: none;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.10em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Decal Selector Tabs */
+    .decal-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      border-radius: 8px;
+    }
+
+    .btn-decal-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 7px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .btn-decal-tab:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .btn-decal-tab.active {
+      background: var(--accent);
+      color: #070a14;
+      font-weight: 700;
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    /* Slider / Input Rows */
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .control-label-wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .control-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .control-slider {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .control-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      cursor: pointer;
+    }
+
+    .control-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      cursor: pointer;
+      border: none;
+    }
+
+    .control-number {
+      width: 68px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 4px 6px;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .control-number:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .btn-nudge {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-muted);
+      border-radius: 4px;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+    .btn-nudge:hover {
+      color: #fff;
+      background: rgba(56, 189, 248, 0.25);
+      border-color: var(--accent);
+    }
+
+    /* Style Customizer Buttons */
+    .style-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .style-option {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 8px;
+      cursor: pointer;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+
+    .style-option:hover {
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .style-option.active {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.18);
+      color: #fff;
+    }
+
+    /* Color Chips */
+    .color-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .color-chip {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    .color-chip:hover {
+      transform: scale(1.15);
+      border-color: #fff;
+    }
+
+    .color-chip.active {
+      transform: scale(1.18);
+      border-color: #ffffff;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+    }
+
+    /* Code Export Box */
+    .code-export-box {
+      background: #040711;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #a5f3fc;
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre;
+      user-select: all;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #0f172a;
+      border: 1px solid var(--accent);
+      color: #f8fafc;
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s ease;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Studio Bar -->
+  <header>
+    <div class="brand">
+      <span style="font-size: 20px;">🏎️</span>
+      <h1>F1 DECAL &amp; LIVERY STUDIO <span class="badge-f1">2022 F1</span></h1>
+    </div>
+    <div class="header-actions">
+      <button id="btn-toggle-turntable" class="btn-header" type="button">
+        <span>🔄 Turntable</span>
+      </button>
+      <button id="btn-reset-current" class="btn-header" type="button">
+        <span>↺ Reset Decal</span>
+      </button>
+      <button id="btn-copy-code" class="btn-header primary" type="button">
+        <span>📋 Copy Coordinates</span>
+      </button>
+      <a href="index.html" class="btn-header" title="Return to Main Game">
+        <span>← Main Track</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Studio Layout -->
+  <div class="studio-container">
+
+    <!-- 3D Viewport -->
+    <div id="viewport-container">
+      <canvas id="webgl-canvas"></canvas>
+
+      <!-- Camera Angles Presets Bar -->
+      <div class="camera-angles-bar" role="toolbar" aria-label="Camera Presets">
+        <button class="btn-cam" data-angle="top">🔝 Top</button>
+        <button class="btn-cam" data-angle="front">🏎️ Front</button>
+        <button class="btn-cam" data-angle="rear">🏁 Rear</button>
+        <button class="btn-cam" data-angle="left">◀️ Left</button>
+        <button class="btn-cam" data-angle="right">▶️ Right</button>
+        <button class="btn-cam active" data-angle="free">🌐 Free 3D</button>
+      </div>
+
+      <!-- Bottom Viewport Status Pill -->
+      <div class="viewport-bottom-bar">
+        <div class="tool-pill">
+          ACTIVE DECAL: <span class="val" id="pill-active-decal">TOP (NOSE CONE)</span>
+        </div>
+        <div class="tool-pill">
+          CAMERA: <span class="val" id="pill-camera-mode">FREE ORBIT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Controls -->
+    <div class="studio-sidebar">
+
+      <!-- 1. Decal Selection -->
+      <div class="sidebar-section">
+        <div class="section-title">
+          <span>Select Decal Position</span>
+        </div>
+        <div class="decal-tabs" id="decal-tabs">
+          <button class="btn-decal-tab active" data-decal="top">Top</button>
+          <button class="btn-decal-tab" data-decal="front">Front</button>
+          <button class="btn-decal-tab" data-decal="rear">Rear</button>
+          <button class="btn-decal-tab" data-decal="left">Left</button>
+          <button class="btn-decal-tab" data-decal="right">Right</button>
+        </div>
+      </div>
+
+      <!-- 2. Position Controls -->
+      <div class="sidebar-section">
+        <div class="section-title">
+          <span>Position (Move)</span>
+          <span style="font-size: 9px; color: var(--text-muted); font-family: var(--mono);">WORLD UNITS</span>
+        </div>
+        <div class="control-group">
+          <!-- Pos X -->
+          <div class="control-row">
+            <div class="control-label-wrap">
+              <span>Forward / Backward (X)</span>
+            </div>
+            <div class="control-input-wrap">
+              <button class="btn-nudge" data-target="posX" data-step="-0.1">−</button>
+              <input type="range" class="control-slider" id="slider-posX" min="-12" max="14" step="0.05">
+              <button class="btn-nudge" data-target="posX" data-step="0.1">+</button>
+              <input type="number" class="control-number" id="num-posX" step="0.05">
+            </div>
+          </div>
+
+          <!-- Pos Y -->
+          <div class="control-row">
+            <div class="control-label-wrap">
+              <span>Lateral Left / Right (Y)</span>
+            </div>
+            <div class="control-input-wrap">
+              <button class="btn-nudge" data-target="posY" data-step="-0.1">−</button>
+              <input type="range" class="control-slider" id="slider-posY" min="-6" max="6" step="0.05">
+              <button class="btn-nudge" data-target="posY" data-step="0.1">+</button>
+              <input type="number" class="control-number" id="num-posY" step="0.05">
+            </div>
+          </div>
+
+          <!-- Pos Z -->
+          <div class="control-row">
+            <div class="control-label-wrap">
+              <span>Height Elevation (Z)</span>
+            </div>
+            <div class="control-input-wrap">
+              <button class="btn-nudge" data-target="posZ" data-step="-0.05">−</button>
+              <input type="range" class="control-slider" id="slider-posZ" min="0" max="8" step="0.02">
+              <button class="btn-nudge" data-target="posZ" data-step="0.05">+</button>
+              <input type="number" class="control-number" id="num-posZ" step="0.02">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Scale Controls -->
+      <div class="sidebar-section">
+        <div class="section-title">
+          <span>Scale (Size)</span>
+        </div>
+        <div class="control-group">
+          <div class="control-row">
+            <div class="control-label-wrap">
+              <span>Width Scale</span>
+            </div>
+            <div class="control-input-wrap">
+              <button class="btn-nudge" data-target="scaleX" data-step="-0.1">−</button>
+              <input type="range" class="control-slider" id="slider-scaleX" min="0.2" max="6.0" step="0.05">
+              <button class="btn-nudge" data-target="scaleX" data-step="0.1">+</button>
+              <input type="number" class="control-number" id="num-scaleX" step="0.05">
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div class="control-label-wrap">
+              <span>Height Scale</span>
+            </div>
+            <div class="control-input-wrap">
+              <button class="btn-nudge" data-target="scaleY" data-step="-0.1">−</button>
+              <input type="range" class="control-slider" id="slider-scaleY" min="0.2" max="6.0" step="0.05">
+              <button class="btn-nudge" data-target="scaleY" data-step="0.1">+</button>
+              <input type="number" class="control-number" id="num-scaleY" step="0.05">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Rotation Controls -->
+      <div class="sidebar-section">
+        <div class="section-title">
+          <span>Orientation (Rotation °)</span>
+        </div>
+        <div class="control-group">
+          <!-- Rot X -->
+          <div class="control-row">
+            <div class="control-label-wrap"><span>Pitch (X Rotation)</span></div>
+            <div class="control-input-wrap">
+              <input type="range" class="control-slider" id="slider-rotX" min="-180" max="180" step="1">
+              <input type="number" class="control-number" id="num-rotX" step="1">
+            </div>
+          </div>
+          <!-- Rot Y -->
+          <div class="control-row">
+            <div class="control-label-wrap"><span>Roll (Y Rotation)</span></div>
+            <div class="control-input-wrap">
+              <input type="range" class="control-slider" id="slider-rotY" min="-180" max="180" step="1">
+              <input type="number" class="control-number" id="num-rotY" step="1">
+            </div>
+          </div>
+          <!-- Rot Z -->
+          <div class="control-row">
+            <div class="control-label-wrap"><span>Yaw (Z Rotation)</span></div>
+            <div class="control-input-wrap">
+              <input type="range" class="control-slider" id="slider-rotZ" min="-180" max="180" step="1">
+              <input type="number" class="control-number" id="num-rotZ" step="1">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Decal & Car Customizer -->
+      <div class="sidebar-section">
+        <div class="section-title">
+          <span>Decal Number &amp; Car Livery</span>
+        </div>
+        <div class="control-group">
+          <div class="control-row">
+            <div class="control-label-wrap"><span>Race Number Text</span></div>
+            <input type="text" id="input-race-number" value="1" maxlength="3" style="background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px 10px; color:#fff; font-family:var(--mono); font-weight:700; font-size:14px;">
+          </div>
+
+          <div class="control-row">
+            <div class="control-label-wrap"><span>Car Livery Accent</span></div>
+            <div class="color-row" id="color-row">
+              <div class="color-chip active" data-color="#dc2626" style="background: #dc2626;" title="Scuderia Red"></div>
+              <div class="color-chip" data-color="#0284c7" style="background: #0284c7;" title="Cyan Racing"></div>
+              <div class="color-chip" data-color="#ea580c" style="background: #ea580c;" title="Papaya Orange"></div>
+              <div class="color-chip" data-color="#16a34a" style="background: #16a34a;" title="British Racing Green"></div>
+              <div class="color-chip" data-color="#f59e0b" style="background: #f59e0b;" title="Racing Gold"></div>
+              <div class="color-chip" data-color="#475569" style="background: #475569;" title="Stealth Carbon"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Code Output -->
+      <div class="sidebar-section">
+        <div class="section-title">
+          <span>Live Coordinate Export</span>
+        </div>
+        <div class="code-export-box" id="code-export-box">// Coordinates auto-update here</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Coordinates Copied to Clipboard!</div>
+
+  <!-- Three.js and Studio Engine -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/controls/OrbitControls.js",
+      "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/loaders/GLTFLoader.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+    // Default calibrated decal transforms
+    const DEFAULT_DECALS = {
+      top: {
+        name: 'Top (Nose Cone)',
+        posX: 6.20,
+        posY: 0.00,
+        posZ: 2.22,
+        scaleX: 2.20,
+        scaleY: 2.20,
+        rotX: -12,
+        rotY: 0,
+        rotZ: -90,
+      },
+      front: {
+        name: 'Front (Nose Tip)',
+        posX: 10.60,
+        posY: 0.00,
+        posZ: 1.15,
+        scaleX: 1.60,
+        scaleY: 1.60,
+        rotX: 35,
+        rotY: 0,
+        rotZ: -90,
+      },
+      rear: {
+        name: 'Rear (Rear Wing Flap)',
+        posX: -8.85,
+        posY: 0.00,
+        posZ: 3.82,
+        scaleX: 2.40,
+        scaleY: 1.40,
+        rotX: 0,
+        rotY: 180,
+        rotZ: -90,
+      },
+      left: {
+        name: 'Left (Sidepod / Fin)',
+        posX: -1.60,
+        posY: -2.35,
+        posZ: 1.95,
+        scaleX: 1.80,
+        scaleY: 1.80,
+        rotX: 0,
+        rotY: 90,
+        rotZ: 0,
+      },
+      right: {
+        name: 'Right (Sidepod / Fin)',
+        posX: -1.60,
+        posY: 2.35,
+        posZ: 1.95,
+        scaleX: 1.80,
+        scaleY: 1.80,
+        rotX: 0,
+        rotY: -90,
+        rotZ: 0,
+      }
+    };
+
+    // Load saved or use defaults
+    let decals = JSON.parse(localStorage.getItem('f1_decal_studio_config')) || JSON.parse(JSON.stringify(DEFAULT_DECALS));
+    let activeDecalKey = 'top';
+    let currentNumber = '1';
+    let currentCarColor = '#dc2626';
+    let isTurntableActive = false;
+
+    // Camera preset coordinates
+    const CAMERA_PRESETS = {
+      top:   { x: 0,  y: 0,  z: 22, targetX: 0, targetY: 0, targetZ: 1.5 },
+      front: { x: 22, y: 0,  z: 3.5, targetX: 4, targetY: 0, targetZ: 1.5 },
+      rear:  { x: -22, y: 0, z: 4.5, targetX: -4, targetY: 0, targetZ: 2.0 },
+      left:  { x: 0, y: -22, z: 3.8, targetX: 0, targetY: 0, targetZ: 1.8 },
+      right: { x: 0, y: 22,  z: 3.8, targetX: 0, targetY: 0, targetZ: 1.8 },
+      free:  { x: 14, y: -16, z: 10, targetX: 0, targetY: 0, targetZ: 1.5 }
+    };
+
+    // Three.js Core
+    const canvas = document.getElementById('webgl-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x070a14);
+    scene.fog = new THREE.FogExp2(0x070a14, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
+    camera.position.set(14, -16, 10);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02; // Keep above floor
+    controls.minDistance = 4;
+    controls.maxDistance = 50;
+    controls.target.set(0, 0, 1.5);
+
+    // Studio Lighting
+    const hemiLight = new THREE.HemisphereLight(0xddeeff, 0x111122, 0.85);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    keyLight.position.set(15, -12, 20);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 1;
+    keyLight.shadow.camera.far = 60;
+    keyLight.shadow.bias = -0.0005;
+    keyLight.shadow.camera.left = -16;
+    keyLight.shadow.camera.right = 16;
+    keyLight.shadow.camera.top = 16;
+    keyLight.shadow.camera.bottom = -16;
+    scene.add(keyLight);
+
+    const rimLight1 = new THREE.DirectionalLight(0x38bdf8, 1.2);
+    rimLight1.position.set(-18, 15, 12);
+    scene.add(rimLight1);
+
+    const fillLight = new THREE.DirectionalLight(0xffeedd, 0.6);
+    fillLight.position.set(0, 18, 10);
+    scene.add(fillLight);
+
+    // Studio Floor Grid & Disc
+    const floorGeo = new THREE.PlaneGeometry(120, 120);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x090e1a,
+      roughness: 0.6,
+      metalness: 0.2
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(60, 60, 0x38bdf8, 0x1e293b);
+    grid.rotation.x = Math.PI / 2;
+    grid.position.z = 0.01;
+    scene.add(grid);
+
+    // Car Root Group (rotates on turntable)
+    const carRoot = new THREE.Group();
+    scene.add(carRoot);
+
+    // Decal Meshes Map
+    const decalMeshes = {};
+    let numberTexture = null;
+
+    // Helper: Create High-Res Number CanvasTexture
+    function createNumberTexture(num) {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, 256, 256);
+
+      // Outer Glow & Border
+      ctx.beginPath();
+      ctx.arc(128, 128, 108, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(10, 15, 26, 0.78)';
+      ctx.fill();
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      // Inner Accent Ring
+      ctx.beginPath();
+      ctx.arc(128, 128, 92, 0, Math.PI * 2);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+      ctx.stroke();
+
+      // Bold Typography
+      const str = `${num}`;
+      const fSize = str.length === 1 ? 120 : str.length === 2 ? 100 : 76;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `900 ${fSize}px "Outfit", "Arial Black", Impact, sans-serif`;
+
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 4;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(str, 128, 130);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      return tex;
+    }
+
+    numberTexture = createNumberTexture(currentNumber);
+
+    // Initialize Decal Meshes
+    function setupDecalMeshes() {
+      Object.keys(DEFAULT_DECALS).forEach((key) => {
+        const geo = new THREE.PlaneGeometry(1, 1);
+        const mat = new THREE.MeshBasicMaterial({
+          map: numberTexture,
+          transparent: true,
+          side: THREE.DoubleSide,
+          depthTest: true,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -1
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.renderOrder = 999;
+        carRoot.add(mesh);
+        decalMeshes[key] = mesh;
+      });
+      applyAllDecalTransforms();
+    }
+
+    setupDecalMeshes();
+
+    // Apply Decal Transform from data
+    function applyDecalTransform(key) {
+      const data = decals[key];
+      const mesh = decalMeshes[key];
+      if (!data || !mesh) return;
+
+      mesh.position.set(data.posX, data.posY, data.posZ);
+      mesh.scale.set(data.scaleX, data.scaleY, 1);
+      mesh.rotation.order = 'ZYX';
+      mesh.rotation.set(
+        THREE.MathUtils.degToRad(data.rotX),
+        THREE.MathUtils.degToRad(data.rotY),
+        THREE.MathUtils.degToRad(data.rotZ)
+      );
+
+      // Outline highlight on active decal
+      if (key === activeDecalKey) {
+        mesh.material.opacity = 1.0;
+      } else {
+        mesh.material.opacity = 0.85;
+      }
+    }
+
+    function applyAllDecalTransforms() {
+      Object.keys(decals).forEach(applyDecalTransform);
+      updateExportCode();
+    }
+
+    // Load 3D F1 Car Model
+    let carModel = null;
+    const gltfLoader = new GLTFLoader();
+    
+    function loadF1Car() {
+      // Try local scene.gltf
+      gltfLoader.load(
+        './full_f1_2022/scene.gltf',
+        (gltf) => {
+          carModel = gltf.scene;
+          const s = 6.0;
+          carModel.scale.set(s, s, s);
+          // Standard F1 Orientation: Front points +X, Roof points +Z
+          carModel.rotation.set(Math.PI / 2, Math.PI, 0);
+          carModel.position.set(0.6, 0, 0);
+
+          carModel.traverse((child) => {
+            if (child.name && (child.name.includes('Plane') || child.name.includes('Sphere') || child.name.includes('Object_12') || child.name.includes('Object_4'))) {
+              child.visible = false;
+              return;
+            }
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              if (child.material) {
+                child.material.roughness = 0.42;
+                child.material.metalness = 0.15;
+              }
+            }
+          });
+
+          carRoot.add(carModel);
+          updateCarLiveryColor(currentCarColor);
+        },
+        undefined,
+        (err) => {
+          console.warn('Could not load GLTF model, generating procedural F1 body:', err);
+          createProceduralF1Car();
+        }
+      );
+    }
+
+    function createProceduralF1Car() {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: currentCarColor, roughness: 0.35, metalness: 0.2 });
+      const carbonMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.8 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 });
+
+      // Nose / Monocoque
+      const noseGeo = new THREE.ConeGeometry(1.6, 12, 16);
+      const nose = new THREE.Mesh(noseGeo, bodyMat);
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.set(4, 0, 1.4);
+      group.add(nose);
+
+      // Cockpit / Engine Cover
+      const bodyGeo = new THREE.BoxGeometry(10, 3.2, 1.8);
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.set(-1, 0, 1.5);
+      group.add(body);
+
+      // Rear Wing
+      const wingGeo = new THREE.BoxGeometry(2.4, 5.8, 0.3);
+      const wing = new THREE.Mesh(wingGeo, carbonMat);
+      wing.position.set(-8.5, 0, 3.8);
+      group.add(wing);
+
+      // Wheels
+      const tireGeo = new THREE.CylinderGeometry(2.2, 2.2, 1.8, 16);
+      [
+        { x: 6, y: -3.8, z: 2.2 },
+        { x: 6, y: 3.8, z: 2.2 },
+        { x: -6, y: -4.0, z: 2.2 },
+        { x: -6, y: 4.0, z: 2.2 },
+      ].forEach((w) => {
+        const t = new THREE.Mesh(tireGeo, tireMat);
+        t.rotation.x = Math.PI / 2;
+        t.position.set(w.x, w.y, w.z);
+        group.add(t);
+      });
+
+      carRoot.add(group);
+      carModel = group;
+    }
+
+    loadF1Car();
+
+    function updateCarLiveryColor(hex) {
+      currentCarColor = hex;
+      if (!carModel) return;
+      carModel.traverse((child) => {
+        if (child.isMesh && child.material && !child.name?.includes('Object_14')) {
+          if (child.material.color) {
+            child.material.color.set(hex);
+          }
+        }
+      });
+    }
+
+    // UI Elements Binding
+    const decalTabs = document.getElementById('decal-tabs');
+    const pillActiveDecal = document.getElementById('pill-active-decal');
+    const pillCameraMode = document.getElementById('pill-camera-mode');
+    const codeExportBox = document.getElementById('code-export-box');
+    const toast = document.getElementById('toast');
+
+    const inputs = {
+      posX: { slider: document.getElementById('slider-posX'), num: document.getElementById('num-posX') },
+      posY: { slider: document.getElementById('slider-posY'), num: document.getElementById('num-posY') },
+      posZ: { slider: document.getElementById('slider-posZ'), num: document.getElementById('num-posZ') },
+      scaleX: { slider: document.getElementById('slider-scaleX'), num: document.getElementById('num-scaleX') },
+      scaleY: { slider: document.getElementById('slider-scaleY'), num: document.getElementById('num-scaleY') },
+      rotX: { slider: document.getElementById('slider-rotX'), num: document.getElementById('num-rotX') },
+      rotY: { slider: document.getElementById('slider-rotY'), num: document.getElementById('num-rotY') },
+      rotZ: { slider: document.getElementById('slider-rotZ'), num: document.getElementById('num-rotZ') },
+    };
+
+    // Sync UI from Decal Data
+    function syncUiFromData(key) {
+      const d = decals[key];
+      if (!d) return;
+
+      Object.keys(inputs).forEach((prop) => {
+        const val = d[prop];
+        if (inputs[prop].slider) inputs[prop].slider.value = val;
+        if (inputs[prop].num) inputs[prop].num.value = val;
+      });
+
+      pillActiveDecal.textContent = d.name.toUpperCase();
+    }
+
+    syncUiFromData(activeDecalKey);
+
+    // Attach Input Event Listeners
+    Object.keys(inputs).forEach((prop) => {
+      const { slider, num } = inputs[prop];
+
+      slider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        num.value = val;
+        decals[activeDecalKey][prop] = val;
+        applyDecalTransform(activeDecalKey);
+        saveDecalsToStorage();
+      });
+
+      num.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value) || 0;
+        slider.value = val;
+        decals[activeDecalKey][prop] = val;
+        applyDecalTransform(activeDecalKey);
+        saveDecalsToStorage();
+      });
+    });
+
+    // Nudge Buttons (+/-)
+    document.querySelectorAll('.btn-nudge').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const prop = btn.getAttribute('data-target');
+        const step = parseFloat(btn.getAttribute('data-step')) || 0.1;
+        const currentVal = decals[activeDecalKey][prop];
+        const newVal = parseFloat((currentVal + step).toFixed(2));
+        decals[activeDecalKey][prop] = newVal;
+        if (inputs[prop].slider) inputs[prop].slider.value = newVal;
+        if (inputs[prop].num) inputs[prop].num.value = newVal;
+        applyDecalTransform(activeDecalKey);
+        saveDecalsToStorage();
+      });
+    });
+
+    // Decal Tabs Switcher
+    decalTabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-decal-tab');
+      if (!btn) return;
+      document.querySelectorAll('.btn-decal-tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeDecalKey = btn.getAttribute('data-decal');
+      syncUiFromData(activeDecalKey);
+      applyAllDecalTransforms();
+
+      // Automatically move camera to match active decal
+      setCameraAngle(activeDecalKey);
+    });
+
+    // Camera Angle Presets
+    let cameraTween = null;
+
+    function setCameraAngle(angleKey) {
+      document.querySelectorAll('.btn-cam').forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-angle') === angleKey);
+      });
+      pillCameraMode.textContent = angleKey.toUpperCase();
+
+      const preset = CAMERA_PRESETS[angleKey] || CAMERA_PRESETS.free;
+      animateCameraTo(preset.x, preset.y, preset.z, preset.targetX, preset.targetY, preset.targetZ);
+    }
+
+    document.querySelectorAll('.btn-cam').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const angle = btn.getAttribute('data-angle');
+        setCameraAngle(angle);
+      });
+    });
+
+    function animateCameraTo(x, y, z, tx, ty, tz, duration = 600) {
+      const startX = camera.position.x;
+      const startY = camera.position.y;
+      const startZ = camera.position.z;
+      const startTx = controls.target.x;
+      const startTy = controls.target.y;
+      const startTz = controls.target.z;
+      const startTime = performance.now();
+
+      if (cameraTween) cancelAnimationFrame(cameraTween);
+
+      function step(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(1, elapsed / duration);
+        const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        camera.position.set(
+          startX + (x - startX) * ease,
+          startY + (y - startY) * ease,
+          startZ + (z - startZ) * ease
+        );
+        controls.target.set(
+          startTx + (tx - startTx) * ease,
+          startTy + (ty - startTy) * ease,
+          startTz + (tz - startTz) * ease
+        );
+
+        if (t < 1) {
+          cameraTween = requestAnimationFrame(step);
+        } else {
+          cameraTween = null;
+        }
+      }
+      cameraTween = requestAnimationFrame(step);
+    }
+
+    // Number text input
+    const numInput = document.getElementById('input-race-number');
+    numInput.addEventListener('input', (e) => {
+      currentNumber = e.target.value || '1';
+      numberTexture = createNumberTexture(currentNumber);
+      Object.keys(decalMeshes).forEach((k) => {
+        decalMeshes[k].material.map = numberTexture;
+        decalMeshes[k].material.needsUpdate = true;
+      });
+    });
+
+    // Color chips
+    document.getElementById('color-row').addEventListener('click', (e) => {
+      const chip = e.target.closest('.color-chip');
+      if (!chip) return;
+      document.querySelectorAll('.color-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      const color = chip.getAttribute('data-color');
+      updateCarLiveryColor(color);
+    });
+
+    // Turntable Toggle
+    const btnTurntable = document.getElementById('btn-toggle-turntable');
+    btnTurntable.addEventListener('click', () => {
+      isTurntableActive = !isTurntableActive;
+      btnTurntable.classList.toggle('primary', isTurntableActive);
+      showToast(isTurntableActive ? 'Turntable Active' : 'Turntable Paused');
+    });
+
+    // Reset Current Decal
+    document.getElementById('btn-reset-current').addEventListener('click', () => {
+      decals[activeDecalKey] = JSON.parse(JSON.stringify(DEFAULT_DECALS[activeDecalKey]));
+      syncUiFromData(activeDecalKey);
+      applyDecalTransform(activeDecalKey);
+      saveDecalsToStorage();
+      showToast(`Reset ${activeDecalKey.toUpperCase()} to defaults`);
+    });
+
+    // Copy Code / Export
+    function updateExportCode() {
+      const exportObj = {};
+      Object.keys(decals).forEach((k) => {
+        const d = decals[k];
+        exportObj[k] = {
+          posX: parseFloat(d.posX.toFixed(2)),
+          posY: parseFloat(d.posY.toFixed(2)),
+          posZ: parseFloat(d.posZ.toFixed(2)),
+          scaleX: parseFloat(d.scaleX.toFixed(2)),
+          scaleY: parseFloat(d.scaleY.toFixed(2)),
+          rotX: Math.round(d.rotX),
+          rotY: Math.round(d.rotY),
+          rotZ: Math.round(d.rotZ),
+        };
+      });
+      codeExportBox.textContent = `// F1 Number Decals Configuration\nexport const F1_DECAL_CONFIG = ${JSON.stringify(exportObj, null, 2)};`;
+    }
+
+    document.getElementById('btn-copy-code').addEventListener('click', () => {
+      updateExportCode();
+      navigator.clipboard.writeText(codeExportBox.textContent).then(() => {
+        showToast('✓ Coordinates copied to clipboard!');
+      });
+    });
+
+    function saveDecalsToStorage() {
+      localStorage.setItem('f1_decal_studio_config', JSON.stringify(decals));
+      updateExportCode();
+    }
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    // Window Resize
+    window.addEventListener('resize', () => {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    // Animation Loop
+    let clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      if (isTurntableActive) {
+        carRoot.rotation.z += delta * 0.45;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
