@@ -663,6 +663,191 @@ export class Renderer3D {
     return this._terrainDetailMaps;
   }
 
+  createAsphaltTextures() {
+    if (this._asphaltTextures) return this._asphaltTextures;
+
+    const size = 512;
+    const totalPixels = size * size;
+
+    const dCanvas = document.createElement('canvas');
+    dCanvas.width = size;
+    dCanvas.height = size;
+    const dCtx = dCanvas.getContext('2d');
+    const dImg = dCtx.createImageData(size, size);
+    const dData = dImg.data;
+
+    const nCanvas = document.createElement('canvas');
+    nCanvas.width = size;
+    nCanvas.height = size;
+    const nCtx = nCanvas.getContext('2d');
+    const nImg = nCtx.createImageData(size, size);
+    const nData = nImg.data;
+
+    const rCanvas = document.createElement('canvas');
+    rCanvas.width = size;
+    rCanvas.height = size;
+    const rCtx = rCanvas.getContext('2d');
+    const rImg = rCtx.createImageData(size, size);
+    const rData = rImg.data;
+
+    function hash2D(i, j, seed = 0) {
+      let n = (Math.imul(i + 137, 374761393) + Math.imul(j + 283, 668265263) + Math.imul(seed + 541, 1013904223)) | 0;
+      n = Math.imul(n ^ (n >>> 13), 1274126177);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967296.0;
+    }
+
+    // Precomputed 1D tables for performance & seamless toroidal wrapping
+    const macroX1 = new Float32Array(size);
+    const macroX2 = new Float32Array(size);
+    const grooveX = new Float32Array(size);
+    const cX8Arr = new Int32Array(size);
+    const cX4Arr = new Int32Array(size);
+    const dx8Arr = new Float32Array(size);
+    const dx4Arr = new Float32Array(size);
+
+    for (let x = 0; x < size; x++) {
+      const xNorm = x / size;
+      macroX1[x] = Math.sin(xNorm * 6.283185 * 2) * 0.07;
+      macroX2[x] = Math.sin(xNorm * 6.283185 * 4 + 1.2) * 0.04;
+      grooveX[x] = Math.sin(xNorm * 6.283185 * 64) * 0.032;
+      cX8Arr[x] = Math.floor(x / 8);
+      cX4Arr[x] = Math.floor(x / 4);
+      dx8Arr[x] = (x % 8) - 3.5;
+      dx4Arr[x] = (x % 4) - 1.5;
+    }
+
+    const heights = new Float32Array(totalPixels);
+
+    // Pass 1: Heightmap, Diffuse Albedo, and Roughness
+    for (let y = 0; y < size; y++) {
+      const yNorm = y / size;
+      const my1 = Math.cos(yNorm * 6.283185 * 2);
+      const my2 = Math.cos(yNorm * 6.283185 * 3);
+      const cY8 = Math.floor(y / 8);
+      const cY4 = Math.floor(y / 4);
+      const dy8 = (y % 8) - 3.5;
+      const dy4 = (y % 4) - 1.5;
+      const yOffset = y * size;
+
+      for (let x = 0; x < size; x++) {
+        const idx = yOffset + x;
+
+        // Macro weathering variation across the tarmac
+        const macro = macroX1[x] * my1 + macroX2[x] * my2;
+
+        // Medium gravel aggregate chips (~8px cells, ~64 stones across tile)
+        const cX8 = cX8Arr[x];
+        const pVal8 = hash2D(cX8, cY8, 42);
+        const jx8 = (hash2D(cX8, cY8, 101) - 0.5) * 2.2;
+        const jy8 = (hash2D(cX8, cY8, 202) - 0.5) * 2.2;
+        const d8X = dx8Arr[x] - jx8;
+        const d8Y = dy8 - jy8;
+        const dist8 = Math.sqrt(d8X * d8X + d8Y * d8Y) * 0.263;
+        const pebble8 = pVal8 > 0.38 ? Math.max(0, 1.0 - dist8) * (pVal8 - 0.38) * 1.7 : 0;
+
+        // Fine gravel grit (~4px cells, ~128 grit chips across tile)
+        const cX4 = cX4Arr[x];
+        const pVal4 = hash2D(cX4, cY4, 789);
+        const d4X = dx4Arr[x];
+        const dist4 = Math.sqrt(d4X * d4X + dy4 * dy4) * 0.5;
+        const pebble4 = pVal4 > 0.35 ? Math.max(0, 1.0 - dist4) * (pVal4 - 0.35) * 1.5 : 0;
+
+        // High frequency micro mineral grit
+        const grit = hash2D(x, y, 999);
+
+        // Longitudinal micro-grooving parallel to track direction
+        const groove = grooveX[x];
+
+        // Combined surface elevation
+        const h = Math.max(0, Math.min(1, 0.42 + macro + pebble8 * 0.34 + pebble4 * 0.22 + (grit - 0.5) * 0.16 + groove));
+        heights[idx] = h;
+
+        // Color & Tonality
+        const isQuartzite = (pVal8 > 0.90 && dist8 < 0.6) || (grit > 0.965);
+        let r, g, b;
+
+        if (isQuartzite) {
+          // Quartzite & silica crystalline flecks
+          const qTone = 74 + grit * 26;
+          r = qTone * 0.94;
+          g = qTone * 0.97;
+          b = qTone * 1.08;
+        } else {
+          // Asphalt base: deep bitumen ~ 32, stone aggregates ~ 48-66
+          const baseTone = 32 + h * 30;
+          const stoneTint = (pVal8 - 0.5) * 7;
+          r = Math.max(0, (baseTone + stoneTint) * 0.94);
+          g = Math.max(0, (baseTone + stoneTint) * 0.98);
+          b = Math.max(0, (baseTone + stoneTint) * 1.05); // Authentic motorsport slate
+        }
+
+        const cIdx = idx * 4;
+        dData[cIdx] = Math.round(r);
+        dData[cIdx + 1] = Math.round(g);
+        dData[cIdx + 2] = Math.round(b);
+        dData[cIdx + 3] = 255;
+
+        // Specular roughness: stone crowns polished (0.72), bitumen valleys matte (0.95)
+        const rough = Math.round(Math.max(165, Math.min(245, (0.95 - h * 0.23) * 255)));
+        rData[cIdx] = rough;
+        rData[cIdx + 1] = rough;
+        rData[cIdx + 2] = rough;
+        rData[cIdx + 3] = 255;
+      }
+    }
+
+    // Pass 2: Sobel Normal Map (seamless toroidal finite differences)
+    const bump = 3.6;
+    for (let y = 0; y < size; y++) {
+      const ym = (y - 1 + size) % size;
+      const yp = (y + 1) % size;
+      const yOffset = y * size;
+      const ymOffset = ym * size;
+      const ypOffset = yp * size;
+
+      for (let x = 0; x < size; x++) {
+        const xm = (x - 1 + size) % size;
+        const xp = (x + 1) % size;
+        const idx = yOffset + x;
+
+        const dx = (heights[yOffset + xp] - heights[yOffset + xm]) * bump;
+        const dy = (heights[ypOffset + x] - heights[ymOffset + x]) * bump;
+        const dz = 1.0;
+
+        const len = Math.sqrt(dx * dx + dy * dy + 1.0);
+        const nIdx = idx * 4;
+        nData[nIdx] = Math.round((-dx / len * 0.5 + 0.5) * 255);
+        nData[nIdx + 1] = Math.round((-dy / len * 0.5 + 0.5) * 255);
+        nData[nIdx + 2] = Math.round((dz / len * 0.5 + 0.5) * 255);
+        nData[nIdx + 3] = 255;
+      }
+    }
+
+    dCtx.putImageData(dImg, 0, 0);
+    nCtx.putImageData(nImg, 0, 0);
+    rCtx.putImageData(rImg, 0, 0);
+
+    const maxAniso = (this.renderer && this.renderer.capabilities) ? this.renderer.capabilities.getMaxAnisotropy() : 8;
+
+    const diffuseMap = new THREE.CanvasTexture(dCanvas);
+    diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
+    diffuseMap.generateMipmaps = true;
+    diffuseMap.anisotropy = maxAniso;
+
+    const normalMap = new THREE.CanvasTexture(nCanvas);
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+    normalMap.generateMipmaps = true;
+    normalMap.anisotropy = maxAniso;
+
+    const roughnessMap = new THREE.CanvasTexture(rCanvas);
+    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
+    roughnessMap.generateMipmaps = true;
+    roughnessMap.anisotropy = maxAniso;
+
+    this._asphaltTextures = { diffuseMap, normalMap, roughnessMap };
+    return this._asphaltTextures;
+  }
+
   createWaterNormalMap() {
     if (this._waterNormalMap) return this._waterNormalMap;
     const size = 256;
@@ -1205,24 +1390,39 @@ export class Renderer3D {
     const t = this.track;
     const N = t.N;
 
+    const asphalt = this.createAsphaltTextures();
+
+    // Metric, distortion-free UV mapping matching asphalt tile size (~6m x 6m)
+    const targetTileSize = 6.0;
+    const totalTiles = Math.max(1, Math.round(t.length / targetTileSize));
+    const effTileSize = t.length / totalTiles;
+    const uMax = t.width / effTileSize;
+
     // Track surface mesh flush at ground level (Z = 0.05)
+    // N + 1 vertex rings: ring N shares exact 3D coordinates with ring 0
+    // while v reaches totalTiles, guaranteeing seamless loop closure without texture reversal.
     const vertices = [];
     const indices = [];
     const uvs = [];
 
-    for (let i = 0; i < N; i++) {
-      // Outer point
-      vertices.push(t.ox[i], -t.oy[i], 0.05);
-      uvs.push(0, (i / N) * 20);
-      // Inner point
-      vertices.push(t.ix[i], -t.iy[i], 0.05);
-      uvs.push(1, (i / N) * 20);
+    for (let i = 0; i <= N; i++) {
+      const idx = i % N;
+      const vDist = (i / N) * totalTiles;
 
-      const nxt = (i + 1) % N;
+      // Outer point (u = 0)
+      vertices.push(t.ox[idx], -t.oy[idx], 0.05);
+      uvs.push(0, vDist);
+
+      // Inner point (u = uMax)
+      vertices.push(t.ix[idx], -t.iy[idx], 0.05);
+      uvs.push(uMax, vDist);
+    }
+
+    for (let i = 0; i < N; i++) {
       const v0 = i * 2;
       const v1 = i * 2 + 1;
-      const v2 = nxt * 2;
-      const v3 = nxt * 2 + 1;
+      const v2 = (i + 1) * 2;
+      const v3 = (i + 1) * 2 + 1;
 
       indices.push(v0, v1, v2);
       indices.push(v1, v3, v2);
@@ -1235,9 +1435,13 @@ export class Renderer3D {
     geo.computeVertexNormals();
 
     const mat = new THREE.MeshStandardMaterial({
-      color: C.asphalt,
-      roughness: 0.85,
-      metalness: 0.1,
+      color: 0xffffff,
+      map: asphalt.diffuseMap,
+      normalMap: asphalt.normalMap,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughnessMap: asphalt.roughnessMap,
+      roughness: 0.88,
+      metalness: 0.08,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
