@@ -703,6 +703,11 @@ function updateCameraPill() {
 
 function setCameraPreset(preset, showToast = true) {
   state.cameraPreset = preset;
+  if (renderer3d) {
+    renderer3d._lastPresetSwitchTime = performance.now();
+    renderer3d._autoPreset = preset;
+    renderer3d._autoNextSwitch = performance.now() + 20000;
+  }
   if (!state.view3d) {
     set3DView(true);
   }

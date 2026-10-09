@@ -5178,6 +5178,31 @@ export class Renderer3D {
       return { carA: pool[0], carB: null };
     }
 
+    const now = performance.now();
+    const prevPair = this._currentActionPair;
+    const prevA = prevPair?.carA;
+    const prevAValid = prevA && (prevA.alive || prevA.finished) && !prevA.crashed;
+
+    // STRICT 5-SECOND LOCK: Camera target/focus cannot change earlier than 5.0 seconds (5000ms)
+    if (prevAValid && this._lastActionPairTime && (now - this._lastActionPairTime < 5000)) {
+      // Keep tracking the same carA; if partner carB is dead/crashed/gone, find closest active opponent
+      let partnerB = prevPair.carB;
+      if (!partnerB || (!partnerB.alive && !partnerB.finished) || partnerB.crashed) {
+        let closestD = Infinity;
+        for (let i = 0; i < pool.length; i++) {
+          const c = pool[i];
+          if (c !== prevA && (c.alive || c.finished) && !c.crashed) {
+            const d = Math.hypot(prevA.x - c.x, prevA.y - c.y);
+            if (d < closestD) {
+              closestD = d;
+              partnerB = c;
+            }
+          }
+        }
+      }
+      return { carA: prevA, carB: partnerB || null };
+    }
+
     let bestScore = -1;
     let bestPair = null;
 
@@ -5267,6 +5292,9 @@ export class Renderer3D {
       }
     }
 
+    if (!this._lastActionPairTime || !this._currentActionPair || this._currentActionPair.carA !== bestPair.carA) {
+      this._lastActionPairTime = now;
+    }
     this._currentActionPair = bestPair;
     return bestPair;
   }
@@ -5276,7 +5304,9 @@ export class Renderer3D {
     if (isNewStart && sim) {
       this.lastGen = sim.generation;
       this._autoPreset = 'heli';
+      this._lastPresetSwitchTime = performance.now();
       this._autoNextSwitch = performance.now() + 24000;
+      this._lastActionPairTime = performance.now();
     }
     if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
@@ -5325,6 +5355,8 @@ export class Renderer3D {
 
     if (cameraPreset === 'auto') {
       const now = performance.now();
+      if (!this._lastPresetSwitchTime) this._lastPresetSwitchTime = now;
+      const canSwitchPreset = (now - this._lastPresetSwitchTime) >= 5000;
       const p1 = (opts.manual && sim.player && (sim.player.alive || sim.player.finished)) ? sim.player : (rankedCars[0] || leader || focusCar);
 
       // Check if P1 is approaching the Start/Finish line (2-3 seconds prior to crossing index 0)
@@ -5352,6 +5384,7 @@ export class Renderer3D {
       }
 
       // Check if this lap should trigger TV Gantry (avoid selecting on every lap end)
+      // STRICT RULE: Cannot switch earlier than 5.0 seconds from last camera change!
       const p1Lap = p1 ? (p1.laps || 0) : 0;
       const maxLaps = CONFIG.generation?.maxLaps || 5;
       const isRaceFinish = p1 && (p1Lap >= maxLaps - 1 || p1.finished || hasFinisher);
@@ -5360,7 +5393,7 @@ export class Renderer3D {
 
       // On race finish: high chance (85%) for dramatic checkered flag shot
       // On regular laps: only 30% chance AND requires at least 2 laps gap since last gantry cut
-      if (p1ApproachingGantry && gantryCooldownPassed && this._autoPreset !== 'broadcast') {
+      if (p1ApproachingGantry && gantryCooldownPassed && this._autoPreset !== 'broadcast' && canSwitchPreset) {
         if (this._gantryRollLap !== p1Lap) {
           this._gantryRollLap = p1Lap;
           this._gantryRollPassed = isRaceFinish ? (Math.random() < 0.85) : (lapDiff >= 2 && Math.random() < 0.30);
@@ -5368,6 +5401,7 @@ export class Renderer3D {
 
         if (this._gantryRollPassed) {
           this._autoPreset = 'broadcast';
+          this._lastPresetSwitchTime = now;
           this._lastGantryCutTime = now;
           this._lastGantryCutLap = p1Lap;
           this._gantryEntryLap = p1Lap;
@@ -5392,8 +5426,9 @@ export class Renderer3D {
         // Wait until P1 has passed the line and ~1.2s has elapsed so we see the car flash under the gantry
         const postCrossElapsed = this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 1200);
         const safetyTimeout = now >= (this._lastGantryCutTime || 0) + 8000;
+        const minHoldGantryPassed = (now - (this._lastGantryCutTime || 0)) >= 5000;
 
-        if (postCrossElapsed || safetyTimeout) {
+        if ((postCrossElapsed || safetyTimeout) && minHoldGantryPassed) {
           // Switch to pursuit/action camera
           const postGantryPool = [
             { preset: 'heli', weight: 40 },
@@ -5411,14 +5446,17 @@ export class Renderer3D {
             rnd -= item.weight;
           }
           this._autoPreset = chosen;
+          this._lastPresetSwitchTime = now;
           this._autoNextSwitch = now + 18000 + Math.random() * 6000;
           this._gantryCrossedLineTime = null;
           this._gantryEntryLap = null;
         }
       } else if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
-        // If at the start of race / session, ensure helicopter is selected
-        if (!this._autoPreset || isStartPhase) {
+        if (!canSwitchPreset) {
+          // Strictly lock current camera preset: cannot change earlier than 5.0 seconds
+        } else if (!this._autoPreset || isStartPhase) {
           this._autoPreset = 'heli';
+          this._lastPresetSwitchTime = now;
           this._autoNextSwitch = now + 20000;
         } else {
           // General rotating pool (TV Gantry 'broadcast' is excluded so it ONLY triggers on 2-3s approach)
@@ -5444,17 +5482,18 @@ export class Renderer3D {
             rnd -= item.weight;
           }
           this._autoPreset = chosen;
+          this._lastPresetSwitchTime = now;
 
-          // Dynamic shot duration per camera archetype (Relaxed TV broadcast pacing)
+          // Dynamic shot duration per camera archetype (Relaxed TV broadcast pacing, minimum 5.0s strictly enforced)
           let duration;
           if (this._autoPreset === 'onboard') {
-            duration = 7000 + Math.random() * 4000; // 7s - 11s (brief action teaser)
+            duration = Math.max(5000, 7000 + Math.random() * 4000); // 7s - 11s (brief action teaser)
           } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
-            duration = 24000 + Math.random() * 10000; // 24s - 34s (sweeping panoramic)
+            duration = Math.max(5000, 24000 + Math.random() * 10000); // 24s - 34s (sweeping panoramic)
           } else if (this._autoPreset === 'action_rear') {
-            duration = 20000 + Math.random() * 8000; // 20s - 28s (intense battle)
+            duration = Math.max(5000, 20000 + Math.random() * 8000); // 20s - 28s (intense battle)
           } else {
-            duration = 18000 + Math.random() * 8000; // 18s - 26s (standard follow/action)
+            duration = Math.max(5000, 18000 + Math.random() * 8000); // 18s - 26s (standard follow/action)
           }
           this._autoNextSwitch = now + duration;
         }
