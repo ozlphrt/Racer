@@ -4905,7 +4905,7 @@ export class Renderer3D {
     if (!sim || !sim.cars) return;
     const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
-    const SKID_THRESH = 0.045; // Clean grip driving leaves ZERO marks; only dynamic sliding triggers
+    const SKID_THRESH = 0.08; // Clean grip driving leaves ZERO marks; only dynamic sliding triggers
     const startHead = this.skidHead;
     this._frameSkidQuadsAdded = 0;
 
@@ -4917,43 +4917,54 @@ export class Renderer3D {
       }
 
       // Exact physical tire sliding models:
-      // 1. Oversteer (Rear lateral breakaway / drift): slip angle exceeds standard grip limit (>2.4 deg) or high yaw rotation
+      // 1. Oversteer (Rear lateral breakaway / drift):
+      // Clean grip cornering operates with slip angle < 5.5 deg (0.096 rad).
+      // True oversteer breakaway occurs when rear slip angle exceeds grip threshold (> 6.5 deg / 0.11 rad),
+      // rapid yaw snap rotation (> 0.75 rad/s), or heavy power oversteer out of corners.
       const slipMag = Math.abs(car.slipAngle || 0);
       const yawMag = Math.abs(car.yawRate || 0);
-      const oversteerNorm = Math.max(
-        slipMag > 0.042 ? Math.min(1.0, (slipMag - 0.042) / 0.10) : 0,
-        yawMag > 0.30 ? Math.min(1.0, (yawMag - 0.30) / 1.0) : 0
-      );
+      let oversteerNorm = 0;
+      if (car.speed > 30) {
+        const slipSlide = slipMag > 0.11 ? Math.min(1.0, (slipMag - 0.11) / 0.12) : 0;
+        const yawSlide = yawMag > 0.75 ? Math.min(1.0, (yawMag - 0.75) / 0.80) : 0;
+        const powerSlide = (car.throttle > 0.75 && slipMag > 0.085)
+          ? Math.min(1.0, ((car.throttle - 0.75) / 0.25) * ((slipMag - 0.085) / 0.08))
+          : 0;
+        oversteerNorm = Math.max(slipSlide, yawSlide, powerSlide);
+      }
       const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.2) : 0;
 
-      // 2. Understeer (Front tire scrub / push): heavy steering input at speed where front tires saturate and push wide
+      // 2. Understeer (Front tire scrub / push):
+      // Occurs when driver aggressively locks steering into high-speed corner beyond front tire grip limit
       const steerMag = Math.abs(car.steer || 0);
       let understeerNorm = 0;
-      if (steerMag > 0.36 && car.speed > 45 && !car.crashed) {
-        const speedFactor = Math.min(1.0, (car.speed - 35) / 60);
-        const steerFactor = (steerMag - 0.36) / 0.50;
-        understeerNorm = Math.min(1.0, steerFactor * speedFactor);
+      if (steerMag > 0.78 && car.speed > 70 && !car.crashed) {
+        const steerPush = (steerMag - 0.78) / 0.22;
+        const speedPush = Math.min(1.0, (car.speed - 70) / 45);
+        understeerNorm = Math.min(1.0, steerPush * speedPush);
       }
       const understeerInt = understeerNorm > 0 ? Math.pow(understeerNorm, 1.2) : 0;
 
-      // 3. Brake Locks (Tire flatspotting under threshold braking): heavy deceleration lockup
-      const isHardBraking = car.throttle < -0.32 && car.speed > 20;
-      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.32) / 0.58) : 0;
+      // 3. Brake Locks (Threshold braking lockup / flatspotting):
+      // Only under heavy panic / maximum threshold braking
+      const isHardBraking = car.throttle < -0.72 && car.speed > 30;
+      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.72) / 0.28) : 0;
       const brakeLockInt = brakeLockNorm > 0 ? Math.pow(brakeLockNorm, 1.2) : 0;
 
-      // 4. Wheelspin / Power Slide (Launch burnout or hard acceleration overpowering rear grip)
-      const isWheelspin = car.throttle > 0.52 && car.speed < 90 && !car.crashed;
-      const wheelspinNorm = isWheelspin
-        ? Math.min(1.0, ((car.throttle - 0.52) / 0.40) * (1.0 - car.speed / 105))
+      // 4. Rapid Acceleration (Standing start burnout / launch wheelspin):
+      // Only during hard throttle launch from low speed / near standstill
+      const isRapidAccel = car.throttle > 0.85 && car.speed < 38 && !car.crashed;
+      const wheelspinNorm = isRapidAccel
+        ? Math.min(1.0, ((car.throttle - 0.85) / 0.15) * (1.0 - car.speed / 42))
         : 0;
       const wheelspinInt = wheelspinNorm > 0 ? Math.pow(wheelspinNorm, 1.2) : 0;
 
       // 5. Crash / Off-track rotational slide
-      const crashInt = (car.crashed && car.speed > 4) ? Math.min(1.0, car.speed / 45) : 0;
+      const crashInt = (car.crashed && car.speed > 8) ? Math.min(1.0, car.speed / 45) : 0;
 
-      // Rear tires mark on oversteer, wheelspin, hard brake locks, and crash slides
-      const targetRearInt = Math.min(1.0, Math.max(oversteerInt, wheelspinInt, brakeLockInt * 0.85, crashInt));
-      // Front tires mark on understeer push, hard brake locks, and crash slides
+      // Rear tires mark on oversteer, launch wheelspin, hard brake locks, and crash slides
+      const targetRearInt = Math.min(1.0, Math.max(oversteerInt, wheelspinInt, brakeLockInt * 0.90, crashInt));
+      // Front tires mark on understeer scrub, hard brake locks, and crash slides
       const targetFrontInt = Math.min(1.0, Math.max(understeerInt, brakeLockInt, crashInt));
 
       let track = this.carPrevTires.get(car);
@@ -4980,14 +4991,14 @@ export class Renderer3D {
         this.carPrevTires.set(car, track);
       }
 
-      // Smooth attack/decay for gapless ribbons without frame jitter
+      // Smooth attack/decay with fast recovery when grip is restored
       const prevRInt = track.smoothRearInt || 0;
-      const rRate = targetRearInt > prevRInt ? 0.80 : 0.25;
+      const rRate = targetRearInt > prevRInt ? 0.85 : 0.45;
       const curRearInt = prevRInt + (targetRearInt - prevRInt) * rRate;
       track.smoothRearInt = curRearInt;
 
       const prevFInt = track.smoothFrontInt || 0;
-      const fRate = targetFrontInt > prevFInt ? 0.80 : 0.25;
+      const fRate = targetFrontInt > prevFInt ? 0.85 : 0.45;
       const curFrontInt = prevFInt + (targetFrontInt - prevFInt) * fRate;
       track.smoothFrontInt = curFrontInt;
 

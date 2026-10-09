@@ -979,24 +979,33 @@ export class Renderer {
         continue;
       }
 
-      // Smooth, progressive skid intensity modeling (no harsh binary on/off)
+      // Exact physical tire sliding models (clean grip driving leaves 0 marks)
       const slipMag = Math.abs(car.slipAngle || 0);
-      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.015) / 0.09));
-      const slipInt = Math.pow(slipNorm, 1.1) * 0.90;
+      const yawMag = Math.abs(car.yawRate || 0);
+      let oversteerNorm = 0;
+      if (car.speed > 30) {
+        const slipSlide = slipMag > 0.11 ? Math.min(1.0, (slipMag - 0.11) / 0.12) : 0;
+        const yawSlide = yawMag > 0.75 ? Math.min(1.0, (yawMag - 0.75) / 0.80) : 0;
+        const powerSlide = (car.throttle > 0.75 && slipMag > 0.085)
+          ? Math.min(1.0, ((car.throttle - 0.75) / 0.25) * ((slipMag - 0.085) / 0.08))
+          : 0;
+        oversteerNorm = Math.max(slipSlide, yawSlide, powerSlide);
+      }
+      const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.2) : 0;
 
-      const brakeNorm = (car.throttle < -0.05 && car.speed > 16)
-        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.70))
+      const isHardBraking = car.throttle < -0.72 && car.speed > 30;
+      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.72) / 0.28) : 0;
+      const brakeLockInt = brakeLockNorm > 0 ? Math.pow(brakeLockNorm, 1.2) : 0;
+
+      const isRapidAccel = car.throttle > 0.85 && car.speed < 38 && !car.crashed;
+      const wheelspinNorm = isRapidAccel
+        ? Math.min(1.0, ((car.throttle - 0.85) / 0.15) * (1.0 - car.speed / 42))
         : 0;
-      const brakeInt = Math.pow(brakeNorm, 1.3) * 0.88;
+      const wheelspinInt = wheelspinNorm > 0 ? Math.pow(wheelspinNorm, 1.2) : 0;
 
-      const spinNorm = (car.throttle > 0.50 && car.speed < 110 && !car.crashed)
-        ? Math.max(0, Math.min(1.0, (car.throttle - 0.50) / 0.45 * (1.0 - car.speed / 110)))
-        : 0;
-      const spinInt = Math.pow(spinNorm, 1.2) * 0.85;
+      const crashInt = (car.crashed && car.speed > 8) ? Math.min(0.92, car.speed / 45) : 0;
 
-      const crashInt = (car.crashed && car.speed > 4) ? Math.min(0.92, car.speed / 50) : 0;
-
-      const targetIntensity = Math.min(0.92, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      const targetIntensity = Math.min(0.92, Math.max(oversteerInt, brakeLockInt * 0.90, wheelspinInt, crashInt));
 
       let track = this.carPrevTires.get(car);
       if (!track) {
@@ -1005,7 +1014,7 @@ export class Renderer {
       }
 
       const prevInt = track.smoothInt || 0;
-      const rate = targetIntensity > prevInt ? 0.80 : 0.25;
+      const rate = targetIntensity > prevInt ? 0.85 : 0.45;
       const curInt = prevInt + (targetIntensity - prevInt) * rate;
       track.smoothInt = curInt;
 
@@ -1017,7 +1026,7 @@ export class Renderer {
       const rx = car.x - cos * 8.0 + sin * 5.2;
       const ry = car.y - sin * 8.0 - cos * 5.2;
 
-      const SKID_THRESH = 0.020;
+      const SKID_THRESH = 0.08;
       const isMarking = curInt > SKID_THRESH;
 
       if (track.initialized && (isMarking || track.active)) {
