@@ -3110,6 +3110,7 @@ export class Renderer3D {
         const count = posAttr.count;
         const liveryColorArr = new Float32Array(count * 3);
         const isBodyArr = new Float32Array(count);
+        const isTireArr = new Float32Array(count);
 
         for (let i = 0; i < count; i++) {
           const x = posAttr.getX(i);
@@ -3117,38 +3118,59 @@ export class Renderer3D {
           const z = posAttr.getZ(i);
           const absZ = Math.abs(z);
 
-          // 1. TYRES / WHEELS (Must remain 100% exact as defined in original 3D model)
-          const isFrontTire = absZ > 0.50 && Math.abs(x - 1.58) < 0.45 && y < 0.58;
-          const isRearTire = absZ > 0.50 && Math.abs(x - (-1.48)) < 0.50 && y < 0.58;
-          const isTire = isFrontTire || isRearTire || (absZ > 0.54 && y < 0.58);
+          // 1. TYRES / WHEELS (Only present in Object_8 front and Object_10 rear)
+          let isTire = false;
+          if (isFrontWingMesh) {
+            isTire = (absZ > 0.48 && Math.abs(x - 1.58) < 0.45 && y < 0.58);
+          } else if (isRearWingMesh) {
+            isTire = (absZ > 0.48 && Math.abs(x - (-1.48)) < 0.50 && y < 0.58);
+          }
 
-          // 2. SIDE SPOILERS, FLOOR, BARGEBOARDS, DIFFUSER, & WING ENDPLATES (Must remain 100% exact as defined in original 3D model)
-          const isSpoilerOrFloor = !isTire && (
-            y < 0.13 || 
-            (absZ > 0.46 && y < 0.26) || 
-            (x < -0.95 && y < 0.22) ||
-            (absZ > 0.48)
-          );
-
-          if (isTire || isSpoilerOrFloor) {
-            // Non-body parts: render 100% identical to original 3D model texture and material
+          if (isTire) {
+            isTireArr[i] = 1.0;
             isBodyArr[i] = 0.0;
             liveryColorArr[i * 3] = 1.0;
             liveryColorArr[i * 3 + 1] = 1.0;
             liveryColorArr[i * 3 + 2] = 1.0;
-          } else {
-            // Bodywork parts: apply multi-color team livery (matching leaderboard car sideview)
+          } else if (isFrontWingMesh) {
+            // Front Wing aerodynamic flap cascade and endplate tips -> Secondary team color (cSec)
+            isTireArr[i] = 0.0;
             isBodyArr[i] = 1.0;
-            let c;
-            if (isFrontWingMesh) {
-              // Front Wing aerodynamic flap cascade -> Secondary team color
-              c = cSec;
-            } else if (isRearWingMesh) {
-              // Rear Wing aerodynamic upper flap / DRS -> Accent team color
-              c = cAcc;
+            const c = cSec;
+            liveryColorArr[i * 3] = c.r;
+            liveryColorArr[i * 3 + 1] = c.g;
+            liveryColorArr[i * 3 + 2] = c.b;
+          } else if (isRearWingMesh) {
+            // Rear Wing aerodynamic upper flap / DRS / endplates -> Accent team color (cAcc)
+            isTireArr[i] = 0.0;
+            isBodyArr[i] = 1.0;
+            const c = cAcc;
+            liveryColorArr[i * 3] = c.r;
+            liveryColorArr[i * 3 + 1] = c.g;
+            liveryColorArr[i * 3 + 2] = c.b;
+          } else {
+            // Main Bodywork Mesh (Object_6):
+            isTireArr[i] = 0.0;
+
+            // True underfloor skidblock & rear diffuser -> Matte dark carbon fiber
+            const isUnderfloor = (y < 0.105) || (x < -1.1 && y < 0.16 && absZ < 0.40);
+
+            if (isUnderfloor) {
+              isBodyArr[i] = 0.0;
+              liveryColorArr[i * 3] = 0.08;
+              liveryColorArr[i * 3 + 1] = 0.08;
+              liveryColorArr[i * 3 + 2] = 0.09;
             } else {
-              // Main Bodywork (Object_6):
-              if (x > 1.75) {
+              isBodyArr[i] = 1.0;
+              let c;
+
+              // A. Front mud protectors / tire wake deflectors over front wheels:
+              const isMudProtector = (Math.abs(x - 1.58) < 0.55 && y >= 0.58 && absZ > 0.42);
+
+              if (isMudProtector) {
+                // Front Mud Protectors -> Secondary team color (cSec) matching nose cone & front wing
+                c = cSec;
+              } else if (x > 1.75) {
                 // Nose Tip & Front Nose Cone -> Secondary Color (cSec)
                 c = cSec;
               } else if (
@@ -3157,23 +3179,27 @@ export class Renderer3D {
               ) {
                 // Halo Safety Ring & Shark Fin Aero Spine -> Accent Color (cAcc)
                 c = cAcc;
-              } else if (absZ >= 0.25 && absZ <= 0.46 && x >= -0.4 && x <= 0.65 && y >= 0.20 && y <= 0.38) {
-                // Sculpted Sidepod Radiator Inlets & Flanks -> Quad Color (cQuad)
+              } else if (absZ >= 0.22 && absZ <= 0.58 && x >= -0.45 && x <= 0.75 && y >= 0.13 && y <= 0.50) {
+                // Sculpted Sidepod Radiator Inlets & Flanks (the sides of the cars) -> Quad Color (cQuad)
                 c = cQuad;
+              } else if (absZ > 0.50 && Math.abs(x - (-1.48)) < 0.50 && y >= 0.12 && y <= 0.45) {
+                // Rear brake duct winglets / deflectors -> Accent Color (cAcc)
+                c = cAcc;
               } else {
                 // Main Chassis Monocoque, Cockpit Flanks & Engine Cover -> Primary Color (cPri)
                 c = cPri;
               }
-            }
 
-            liveryColorArr[i * 3] = c.r;
-            liveryColorArr[i * 3 + 1] = c.g;
-            liveryColorArr[i * 3 + 2] = c.b;
+              liveryColorArr[i * 3] = c.r;
+              liveryColorArr[i * 3 + 1] = c.g;
+              liveryColorArr[i * 3 + 2] = c.b;
+            }
           }
         }
 
         geo.setAttribute('liveryColor', new THREE.BufferAttribute(liveryColorArr, 3));
         geo.setAttribute('isBody', new THREE.BufferAttribute(isBodyArr, 1));
+        geo.setAttribute('isTire', new THREE.BufferAttribute(isTireArr, 1));
 
         const mat = new THREE.MeshStandardMaterial({
           map: origMap,
@@ -3190,8 +3216,10 @@ export class Renderer3D {
             `#include <common>
             attribute vec3 liveryColor;
             attribute float isBody;
+            attribute float isTire;
             varying vec3 vLiveryColor;
             varying float vIsBody;
+            varying float vIsTire;
             varying vec3 vModelPos;`
           );
           shader.vertexShader = shader.vertexShader.replace(
@@ -3199,6 +3227,7 @@ export class Renderer3D {
             `#include <begin_vertex>
             vLiveryColor = liveryColor;
             vIsBody = isBody;
+            vIsTire = isTire;
             vModelPos = position;`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
@@ -3207,6 +3236,7 @@ export class Renderer3D {
             uniform sampler2D decalTex;
             varying vec3 vLiveryColor;
             varying float vIsBody;
+            varying float vIsTire;
             varying vec3 vModelPos;`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
@@ -3215,45 +3245,25 @@ export class Renderer3D {
               vec4 texColor = texture2D( map, vMapUv );
               if (vIsBody > 0.5) {
                 diffuseColor.rgb = vLiveryColor;
+              } else if (vIsTire > 0.5) {
+                // Real Pirelli tire rubber and wheel rim
+                // Neutralize any red paint bleed from original texture to dark tire charcoal
+                if (texColor.r > 0.45 && texColor.r > (texColor.g + texColor.b) * 1.2) {
+                  diffuseColor.rgb = vec3(0.12, 0.12, 0.13);
+                } else {
+                  diffuseColor = texColor;
+                }
               } else {
-                diffuseColor = texColor;
+                // Underbody aerodynamic floor, plank & diffuser -> sleek dark carbon fiber
+                diffuseColor.rgb = vec3(0.08, 0.08, 0.09);
               }
             #else
               if (vIsBody > 0.5) {
                 diffuseColor.rgb = vLiveryColor;
+              } else {
+                diffuseColor.rgb = vec3(0.08, 0.08, 0.09);
               }
-            #endif
-
-            // Surface Decal Wrapping directly onto the 3D bodywork curvature
-            if (vIsBody > 0.5) {
-              vec4 decal = vec4(0.0);
-
-              // 1. Nose Cone Roundel (compact 1:1 circular disc facing forward/upwards):
-              if (vModelPos.x >= 0.94 && vModelPos.x <= 1.18 && abs(vModelPos.z) <= 0.12 && vModelPos.y >= 0.32) {
-                float uNose = clamp((vModelPos.z - (-0.12)) / 0.24, 0.0, 1.0);
-                float vNose = clamp((1.18 - vModelPos.x) / 0.24, 0.0, 1.0);
-                vec4 s = texture2D(decalTex, vec2(uNose, vNose));
-                if (s.a > 0.05) decal = s;
-              }
-              // 2. Shark Fin Left side (compact 1:1 circular disc):
-              else if (vModelPos.x >= -0.42 && vModelPos.x <= -0.24 && vModelPos.y >= 0.49 && vModelPos.y <= 0.67 && vModelPos.z >= 0.001) {
-                float uFinL = clamp((-0.24 - vModelPos.x) / 0.18, 0.0, 1.0);
-                float vFinL = clamp((vModelPos.y - 0.49) / 0.18, 0.0, 1.0);
-                vec4 s = texture2D(decalTex, vec2(uFinL, vFinL));
-                if (s.a > 0.05) decal = s;
-              }
-              // 3. Shark Fin Right side (compact 1:1 circular disc):
-              else if (vModelPos.x >= -0.42 && vModelPos.x <= -0.24 && vModelPos.y >= 0.49 && vModelPos.y <= 0.67 && vModelPos.z <= -0.001) {
-                float uFinR = clamp((vModelPos.x - (-0.42)) / 0.18, 0.0, 1.0);
-                float vFinR = clamp((vModelPos.y - 0.49) / 0.18, 0.0, 1.0);
-                vec4 s = texture2D(decalTex, vec2(uFinR, vFinR));
-                if (s.a > 0.05) decal = s;
-              }
-
-              if (decal.a > 0.05) {
-                diffuseColor.rgb = mix(diffuseColor.rgb, decal.rgb, decal.a);
-              }
-            }`
+            #endif`
           );
         };
 

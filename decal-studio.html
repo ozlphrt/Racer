@@ -1033,20 +1033,7 @@
           carModel.rotation.set(Math.PI / 2, 0, 0);
           carModel.position.set(0, 0, 0);
 
-          carModel.traverse((child) => {
-            if (child.name && (child.name.includes('Plane') || child.name.includes('Sphere') || child.name.includes('Object_12') || child.name.includes('Object_4'))) {
-              child.visible = false;
-              return;
-            }
-            if (child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-              if (child.material) {
-                child.material.roughness = 0.42;
-                child.material.metalness = 0.15;
-              }
-            }
-          });
+          setupStudioF1Materials(carModel);
 
           carRoot.add(carModel);
           carRoot.updateMatrixWorld(true);
@@ -1155,14 +1142,225 @@
       }
     });
 
+    let studioMeshAttrs = [];
+
+    function setupStudioF1Materials(model) {
+      studioMeshAttrs = [];
+      model.traverse((child) => {
+        if (child.name && (child.name.includes('Plane') || child.name.includes('Sphere') || child.name.includes('Object_12') || child.name.includes('Object_4'))) {
+          child.visible = false;
+          return;
+        }
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+
+          const isFrontWingMesh = child.name === 'Object_8';
+          const isRearWingMesh = child.name === 'Object_10';
+          const origMap = child.material?.map;
+
+          const geo = child.geometry.clone();
+          child.geometry = geo;
+
+          const posAttr = geo.attributes.position;
+          const count = posAttr.count;
+          const liveryColorArr = new Float32Array(count * 3);
+          const isBodyArr = new Float32Array(count);
+          const isTireArr = new Float32Array(count);
+
+          for (let i = 0; i < count; i++) {
+            const x = posAttr.getX(i);
+            const y = posAttr.getY(i);
+            const z = posAttr.getZ(i);
+            const absZ = Math.abs(z);
+
+            let isTire = false;
+            if (isFrontWingMesh) {
+              isTire = (absZ > 0.48 && Math.abs(x - 1.58) < 0.45 && y < 0.58);
+            } else if (isRearWingMesh) {
+              isTire = (absZ > 0.48 && Math.abs(x - (-1.48)) < 0.50 && y < 0.58);
+            }
+
+            if (isTire) {
+              isTireArr[i] = 1.0;
+              isBodyArr[i] = 0.0;
+            } else if (isFrontWingMesh) {
+              isTireArr[i] = 0.0;
+              isBodyArr[i] = 1.0;
+            } else if (isRearWingMesh) {
+              isTireArr[i] = 0.0;
+              isBodyArr[i] = 1.0;
+            } else {
+              isTireArr[i] = 0.0;
+              const isUnderfloor = (y < 0.105) || (x < -1.1 && y < 0.16 && absZ < 0.40);
+              if (isUnderfloor) {
+                isBodyArr[i] = 0.0;
+              } else {
+                isBodyArr[i] = 1.0;
+              }
+            }
+          }
+
+          const liveryAttr = new THREE.BufferAttribute(liveryColorArr, 3);
+          geo.setAttribute('liveryColor', liveryAttr);
+          geo.setAttribute('isBody', new THREE.BufferAttribute(isBodyArr, 1));
+          geo.setAttribute('isTire', new THREE.BufferAttribute(isTireArr, 1));
+
+          studioMeshAttrs.push({
+            mesh: child,
+            geo,
+            liveryAttr,
+            isFrontWingMesh,
+            isRearWingMesh,
+          });
+
+          const mat = new THREE.MeshStandardMaterial({
+            map: origMap,
+            roughness: 0.42,
+            metalness: 0.15,
+          });
+
+          mat.onBeforeCompile = (shader) => {
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <common>',
+              `#include <common>
+              attribute vec3 liveryColor;
+              attribute float isBody;
+              attribute float isTire;
+              varying vec3 vLiveryColor;
+              varying float vIsBody;
+              varying float vIsTire;
+              varying vec3 vModelPos;`
+            );
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <begin_vertex>',
+              `#include <begin_vertex>
+              vLiveryColor = liveryColor;
+              vIsBody = isBody;
+              vIsTire = isTire;
+              vModelPos = position;`
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <common>',
+              `#include <common>
+              varying vec3 vLiveryColor;
+              varying float vIsBody;
+              varying float vIsTire;
+              varying vec3 vModelPos;`
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <map_fragment>',
+              `#ifdef USE_MAP
+                vec4 texColor = texture2D( map, vMapUv );
+                if (vIsBody > 0.5) {
+                  diffuseColor.rgb = vLiveryColor;
+                } else if (vIsTire > 0.5) {
+                  // Real Pirelli tire rubber and wheel rim
+                  if (texColor.r > 0.45 && texColor.r > (texColor.g + texColor.b) * 1.2) {
+                    diffuseColor.rgb = vec3(0.12, 0.12, 0.13);
+                  } else {
+                    diffuseColor = texColor;
+                  }
+                } else {
+                  // Underbody floor, plank & diffuser -> sleek dark carbon fiber
+                  diffuseColor.rgb = vec3(0.08, 0.08, 0.09);
+                }
+              #else
+                if (vIsBody > 0.5) {
+                  diffuseColor.rgb = vLiveryColor;
+                } else {
+                  diffuseColor.rgb = vec3(0.08, 0.08, 0.09);
+                }
+              #endif`
+            );
+          };
+
+          child.material = mat;
+        }
+      });
+    }
+
     function updateCarLiveryColor(hex) {
       currentCarColor = hex;
       if (!carModel) return;
-      carModel.traverse((child) => {
-        if (child.isMesh && child.material && !child.name?.includes('Object_14')) {
-          if (child.material.color) {
-            child.material.color.set(hex);
+
+      const cPri = new THREE.Color(hex);
+      const hsl = {};
+      cPri.getHSL(hsl);
+      // Secondary: slightly lighter or high contrast
+      const cSec = new THREE.Color().setHSL((hsl.h + 0.06) % 1.0, Math.min(1.0, hsl.s * 1.05), Math.min(0.85, hsl.l * 1.15 + 0.05));
+      // Accent: contrasting complement
+      const cAcc = new THREE.Color().setHSL((hsl.h + 0.45) % 1.0, 0.85, 0.80);
+      const cQuad = cSec;
+
+      studioMeshAttrs.forEach(({ geo, liveryAttr, isFrontWingMesh, isRearWingMesh }) => {
+        const posAttr = geo.attributes.position;
+        const count = posAttr.count;
+        const arr = liveryAttr.array;
+
+        for (let i = 0; i < count; i++) {
+          const x = posAttr.getX(i);
+          const y = posAttr.getY(i);
+          const z = posAttr.getZ(i);
+          const absZ = Math.abs(z);
+
+          let isTire = false;
+          if (isFrontWingMesh) {
+            isTire = (absZ > 0.48 && Math.abs(x - 1.58) < 0.45 && y < 0.58);
+          } else if (isRearWingMesh) {
+            isTire = (absZ > 0.48 && Math.abs(x - (-1.48)) < 0.50 && y < 0.58);
           }
+
+          if (isTire) {
+            arr[i * 3] = 1.0;
+            arr[i * 3 + 1] = 1.0;
+            arr[i * 3 + 2] = 1.0;
+          } else if (isFrontWingMesh) {
+            // Front Wing cascade & wingtip endplates -> Secondary color
+            arr[i * 3] = cSec.r;
+            arr[i * 3 + 1] = cSec.g;
+            arr[i * 3 + 2] = cSec.b;
+          } else if (isRearWingMesh) {
+            // Rear Wing upper flap / DRS & endplates -> Accent color
+            arr[i * 3] = cAcc.r;
+            arr[i * 3 + 1] = cAcc.g;
+            arr[i * 3 + 2] = cAcc.b;
+          } else {
+            const isUnderfloor = (y < 0.105) || (x < -1.1 && y < 0.16 && absZ < 0.40);
+            if (isUnderfloor) {
+              arr[i * 3] = 0.08;
+              arr[i * 3 + 1] = 0.08;
+              arr[i * 3 + 2] = 0.09;
+            } else {
+              let c;
+              const isMudProtector = (Math.abs(x - 1.58) < 0.55 && y >= 0.58 && absZ > 0.42);
+              if (isMudProtector || x > 1.75) {
+                c = cSec;
+              } else if (
+                (x < -0.15 && x > -1.25 && y > 0.56 && absZ < 0.12) ||
+                (x >= -0.25 && x <= 0.35 && y > 0.54 && absZ < 0.24)
+              ) {
+                c = cAcc;
+              } else if (absZ >= 0.22 && absZ <= 0.58 && x >= -0.45 && x <= 0.75 && y >= 0.13 && y <= 0.50) {
+                c = cQuad;
+              } else if (absZ > 0.50 && Math.abs(x - (-1.48)) < 0.50 && y >= 0.12 && y <= 0.45) {
+                c = cAcc;
+              } else {
+                c = cPri;
+              }
+              arr[i * 3] = c.r;
+              arr[i * 3 + 1] = c.g;
+              arr[i * 3 + 2] = c.b;
+            }
+          }
+        }
+        liveryAttr.needsUpdate = true;
+      });
+
+      // Procedural fallback handling
+      carModel.traverse((child) => {
+        if (child.isMesh && child.material && !child.geometry.attributes.liveryColor) {
+          if (child.material.color) child.material.color.set(hex);
         }
       });
     }
