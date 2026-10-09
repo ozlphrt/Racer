@@ -4668,10 +4668,10 @@ export class Renderer3D {
         vec2 rotUv = (pRot * 0.80) + vec2(0.5);
         
         vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * feather * vAlpha * 0.42;
+        float alpha = texColor.a * feather * vAlpha * 0.26;
         if (alpha < 0.003) discard;
 
-        // Authentic white-grey tire friction vapor
+        // Authentic subtle white-grey tire friction vapor
         vec3 smokeColor = vec3(0.93, 0.94, 0.96);
         gl_FragColor = vec4(smokeColor, alpha);
       }
@@ -4704,21 +4704,21 @@ export class Renderer3D {
       this.smokeParticles.shift();
     }
     const angle = Math.random() * Math.PI * 2;
-    const spread = 0.9 + extraSpread;
+    const spread = 0.6 + extraSpread;
     this.smokeParticles.push({
       x: x + (Math.random() - 0.5) * spread,
       y: y + (Math.random() - 0.5) * spread,
-      z: z + Math.random() * 0.06,
-      vx: (carVx * 0.10) + (Math.random() - 0.5) * 2.2,
-      vy: (carVy * 0.10) + (Math.random() - 0.5) * 2.2,
-      vz: 1.1 + Math.random() * 1.6, // Natural upward thermal plume rise
-      size: 5.6 + Math.random() * 2.4, // Volumetric footprint
-      growthRate: 8.5 + Math.random() * 4.0, // Billows out rapidly to merge clouds
+      z: z + Math.random() * 0.04,
+      vx: (carVx * 0.08) + (Math.random() - 0.5) * 1.6,
+      vy: (carVy * 0.08) + (Math.random() - 0.5) * 1.6,
+      vz: 0.9 + Math.random() * 1.2, // Gentle upward thermal plume rise
+      size: 4.2 + Math.random() * 1.8, // Subtle wisp footprint
+      growthRate: 5.5 + Math.random() * 2.5, // Natural gradual plume expansion
       rot: angle,
-      vRot: (Math.random() - 0.5) * 1.4,
-      alpha: Math.min(0.36, 0.15 + intensity * 0.28), // Airy translucent vapor
+      vRot: (Math.random() - 0.5) * 1.2,
+      alpha: Math.min(0.20, 0.06 + intensity * 0.16), // Light translucent vapor
       life: 1.0,
-      decay: 0.48 + Math.random() * 0.14, // Lingers ~2.0 seconds
+      decay: 0.58 + Math.random() * 0.16, // Lingers ~1.4 to 1.8 seconds
     });
   }
 
@@ -4743,9 +4743,9 @@ export class Renderer3D {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vx *= 0.95;
-      p.vy *= 0.95;
-      p.vz *= 0.96;
+      p.vx *= 0.94;
+      p.vy *= 0.94;
+      p.vz *= 0.95;
       p.size += p.growthRate * dt;
       p.rot += p.vRot * dt;
 
@@ -4755,8 +4755,8 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      // Smooth gradual fade-out across lingering life
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.4);
+      // Exponential tail fade creates a natural feathered tail behind the car
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.8);
 
       const rIdx = writeIdx * 2;
       this.smokeCosSinArr[rIdx] = Math.cos(p.rot);
@@ -5050,18 +5050,18 @@ export class Renderer3D {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
               if (camDist < 500) {
                 track.oversteerSmokeDist = (track.oversteerSmokeDist || 0) + dLR;
-                if (track.oversteerSmokeDist >= 0.70) {
+                if (track.oversteerSmokeDist >= 1.20) {
                   track.oversteerSmokeDist = 0;
                   const carVx = car.vx || 0;
                   const carVy = -(car.vy || 0);
                   // Left tire contact patch
-                  this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, oversteerInt, 0.8);
+                  this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, oversteerInt, 0.5);
                   // Right tire contact patch
-                  this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, oversteerInt, 0.8);
+                  this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, oversteerInt, 0.5);
                   // Central diffuser wake plume
                   const rcx = (rlx + rrx) * 0.5;
                   const rcy = (rly + rry) * 0.5;
-                  this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, oversteerInt * 1.1, 1.8);
+                  this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, oversteerInt, 1.2);
                 }
               }
             } else {
@@ -5103,18 +5103,18 @@ export class Renderer3D {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
               if (camDist < 500) {
                 track.understeerSmokeDist = (track.understeerSmokeDist || 0) + dLF;
-                if (track.understeerSmokeDist >= 0.70) {
+                if (track.understeerSmokeDist >= 1.20) {
                   track.understeerSmokeDist = 0;
                   const carVx = car.vx || 0;
                   const carVy = -(car.vy || 0);
                   // Left front contact patch
-                  this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, understeerInt, 0.6);
+                  this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, understeerInt, 0.4);
                   // Right front contact patch
-                  this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, understeerInt, 0.6);
+                  this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, understeerInt, 0.4);
                   // Front center airflow wake
                   const fcx = (flx + frx) * 0.5;
                   const fcy = (fly + fry) * 0.5;
-                  this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, understeerInt * 0.9, 1.4);
+                  this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, understeerInt, 1.0);
                 }
               }
             } else {
