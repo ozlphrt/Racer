@@ -2,13 +2,13 @@ import * as THREE from 'three';
 
 console.log('Testing 3D skidmark buffer geometry...');
 
-const maxQuads = 24000;
+const maxQuads = 80000;
 const maxVerts = maxQuads * 4;
 const maxIndices = maxQuads * 6;
 
 const posArr = new Float32Array(maxVerts * 3);
 const alphaArr = new Float32Array(maxVerts);
-const indices = new Uint16Array(maxIndices);
+const indices = new Uint32Array(maxIndices);
 
 for (let i = 0; i < maxQuads; i++) {
   const v0 = i * 4;

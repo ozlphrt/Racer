@@ -4767,7 +4767,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 24000;
+    this.maxSkidQuads = 80000;
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -4823,8 +4823,9 @@ export class Renderer3D {
         // Soft lateral tire feathering with solid dark center contact patch
         float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
         float lateral = 0.50 + 0.50 * edge;
-        float alpha = clamp(vAlpha * lateral, 0.0, 0.65);
-        if (alpha < 0.01) discard;
+        // Translucent, subtle rubber deposit that naturally builds up across laps
+        float alpha = clamp(vAlpha * lateral, 0.0, 0.28);
+        if (alpha < 0.005) discard;
         gl_FragColor = vec4(rubber, alpha);
       }
     `;
@@ -4898,7 +4899,7 @@ export class Renderer3D {
     if (!sim || !sim.cars) return;
     const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
     let added = false;
-    const SKID_THRESH = 0.020;
+    const SKID_THRESH = 0.045; // Clean grip driving leaves ZERO marks; only dynamic sliding triggers
     const startHead = this.skidHead;
     this._frameSkidQuadsAdded = 0;
 
@@ -4909,155 +4910,207 @@ export class Renderer3D {
         continue;
       }
 
-      // Smooth, progressive skid intensity modeling (no harsh binary on/off)
-      // 1. Lateral cornering slip: starts with a soft trace and smoothly darkens as slip increases
+      // Exact physical tire sliding models:
+      // 1. Oversteer (Rear lateral breakaway / drift): slip angle exceeds standard grip limit (>2.4 deg) or high yaw rotation
       const slipMag = Math.abs(car.slipAngle || 0);
-      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.015) / 0.09));
-      const slipInt = Math.pow(slipNorm, 1.1) * 0.90;
+      const yawMag = Math.abs(car.yawRate || 0);
+      const oversteerNorm = Math.max(
+        slipMag > 0.042 ? Math.min(1.0, (slipMag - 0.042) / 0.10) : 0,
+        yawMag > 0.30 ? Math.min(1.0, (yawMag - 0.30) / 1.0) : 0
+      );
+      const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.2) : 0;
 
-      // 2. Trail braking & heavy lockup: smooth progressive build-up
-      const brakeNorm = (car.throttle < -0.05 && car.speed > 16)
-        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.70))
+      // 2. Understeer (Front tire scrub / push): heavy steering input at speed where front tires saturate and push wide
+      const steerMag = Math.abs(car.steer || 0);
+      let understeerNorm = 0;
+      if (steerMag > 0.36 && car.speed > 45 && !car.crashed) {
+        const speedFactor = Math.min(1.0, (car.speed - 35) / 60);
+        const steerFactor = (steerMag - 0.36) / 0.50;
+        understeerNorm = Math.min(1.0, steerFactor * speedFactor);
+      }
+      const understeerInt = understeerNorm > 0 ? Math.pow(understeerNorm, 1.2) : 0;
+
+      // 3. Brake Locks (Tire flatspotting under threshold braking): heavy deceleration lockup
+      const isHardBraking = car.throttle < -0.32 && car.speed > 20;
+      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.32) / 0.58) : 0;
+      const brakeLockInt = brakeLockNorm > 0 ? Math.pow(brakeLockNorm, 1.2) : 0;
+
+      // 4. Wheelspin / Power Slide (Launch burnout or hard acceleration overpowering rear grip)
+      const isWheelspin = car.throttle > 0.52 && car.speed < 90 && !car.crashed;
+      const wheelspinNorm = isWheelspin
+        ? Math.min(1.0, ((car.throttle - 0.52) / 0.40) * (1.0 - car.speed / 105))
         : 0;
-      const brakeInt = Math.pow(brakeNorm, 1.3) * 0.88;
+      const wheelspinInt = wheelspinNorm > 0 ? Math.pow(wheelspinNorm, 1.2) : 0;
 
-      // 3. Launch wheelspin / burnout
-      const spinNorm = (car.throttle > 0.50 && car.speed < 110 && !car.crashed)
-        ? Math.max(0, Math.min(1.0, (car.throttle - 0.50) / 0.45 * (1.0 - car.speed / 110)))
-        : 0;
-      const spinInt = Math.pow(spinNorm, 1.2) * 0.85;
+      // 5. Crash / Off-track rotational slide
+      const crashInt = (car.crashed && car.speed > 4) ? Math.min(1.0, car.speed / 45) : 0;
 
-      // 4. Off-track crash slide
-      const crashInt = (car.crashed && car.speed > 4) ? Math.min(0.92, car.speed / 50) : 0;
-
-      // Combined instantaneous target intensity (0.00 .. 0.92)
-      const targetIntensity = Math.min(0.92, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      // Rear tires mark on oversteer, wheelspin, hard brake locks, and crash slides
+      const targetRearInt = Math.min(1.0, Math.max(oversteerInt, wheelspinInt, brakeLockInt * 0.85, crashInt));
+      // Front tires mark on understeer push, hard brake locks, and crash slides
+      const targetFrontInt = Math.min(1.0, Math.max(understeerInt, brakeLockInt, crashInt));
 
       let track = this.carPrevTires.get(car);
       if (!track) {
         track = {
-          lx: 0, ly: 0, rx: 0, ry: 0,
-          l0x: 0, l0y: 0, l1x: 0, l1y: 0,
-          r0x: 0, r0y: 0, r1x: 0, r1y: 0,
-          smoothInt: 0,
-          prevAlpha: 0,
-          active: false,
+          // Rear axle
+          rlx: 0, rly: 0, rrx: 0, rry: 0,
+          rl0x: 0, rl0y: 0, rl1x: 0, rl1y: 0,
+          rr0x: 0, rr0y: 0, rr1x: 0, rr1y: 0,
+          smoothRearInt: 0,
+          prevRearAlpha: 0,
+          rearActive: false,
+          // Front axle
+          flx: 0, fly: 0, frx: 0, fry: 0,
+          fl0x: 0, fl0y: 0, fl1x: 0, fl1y: 0,
+          fr0x: 0, fr0y: 0, fr1x: 0, fr1y: 0,
+          smoothFrontInt: 0,
+          prevFrontAlpha: 0,
+          frontActive: false,
           initialized: false,
         };
         this.carPrevTires.set(car, track);
       }
 
-      // Fast attack so rubber marks appear immediately when tires scrub, with smooth decay on exit
-      // Eliminates high-frequency frame jitter / dashed line artifacts while keeping skids bold & responsive
-      const prevInt = track.smoothInt || 0;
-      const rate = targetIntensity > prevInt ? 0.80 : 0.25;
-      const curInt = prevInt + (targetIntensity - prevInt) * rate;
-      track.smoothInt = curInt;
+      // Smooth attack/decay for gapless ribbons without frame jitter
+      const prevRInt = track.smoothRearInt || 0;
+      const rRate = targetRearInt > prevRInt ? 0.80 : 0.25;
+      const curRearInt = prevRInt + (targetRearInt - prevRInt) * rRate;
+      track.smoothRearInt = curRearInt;
+
+      const prevFInt = track.smoothFrontInt || 0;
+      const fRate = targetFrontInt > prevFInt ? 0.80 : 0.25;
+      const curFrontInt = prevFInt + (targetFrontInt - prevFInt) * fRate;
+      track.smoothFrontInt = curFrontInt;
 
       const cos = Math.cos(car.angle);
       const sin = Math.sin(car.angle);
-      // Contact patch of Left and Right rear tires (aligned with 3D F1 rear axle)
-      // Car heading in 3D is -car.angle, rear axle backward is (-cos, sin), lateral left is (sin, cos)
-      const lx = car.x - cos * 5.6 + sin * 4.6;
-      const ly = -car.y + sin * 5.6 + cos * 4.6;
-      const rx = car.x - cos * 5.6 - sin * 4.6;
-      const ry = -car.y + sin * 5.6 - cos * 4.6;
 
-      const hw = 1.1; // half width of tire contact patch (~2.2m wide contact patch)
+      // Rear axle contact points (aligned with 3D F1 rear axle)
+      const rlx = car.x - cos * 5.6 + sin * 4.6;
+      const rly = -car.y + sin * 5.6 + cos * 4.6;
+      const rrx = car.x - cos * 5.6 - sin * 4.6;
+      const rry = -car.y + sin * 5.6 - cos * 4.6;
+
+      // Front axle contact points (aligned with 3D F1 front steering wheels)
+      const flx = car.x + cos * 8.6 + sin * 4.6;
+      const fly = -car.y - sin * 8.6 + cos * 4.6;
+      const frx = car.x + cos * 8.6 - sin * 4.6;
+      const fry = -car.y - sin * 8.6 - cos * 4.6;
+
+      const hw = 1.05; // ~2.1m contact width per tire
       const nx = sin * hw;
       const ny = cos * hw;
 
-      const curL0x = lx - nx;
-      const curL0y = ly - ny;
-      const curL1x = lx + nx;
-      const curL1y = ly + ny;
+      const curRl0x = rlx - nx, curRl0y = rly - ny;
+      const curRl1x = rlx + nx, curRl1y = rly + ny;
+      const curRr0x = rrx - nx, curRr0y = rry - ny;
+      const curRr1x = rrx + nx, curRr1y = rry + ny;
 
-      const curR0x = rx - nx;
-      const curR0y = ry - ny;
-      const curR1x = rx + nx;
-      const curR1y = ry + ny;
+      const curFl0x = flx - nx, curFl0y = fly - ny;
+      const curFl1x = flx + nx, curFl1y = fly + ny;
+      const curFr0x = frx - nx, curFr0y = fry - ny;
+      const curFr1x = frx + nx, curFr1y = fry + ny;
 
-      const isMarking = curInt > SKID_THRESH;
-      const curAlpha = isMarking ? (0.16 + curInt * 0.44) : 0.0;
+      // Translucent, subtle rubber alpha
+      const isRearMarking = curRearInt > SKID_THRESH;
+      const curRearAlpha = isRearMarking ? (0.05 + curRearInt * 0.20) : 0.0;
 
-      if (track.initialized && (isMarking || track.active)) {
-        const dL = Math.hypot(lx - track.lx, ly - track.ly);
-        if (dL > 0.25 && dL < 35) {
-          // If already actively drawing, reuse the exact previous quad endpoints to ensure a continuous gapless ribbon;
-          // if starting a new ribbon, start from previous tire position with soft entry alpha for a smooth, gradual fade-in
-          const pL0x = track.active ? track.l0x : (track.lx - nx);
-          const pL0y = track.active ? track.l0y : (track.ly - ny);
-          const pL1x = track.active ? track.l1x : (track.lx + nx);
-          const pL1y = track.active ? track.l1y : (track.ly + ny);
+      const isFrontMarking = curFrontInt > SKID_THRESH;
+      const curFrontAlpha = isFrontMarking ? (0.05 + curFrontInt * 0.20) : 0.0;
 
-          const pR0x = track.active ? track.r0x : (track.rx - nx);
-          const pR0y = track.active ? track.r0y : (track.ry - ny);
-          const pR1x = track.active ? track.r1x : (track.rx + nx);
-          const pR1y = track.active ? track.r1y : (track.ry + ny);
+      if (track.initialized) {
+        // --- 1. REAR TIRES (Oversteer, Wheelspin, Brake Locks, Crash) ---
+        if (isRearMarking || track.rearActive) {
+          const dLR = Math.hypot(rlx - track.rlx, rly - track.rly);
+          if (dLR > 0.25 && dLR < 35) {
+            const pRl0x = track.rearActive ? track.rl0x : (track.rlx - nx);
+            const pRl0y = track.rearActive ? track.rl0y : (track.rly - ny);
+            const pRl1x = track.rearActive ? track.rl1x : (track.rlx + nx);
+            const pRl1y = track.rearActive ? track.rl1y : (track.rly + ny);
 
-          const alpha0 = track.active ? track.prevAlpha : (curAlpha * 0.35);
-          const alpha1 = isMarking ? curAlpha : 0.0;
+            const pRr0x = track.rearActive ? track.rr0x : (track.rrx - nx);
+            const pRr0y = track.rearActive ? track.rr0y : (track.rry - ny);
+            const pRr1x = track.rearActive ? track.rr1x : (track.rrx + nx);
+            const pRr1y = track.rearActive ? track.rr1y : (track.rry + ny);
 
-          // Left tire skid quad
-          this.addSkidQuad(
-            pL0x, pL0y,
-            pL1x, pL1y,
-            curL0x, curL0y,
-            curL1x, curL1y,
-            alpha0, alpha1
-          );
+            const alpha0 = track.rearActive ? track.prevRearAlpha : (curRearAlpha * 0.35);
+            const alpha1 = isRearMarking ? curRearAlpha : 0.0;
 
-          // Right tire skid quad
-          this.addSkidQuad(
-            pR0x, pR0y,
-            pR1x, pR1y,
-            curR0x, curR0y,
-            curR1x, curR1y,
-            alpha0, alpha1
-          );
+            this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1);
+            this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1);
 
-          // Continuous tire smoke puff emission on heavier slides
-          if (curInt > 0.25) {
-            const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-            if (camDistSq < 600 || car === sim.player) {
-              const carVx = car.vx || 0;
-              const carVy = -(car.vy || 0);
-              const numPuffs = Math.max(1, Math.min(3, Math.ceil(dL / 1.4)));
-              const smokeAlpha = (curInt - 0.25) / 0.75;
-              for (let s = 1; s <= numPuffs; s++) {
-                const frac = s / numPuffs;
-                const pxL = track.lx + (lx - track.lx) * frac;
-                const pyL = track.ly + (ly - track.ly) * frac;
-                const pxR = track.rx + (rx - track.rx) * frac;
-                const pyR = track.ry + (ry - track.ry) * frac;
-                this.addTireSmokePuff(pxL, pyL, 0.40, carVx, carVy, smokeAlpha);
-                this.addTireSmokePuff(pxR, pyR, 0.40, carVx, carVy, smokeAlpha);
-              }
-            }
+            track.prevRearAlpha = isRearMarking ? curRearAlpha : 0.0;
+            track.rearActive = isRearMarking;
+            added = true;
           }
+        } else {
+          track.rearActive = false;
+          track.prevRearAlpha = 0;
+        }
 
-          track.prevAlpha = isMarking ? curAlpha : 0.0;
-          track.active = isMarking;
-          added = true;
+        // --- 2. FRONT TIRES (Understeer, Brake Locks, Crash) ---
+        if (isFrontMarking || track.frontActive) {
+          const dLF = Math.hypot(flx - track.flx, fly - track.fly);
+          if (dLF > 0.25 && dLF < 35) {
+            const pFl0x = track.frontActive ? track.fl0x : (track.flx - nx);
+            const pFl0y = track.frontActive ? track.fl0y : (track.fly - ny);
+            const pFl1x = track.frontActive ? track.fl1x : (track.flx + nx);
+            const pFl1y = track.frontActive ? track.fl1y : (track.fly + ny);
+
+            const pFr0x = track.frontActive ? track.fr0x : (track.frx - nx);
+            const pFr0y = track.frontActive ? track.fr0y : (track.fry - ny);
+            const pFr1x = track.frontActive ? track.fr1x : (track.frx + nx);
+            const pFr1y = track.frontActive ? track.fr1y : (track.fry + ny);
+
+            const alpha0 = track.frontActive ? track.prevFrontAlpha : (curFrontAlpha * 0.35);
+            const alpha1 = isFrontMarking ? curFrontAlpha : 0.0;
+
+            this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1);
+            this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1);
+
+            track.prevFrontAlpha = isFrontMarking ? curFrontAlpha : 0.0;
+            track.frontActive = isFrontMarking;
+            added = true;
+          }
+        } else {
+          track.frontActive = false;
+          track.prevFrontAlpha = 0;
+        }
+
+        // Continuous tire smoke puff emission on heavier slides
+        const maxSlide = Math.max(curRearInt, curFrontInt);
+        if (maxSlide > 0.35) {
+          const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+          if (camDistSq < 600 || car === sim.player) {
+            const carVx = car.vx || 0;
+            const carVy = -(car.vy || 0);
+            const smokeAlpha = (maxSlide - 0.35) / 0.65;
+            this.addTireSmokePuff(rlx, rly, 0.40, carVx, carVy, smokeAlpha);
+            this.addTireSmokePuff(rrx, rry, 0.40, carVx, carVy, smokeAlpha);
+          }
         }
       } else {
-        track.active = false;
-        track.prevAlpha = 0;
+        track.rearActive = false;
+        track.prevRearAlpha = 0;
+        track.frontActive = false;
+        track.prevFrontAlpha = 0;
       }
 
       // Maintain persistent tracking across frames
-      track.lx = lx;
-      track.ly = ly;
-      track.rx = rx;
-      track.ry = ry;
-      track.l0x = curL0x;
-      track.l0y = curL0y;
-      track.l1x = curL1x;
-      track.l1y = curL1y;
-      track.r0x = curR0x;
-      track.r0y = curR0y;
-      track.r1x = curR1x;
-      track.r1y = curR1y;
+      track.rlx = rlx; track.rly = rly;
+      track.rrx = rrx; track.rry = rry;
+      track.rl0x = curRl0x; track.rl0y = curRl0y;
+      track.rl1x = curRl1x; track.rl1y = curRl1y;
+      track.rr0x = curRr0x; track.rr0y = curRr0y;
+      track.rr1x = curRr1x; track.rr1y = curRr1y;
+
+      track.flx = flx; track.fly = fly;
+      track.frx = frx; track.fry = fry;
+      track.fl0x = curFl0x; track.fl0y = curFl0y;
+      track.fl1x = curFl1x; track.fl1y = curFl1y;
+      track.fr0x = curFr0x; track.fr0y = curFr0y;
+      track.fr1x = curFr1x; track.fr1y = curFr1y;
       track.initialized = true;
     }
 
