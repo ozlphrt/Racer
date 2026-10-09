@@ -565,209 +565,162 @@
       <div class="hub-tab-body">
         <!-- ================= SECTION 1: TRAIN YOURSELF ================= -->
         <div class="hub-pane active" id="hub-pane-train">
-          <div class="hyper-setup" id="hyper-setup-view">
-            <!-- Engine Spec Banner -->
-            <div class="hub-engine-specs">
-              <div class="hub-spec-item">
-                <span class="hub-spec-val">80 CARS</span>
-                <span class="hub-spec-label">POPULATION</span>
-              </div>
-              <div class="hub-spec-sep"></div>
-              <div class="hub-spec-item">
-                <span class="hub-spec-val">30×–80×</span>
-                <span class="hub-spec-label">ACCELERATION</span>
-              </div>
-              <div class="hub-spec-sep"></div>
-              <div class="hub-spec-item">
-                <span class="hub-spec-val">60 Hz</span>
-                <span class="hub-spec-label">PHYSICS RATE</span>
-              </div>
-            </div>
-
-            <!-- Configuration Card -->
-            <div class="hub-config-card">
-              <!-- Target Type Mode Switcher -->
-              <div class="hyper-mode-tabs" role="tablist">
-                <button class="btn-hyper-tab active" id="tab-hyper-gens" type="button" role="tab" aria-selected="true">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="4" y1="9" x2="20" y2="9"></line>
-                    <line x1="4" y1="15" x2="20" y2="15"></line>
-                    <line x1="10" y1="3" x2="8" y2="21"></line>
-                    <line x1="16" y1="3" x2="14" y2="21"></line>
-                  </svg>
-                  <span>Generations Target</span>
-                </button>
-                <button class="btn-hyper-tab" id="tab-hyper-time" type="button" role="tab" aria-selected="false">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                  </svg>
-                  <span>Time Duration Target</span>
-                </button>
-              </div>
-
-              <!-- Section 1A: By Generations -->
-              <div class="hyper-tab-pane" id="pane-hyper-gens">
-                <div class="hub-field-header">
-                  <span class="hyper-label">Quick Generation Presets</span>
-                  <span class="hub-field-sub">Select amount to simulate</span>
-                </div>
-                <div class="hyper-preset-grid" id="hyper-gen-presets">
-                  <button class="btn btn-chip" data-gens="25">
-                    <span class="chip-main">+25</span>
-                    <span class="chip-sub">GENS</span>
-                  </button>
-                  <button class="btn btn-chip active" data-gens="50">
-                    <span class="chip-main">+50</span>
-                    <span class="chip-sub">GENS</span>
-                  </button>
-                  <button class="btn btn-chip" data-gens="100">
-                    <span class="chip-main">+100</span>
-                    <span class="chip-sub">GENS</span>
-                  </button>
-                  <button class="btn btn-chip" data-gens="250">
-                    <span class="chip-main">+250</span>
-                    <span class="chip-sub">GENS</span>
-                  </button>
-                  <button class="btn btn-chip" data-gens="500">
-                    <span class="chip-main">+500</span>
-                    <span class="chip-sub">GENS</span>
-                  </button>
-                  <button class="btn btn-chip" data-gens="1000">
-                    <span class="chip-main">+1000</span>
-                    <span class="chip-sub">GENS</span>
-                  </button>
-                </div>
-
-                <div class="hub-stepper-card">
-                  <div class="hub-stepper-label">
-                    <span class="stepper-title">Custom Generations</span>
-                    <span class="stepper-desc">Simulate continuous generations headless</span>
-                  </div>
-                  <div class="hub-stepper-controls">
-                    <button class="btn-stepper" id="btn-step-dec" type="button" aria-label="Decrease generations">−</button>
-                    <input type="number" id="hyper-target-input" class="hub-num-input" min="1" max="10000" value="50">
-                    <button class="btn-stepper" id="btn-step-inc" type="button" aria-label="Increase generations">+</button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Section 1B: By Time Duration -->
-              <div class="hyper-tab-pane" id="pane-hyper-time" hidden>
-                <div class="hub-field-header">
-                  <span class="hyper-label">Quick Duration Presets</span>
-                  <span class="hub-field-sub">Set auto-stop timer</span>
-                </div>
-                <div class="hyper-preset-grid" id="hyper-time-presets">
-                  <button class="btn btn-chip active" data-mins="1">
-                    <span class="chip-main">1</span>
-                    <span class="chip-sub">MIN</span>
-                  </button>
-                  <button class="btn btn-chip" data-mins="5">
-                    <span class="chip-main">5</span>
-                    <span class="chip-sub">MINS</span>
-                  </button>
-                  <button class="btn btn-chip" data-mins="15">
-                    <span class="chip-main">15</span>
-                    <span class="chip-sub">MINS</span>
-                  </button>
-                  <button class="btn btn-chip" data-mins="30">
-                    <span class="chip-main">30</span>
-                    <span class="chip-sub">MINS</span>
-                  </button>
-                  <button class="btn btn-chip" data-mins="60">
-                    <span class="chip-main">1</span>
-                    <span class="chip-sub">HOUR</span>
-                  </button>
-                  <button class="btn btn-chip" data-mins="120">
-                    <span class="chip-main">2</span>
-                    <span class="chip-sub">HOURS</span>
-                  </button>
-                </div>
-
-                <div class="hyper-time-inputs-row">
-                  <div class="time-input-field">
-                    <label for="hyper-time-hours">Hours</label>
-                    <input type="number" id="hyper-time-hours" class="hub-num-input" min="0" max="72" value="0">
-                  </div>
-                  <div class="time-input-field">
-                    <label for="hyper-time-mins">Minutes</label>
-                    <input type="number" id="hyper-time-mins" class="hub-num-input" min="0" max="59" value="1">
-                  </div>
-                  <div class="time-input-field">
-                    <label for="hyper-time-secs">Seconds</label>
-                    <input type="number" id="hyper-time-secs" class="hub-num-input" min="0" max="59" value="0">
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="hub-action-row">
-              <button class="btn-hub-primary" id="btn-hyper-start" type="button">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                <span>Start Fast-Forward Simulation</span>
-              </button>
-              <button class="btn-hub-danger-ghost" id="btn-hyper-reset-setup" type="button" title="Reset all neural weights and start fresh from Gen 1">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                  <path d="M3 3v5h5"></path>
-                </svg>
-                <span>Reset Learning</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Running Telemetry View -->
-          <div class="hyper-running" id="hyper-running-view" hidden>
+          <!-- Fast-Forward Continuous Simulation Dashboard -->
+          <div class="hyper-running" id="hyper-running-view">
             <div class="hyper-progress-wrap">
               <div class="hyper-progress-labels">
                 <div class="prog-label-left">
-                  <span class="prog-dot"></span>
-                  <span>SIMULATION ACTIVE</span>
+                  <span class="prog-dot" id="hyper-prog-dot"></span>
+                  <span id="hyper-prog-state">SIMULATION STANDBY</span>
                 </div>
                 <div class="prog-label-right">
-                  <span id="hyper-target-info">GEN <strong id="hyper-cur-gen">1</strong> / <span id="hyper-target-gen">50</span></span>
-                  <span class="prog-badge" id="hyper-prog-pct">0%</span>
+                  <span id="hyper-target-info">GEN <strong id="hyper-cur-gen">1</strong> · CONTINUOUS EVOLUTION</span>
+                  <span class="prog-badge" id="hyper-prog-pct">READY</span>
                 </div>
               </div>
-              <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill"></div></div>
+              <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill" style="width: 100%;"></div></div>
+            </div>
+
+            <!-- AI Training Health Diagnostic Banner -->
+            <div class="hyper-health-banner" id="hyper-health-banner">
+              <div class="health-header-row">
+                <div class="health-status-badge status-info" id="hyper-health-badge">
+                  <span class="health-status-pulse"></span>
+                  <span class="health-status-text" id="hyper-health-status">INITIALIZING</span>
+                </div>
+                <div class="health-message" id="hyper-health-msg">
+                  Monitoring neural weight evolution and trajectory stability...
+                </div>
+              </div>
             </div>
 
             <div class="hyper-stats-grid">
-              <div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value" id="hyper-stat-time">0.0s</span></div>
-              <div class="stat"><span class="stat-label">Remaining</span><span class="stat-value" id="hyper-stat-rem">–</span></div>
-              <div class="stat"><span class="stat-label">Rate</span><span class="stat-value" id="hyper-stat-rate">0 gen/s</span></div>
-              <div class="stat"><span class="stat-label">Gens Added</span><span class="stat-value" id="hyper-stat-added">+0</span></div>
-              <div class="stat"><span class="stat-label">Best Fitness</span><span class="stat-value highlight-num" id="hyper-stat-fitness">–</span></div>
-              <div class="stat"><span class="stat-label">Best Lap</span><span class="stat-value" id="hyper-stat-lap">–</span></div>
-              <div class="stat"><span class="stat-label">Pop Avg Fitness</span><span class="stat-value" id="hyper-stat-pop-avg">–</span></div>
-              <div class="stat"><span class="stat-label">Pop Median</span><span class="stat-value" id="hyper-stat-pop-median">–</span></div>
-              <div class="stat"><span class="stat-label">Survival (Fin/Crash)</span><span class="stat-value" id="hyper-stat-pop-survival">–</span></div>
-              <div class="stat"><span class="stat-label">Pace vs Avg Lap</span><span class="stat-value" id="hyper-stat-pop-pace">–</span></div>
+              <!-- Tile 1: AI Competency (Span 3 - Balanced Square Card) -->
+              <div class="stat stat-trend stat-square stat-col-3">
+                <div class="stat-header">
+                  <span class="stat-label">AI Competency</span>
+                </div>
+                <div class="stat-square-body">
+                  <span class="stat-value highlight-num" id="hyper-quality-val">68/100</span>
+                  <span class="trend-badge improving" id="hyper-quality-tier">Apex Braking</span>
+                </div>
+              </div>
+
+              <!-- Tile 2: Peak Fitness (Span 3 - Balanced Square Card) -->
+              <div class="stat stat-trend stat-square stat-col-3">
+                <div class="stat-header">
+                  <span class="stat-label">Peak Fitness</span>
+                </div>
+                <div class="stat-square-body">
+                  <span class="stat-value highlight-num" id="hyper-stat-fitness">–</span>
+                  <span class="trend-badge" id="hyper-delta-fitness">–</span>
+                </div>
+              </div>
+
+              <!-- Tile 3: Corner Straightness (Span 3 - Balanced Square Card) -->
+              <div class="stat stat-trend stat-square stat-col-3">
+                <div class="stat-header">
+                  <span class="stat-label">Corner Straightness</span>
+                </div>
+                <div class="stat-square-body">
+                  <span class="stat-value highlight-num" id="hyper-stat-curvature">–</span>
+                  <span class="trend-badge" id="hyper-delta-curvature">–</span>
+                </div>
+              </div>
+
+              <!-- Tile 4: Fastest Lap Record (Split Layout: Left Text, Right 5k Waterfall) -->
+              <div class="stat stat-trend stat-split stat-col-3">
+                <div class="stat-split-left">
+                  <div class="stat-header">
+                    <span class="stat-label">Fastest Lap</span>
+                  </div>
+                  <span class="stat-value highlight-num" id="hyper-stat-lap">–</span>
+                  <span class="trend-badge" id="hyper-delta-lap">–</span>
+                </div>
+                <div class="stat-split-right">
+                  <canvas class="tile-split-canvas" id="sparkline-lap"></canvas>
+                </div>
+              </div>
+
+              <!-- Tile 5: Pack Pace & Gap to Leader (Span 3 - Square Card) -->
+              <div class="stat stat-trend stat-square stat-col-3">
+                <div class="stat-header">
+                  <span class="stat-label">Pack Pace</span>
+                </div>
+                <div class="stat-square-body">
+                  <span class="stat-value highlight-num" id="hyper-stat-speed">–</span>
+                  <span class="trend-badge" id="hyper-delta-speed">–</span>
+                </div>
+              </div>
+
+              <!-- Tile 6: Grid Survival (Split Layout: Left Text, Right 0-100% Graph - Span 3) -->
+              <div class="stat stat-trend stat-split stat-col-3 stat-wide-mobile">
+                <div class="stat-split-left">
+                  <div class="stat-header">
+                    <span class="stat-label">Grid Survival</span>
+                  </div>
+                  <span class="stat-value highlight-num" id="hyper-stat-pop-survival">–</span>
+                  <span class="trend-badge" id="hyper-delta-survival">–</span>
+                </div>
+                <div class="stat-split-right">
+                  <canvas class="tile-split-canvas" id="sparkline-survival"></canvas>
+                </div>
+              </div>
+
+              <!-- Tile 7: Convergence Stability (Span 3 - Square Card) -->
+              <div class="stat stat-trend stat-square stat-col-3">
+                <div class="stat-header">
+                  <span class="stat-label">Convergence Stability</span>
+                </div>
+                <div class="stat-square-body">
+                  <span class="stat-value highlight-num" id="hyper-stat-stagnation">94%</span>
+                  <span class="trend-badge improving" id="hyper-delta-stagnation">Locked · Steady</span>
+                </div>
+              </div>
+
+              <!-- Tile 8: Genetic Diversity (Split Layout: Left Text, Right Target Range Gauge) -->
+              <div class="stat stat-trend stat-split stat-col-3">
+                <div class="stat-split-left">
+                  <div class="stat-header">
+                    <span class="stat-label">Diversity</span>
+                  </div>
+                  <span class="stat-value highlight-num" id="hyper-stat-diversity">48%</span>
+                  <span class="trend-badge" id="hyper-delta-diversity">Optimal Spread</span>
+                </div>
+                <div class="stat-split-right">
+                  <canvas class="tile-split-canvas" id="sparkline-diversity"></canvas>
+                </div>
+              </div>
             </div>
 
             <div class="hyper-chart-container">
-              <div class="hyper-chart-legend">
-                <div class="legend-items">
-                  <span><i class="sw-mono-white"></i>Best (Leader)</span>
-                  <span><i class="sw-mono-slate"></i>Pop Avg</span>
-                  <span class="band-tag-mono"><i></i>Min-Max Band</span>
+              <div class="hyper-chart-header">
+                <div class="chart-tab-group" role="tablist" id="hyper-chart-tabs">
+                  <button class="chart-tab active" data-mode="lap" type="button">Lap Pace</button>
+                  <button class="chart-tab" data-mode="speed" type="button">Top Speed</button>
+                  <button class="chart-tab" data-mode="survival" type="button">Survival</button>
+                  <button class="chart-tab" data-mode="fitness" type="button">Fitness</button>
                 </div>
-                <span class="telemetry-hint">Hover points for telemetry</span>
+                <div class="chart-kpi-strip" id="hyper-chart-kpis"></div>
               </div>
               <canvas id="hyper-chart-canvas" class="chart-canvas"></canvas>
             </div>
 
-            <div class="hub-action-row" style="margin-top: 16px;">
-              <button class="btn-hub-primary" id="btn-hyper-stop" type="button">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <rect x="6" y="4" width="4" height="16"></rect>
-                  <rect x="14" y="4" width="4" height="16"></rect>
+            <div class="hub-action-row">
+              <button class="btn-hub-primary" id="btn-hyper-toggle" type="button">
+                <svg id="hyper-toggle-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
-                <span>Stop &amp; Resume 3D View</span>
+                <span id="hyper-toggle-text">Start Fast-Forward Simulation</span>
+              </button>
+              <button class="btn-hub-secondary" id="btn-hyper-exit" type="button">
+                <span id="hyper-exit-text">Resume 3D View</span>
+              </button>
+              <button class="btn-hub-secondary" id="btn-hyper-burst" type="button" title="Inject 150 generations of boosted genetic mutation to break through lap time plateaus">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span id="hyper-burst-text">Exploration Burst</span>
               </button>
               <button class="btn-hub-danger-ghost" id="btn-hyper-reset-running" type="button" title="Reset all neural weights and start fresh from Gen 1">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

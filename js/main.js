@@ -5,12 +5,14 @@ import { Renderer } from './renderer.js';
 import { Renderer3D } from './renderer3d.js';
 import { NetworkViz } from './networkViz.js';
 import { FitnessChart, compact } from './chart.js';
+import { drawSparkline, analyzeTrainingProgress, renderAllTileGraphics } from './trainingTelemetry.js';
 import { LeaderboardTower } from './leaderboard.js';
 import { EliminationModalManager } from './eliminationModal.js';
 import { audio } from './audio.js';
 import * as storage from './storage.js';
 import { NeuralNetwork } from './neuralNetwork.js';
 import { PRESET_BRAINS, PRESET_MILESTONES } from './presetBrains.js';
+import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
@@ -256,21 +258,31 @@ sim.onGeneration = () => {
   focusedFollowCar = null;
   leaderboard.reset();
   eliminationModals.clear();
-  chart.draw(sim.history);
-  hubChart?.draw(sim.history);
+
+  if (hyperRunning) {
+    // In headless fast-forward, defer expensive full-canvas redraws and synchronous
+    // multi-megabyte localStorage serialization until hyper training completes
+    return;
+  }
+
+  chart.draw(sim.history, sim.bestLapEver);
+  hubChart?.draw(sim.history, sim.bestLapEver);
   if (renderer) {
     renderer.cam = null;
   }
   updateHighestGenAndLiveSnapshot();
+  updateBurstButtonUi();
   persistState();
 };
 
 sim.onNewBest = (best) => {
+  if (hyperRunning) return;
   pulse('stat-best-fitness-box');
   persistState();
 };
 
 sim.onNewBestLap = () => {
+  if (hyperRunning) return;
   pulse('stat-best-lap-box');
   persistState();
 };
@@ -407,7 +419,7 @@ $('track-select').addEventListener('change', (e) => {
   sim.setTrack(currentTrack, true);
   renderer.setTrack(currentTrack);
   if (renderer3d) renderer3d.setTrack(currentTrack);
-  chart.draw(sim.history);
+  chart.draw(sim.history, sim.bestLapEver);
   persistState();
   toast(`Switched to ${preset.name}`);
 });
@@ -469,8 +481,8 @@ $('btn-load').addEventListener('click', async () => {
   storage.saveBrain(data, LAYERS);
   storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
   refreshSavedInfo();
-  chart.draw(sim.history);
-  hyperChart?.draw(sim.history);
+  chart.draw(sim.history, sim.bestLapEver);
+  hyperChart?.draw(sim.history, sim.bestLapEver);
   updateHud(sim.leader);
   const lapStr = data.bestLap && Number.isFinite(data.bestLap) ? ` (${data.bestLap.toFixed(2)}s lap)` : '';
   toast(`Population seeded from ${data.generation ? 'Gen ' + data.generation : 'Champion'} brain${lapStr}`, 'success');
@@ -523,8 +535,8 @@ $('input-import').addEventListener('change', async (e) => {
     storage.saveBrain(data, LAYERS);
     storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
     refreshSavedInfo();
-    chart.draw(sim.history);
-    hyperChart?.draw(sim.history);
+    chart.draw(sim.history, sim.bestLapEver);
+    hyperChart?.draw(sim.history, sim.bestLapEver);
     updateHud(sim.leader);
     const lapStr = data.bestLap && Number.isFinite(data.bestLap) ? ` (${data.bestLap.toFixed(2)}s lap)` : '';
     toast(`Imported brain (Gen ${data.generation || '?'}${lapStr}) and seeded population`, 'success');
@@ -543,24 +555,19 @@ function resetAllLearning(fromRunningModal = false) {
     storage.clearTrainingState();
     sim.reset();
     storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
-    chart.draw(sim.history);
-    hyperChart?.draw(sim.history);
+    chart.draw(sim.history, sim.bestLapEver);
+    hyperChart?.draw(sim.history, sim.bestLapEver);
     refreshSavedInfo();
     updateHud(sim.leader);
 
-    if (fromRunningModal && hyperModal && !hyperModal.hidden) {
+    if (hyperModal && !hyperModal.hidden) {
       hyperStartGen = 1;
       hyperStartTime = performance.now();
-      if (hyperMode === 'gens') {
-        const count = Math.max(1, Math.min(10000, Number(hyperTargetInput?.value) || 50));
-        hyperGenGoal = 1 + count;
-        const targetInfo = $('hyper-target-info');
-        if (targetInfo) {
-          targetInfo.innerHTML = `Gen <strong id="hyper-cur-gen">1</strong> / <span>${hyperGenGoal}</span> (+${count} gens)`;
-        }
-      }
-      hyperRunning = true;
-      runHyperBatch();
+      hyperRunning = false;
+      state.hyperRunning = false;
+      sim.hyperRunning = false;
+      if (typeof updateHyperControlsUi === 'function') updateHyperControlsUi();
+      if (typeof updateHyperTelemetryUi === 'function') updateHyperTelemetryUi('0');
     }
     toast('↺ Learning reset: starting fresh from Gen 1 with random neural weights', 'info');
   } else if (wasHyperRunning) {
@@ -937,12 +944,19 @@ function setHubTab(tab) {
     }
   });
 
-  if (tab === 'storage') {
+  if (tab === 'train') {
+    requestAnimationFrame(() => {
+      hyperChart?.resize();
+      hyperChart?.draw(sim.history, sim.bestLapEver);
+      if (typeof updateHyperControlsUi === 'function') updateHyperControlsUi();
+      if (typeof updateHyperTelemetryUi === 'function') updateHyperTelemetryUi(hyperRunning ? undefined : '0');
+    });
+  } else if (tab === 'storage') {
     refreshSavedInfo();
   } else if (tab === 'analytics') {
     requestAnimationFrame(() => {
       hubChart?.resize();
-      hubChart?.draw(sim.history);
+      hubChart?.draw(sim.history, sim.bestLapEver);
       hubNnViz?.resize();
       updateHubAnalytics();
     });
@@ -1023,6 +1037,120 @@ function fmtDuration(seconds) {
   return `${mins}m ${secs.toString().padStart(2, '0')}s`;
 }
 
+let lastHyperTelemetryUpdate = 0;
+
+function updateHyperTelemetryUi(rateStr) {
+  const insights = analyzeTrainingProgress(sim.history, sim, rateStr);
+
+  const bannerBadge = $('hyper-health-badge');
+  const bannerStatus = $('hyper-health-status');
+  const qualityVal = $('hyper-quality-val');
+  const healthMsg = $('hyper-health-msg');
+
+  if (bannerBadge && bannerStatus) {
+    bannerBadge.className = `health-status-badge ${insights.statusClass}`;
+    bannerStatus.textContent = insights.statusText;
+  }
+  if (healthMsg) healthMsg.textContent = insights.message;
+
+  // Tile 1: AI Competency (Score + Driving Milestone)
+  if (qualityVal) qualityVal.textContent = `${insights.competencyScore}/100`;
+  const qualityTier = $('hyper-quality-tier');
+  if (qualityTier) {
+    qualityTier.textContent = insights.milestoneName;
+    const qType = insights.qualityClass || 'improving';
+    qualityTier.className = `trend-badge ${qType}`;
+    const qTile = qualityTier.closest('.stat');
+    if (qTile) {
+      qTile.classList.remove('tile-improving', 'tile-declining', 'tile-neutral');
+      qTile.classList.add(`tile-${qType}`);
+    }
+  }
+
+  const updateBadge = (id, delta) => {
+    const el = $(id);
+    if (!el || !delta) return;
+    el.textContent = delta.text;
+    const type = delta.type || 'neutral';
+    el.className = `trend-badge ${type}`;
+    const tile = el.closest('.stat');
+    if (tile) {
+      tile.classList.remove('tile-improving', 'tile-declining', 'tile-neutral');
+      tile.classList.add(`tile-${type}`);
+    }
+  };
+
+  updateBadge('hyper-delta-fitness', insights.deltas.fitness);
+  updateBadge('hyper-delta-curvature', insights.deltas.curvature);
+  updateBadge('hyper-delta-progress', insights.deltas.curvature || insights.deltas.progress);
+  updateBadge('hyper-delta-lap', insights.deltas.lap);
+  updateBadge('hyper-delta-speed', insights.deltas.speed);
+  updateBadge('hyper-delta-pop-avg', insights.deltas.speed || insights.deltas.popSpread);
+  updateBadge('hyper-delta-survival', insights.deltas.survival);
+  updateBadge('hyper-delta-stagnation', insights.deltas.stagnation);
+  updateBadge('hyper-delta-diversity', insights.deltas.diversity);
+
+  // Live simulation rate in Engine Spec strip
+  const statRate = $('hyper-stat-rate');
+  if (statRate) {
+    statRate.textContent = `${rateStr || '0'} gen/s`;
+  }
+  updateBurstButtonUi();
+
+  // Populate numeric stat values
+  const lastRecord = sim.history && sim.history.length ? sim.history[sim.history.length - 1] : null;
+
+  const statFit = $('hyper-stat-fitness');
+  if (statFit) statFit.textContent = compact(sim.allTimeBest?.fitness);
+
+  const statCurvature = $('hyper-stat-curvature');
+  if (statCurvature) statCurvature.textContent = insights.straightnessText;
+
+  const statProgress = $('hyper-stat-progress');
+  if (statProgress) statProgress.textContent = insights.straightnessText;
+
+  const statLap = $('hyper-stat-lap');
+  if (statLap) statLap.textContent = fmtTime(sim.bestLapEver);
+
+  const statSpeed = $('hyper-stat-speed') || $('hyper-stat-pop-avg');
+  if (statSpeed) statSpeed.textContent = insights.topSpeedText;
+
+  const statPopAvg = $('hyper-stat-pop-avg');
+  if (statPopAvg && !$('hyper-stat-speed')) statPopAvg.textContent = lastRecord ? compact(lastRecord.avg) : '–';
+
+  const statPopSurvival = $('hyper-stat-pop-survival');
+  if (statPopSurvival) {
+    if (lastRecord) {
+      const pop = lastRecord.population || 20;
+      const fin = lastRecord.finishers || 0;
+      const pct = Math.round((fin / pop) * 100);
+      statPopSurvival.textContent = `${fin}/${pop} (${pct}%)`;
+    } else {
+      statPopSurvival.textContent = '–';
+    }
+  }
+
+  const statStagnation = $('hyper-stat-stagnation');
+  if (statStagnation) statStagnation.textContent = insights.stagnationText;
+
+  const statDiversity = $('hyper-stat-diversity');
+  if (statDiversity) statDiversity.textContent = insights.diversityText;
+
+  // Render bespoke specialized micro-charts for each of the 8 tiles
+  renderAllTileGraphics({
+    quality: $('sparkline-quality'),
+    fitness: $('sparkline-fitness'),
+    curvature: $('sparkline-curvature'),
+    progress: $('sparkline-progress'),
+    lap: $('sparkline-lap'),
+    speed: $('sparkline-speed'),
+    popAvg: $('sparkline-speed') || $('sparkline-pop-avg'),
+    survival: $('sparkline-survival'),
+    stagnation: $('sparkline-stagnation'),
+    diversity: $('sparkline-diversity'),
+  }, sim, insights, rateStr);
+}
+
 function setHyperMode(mode) {
   hyperMode = mode;
   if (tabHyperGens && tabHyperTime && paneHyperGens && paneHyperTime) {
@@ -1047,34 +1175,258 @@ function setHyperMode(mode) {
 tabHyperGens?.addEventListener('click', () => setHyperMode('gens'));
 tabHyperTime?.addEventListener('click', () => setHyperMode('time'));
 
+function updateHyperControlsUi() {
+  const toggleBtn = $('btn-hyper-toggle');
+  const toggleText = $('hyper-toggle-text');
+  const toggleIcon = $('hyper-toggle-icon');
+  const exitBtn = $('btn-hyper-exit');
+  const exitText = $('hyper-exit-text') || exitBtn?.querySelector('span');
+
+  const progDot = $('hyper-prog-dot');
+  const progState = $('hyper-prog-state');
+  const progBadge = $('hyper-prog-pct');
+  const barFill = $('hyper-bar-fill');
+  const curGenEl = $('hyper-cur-gen');
+  const targetInfo = $('hyper-target-info');
+
+  if (curGenEl) curGenEl.textContent = sim.generation;
+
+  if (hyperRunning) {
+    if (toggleBtn) toggleBtn.classList.add('is-running');
+    if (toggleText) toggleText.textContent = 'Stop and Resume 3D View';
+    if (toggleIcon) {
+      toggleIcon.innerHTML = '<rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"></rect>';
+    }
+    if (exitText) exitText.textContent = 'Pause Simulation';
+    if (progDot) progDot.classList.add('active');
+    if (progState) progState.textContent = 'SIMULATION ACTIVE';
+    if (barFill) barFill.classList.add('is-active');
+  } else {
+    if (toggleBtn) toggleBtn.classList.remove('is-running');
+    if (toggleText) toggleText.textContent = 'Start Fast-Forward Simulation';
+    if (toggleIcon) {
+      toggleIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+    }
+    if (exitText) exitText.textContent = 'Resume 3D View';
+    if (progDot) progDot.classList.remove('active');
+    if (progState) progState.textContent = 'SIMULATION STANDBY';
+    if (progBadge) progBadge.textContent = 'STANDBY';
+    if (targetInfo) {
+      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · CONTINUOUS EVOLUTION`;
+    }
+    if (barFill) {
+      barFill.classList.remove('is-active');
+      barFill.style.width = '100%';
+    }
+  }
+}
+
+function stopAndResume3DView() {
+  const wasRunning = hyperRunning;
+  hyperRunning = false;
+  state.hyperRunning = false;
+  sim.hyperRunning = false;
+  headlessPostFinishTimer = null;
+
+  if (CONFIG.generation) {
+    CONFIG.generation.startDelay = prevStartDelay;
+    CONFIG.generation.maxLaps = prevMaxLaps;
+    CONFIG.generation.timeLimit = prevTimeLimit;
+  }
+  sim.tireBarriers = prevTireBarriers;
+
+  audio.enabled = prevAudioEnabled;
+  audio.silenceAll();
+
+  const elapsedSec = (performance.now() - hyperStartTime) / 1000;
+  const elapsedFmt = fmtDuration(elapsedSec);
+  const gensDone = sim.generation - hyperStartGen;
+  const rate = elapsedSec > 0 ? (gensDone / elapsedSec).toFixed(1) : '0';
+
+  updateHyperControlsUi();
+  updateHyperTelemetryUi(rate);
+  persistState();
+  chart.draw(sim.history, sim.bestLapEver);
+  hubChart?.draw(sim.history, sim.bestLapEver);
+  hyperChart?.draw(sim.history, sim.bestLapEver);
+  refreshSavedInfo();
+  updateHud(sim.leader);
+
+  // Resume 3D animation frame loop if it was suspended
+  if (!frameActive) {
+    frameActive = true;
+    last = performance.now();
+    requestAnimationFrame(frame);
+  }
+
+  if (hyperModal) hyperModal.hidden = true;
+
+  if (wasRunning && gensDone > 0) {
+    toast(`🏁 Simulation stopped: +${gensDone} generations simulated (${rate} gen/s). Resuming 3D view!`, 'success');
+  } else {
+    toast('Resuming 3D view', 'info');
+  }
+}
+
+function pauseHyperTraining() {
+  const wasRunning = hyperRunning;
+  hyperRunning = false;
+  state.hyperRunning = false;
+  sim.hyperRunning = false;
+  headlessPostFinishTimer = null;
+
+  if (CONFIG.generation) {
+    CONFIG.generation.startDelay = prevStartDelay;
+    CONFIG.generation.maxLaps = prevMaxLaps;
+    CONFIG.generation.timeLimit = prevTimeLimit;
+  }
+  sim.tireBarriers = prevTireBarriers;
+
+  audio.enabled = prevAudioEnabled;
+  audio.silenceAll();
+
+  const elapsedSec = (performance.now() - hyperStartTime) / 1000;
+  const gensDone = sim.generation - hyperStartGen;
+  const rate = elapsedSec > 0 ? (gensDone / elapsedSec).toFixed(1) : '0';
+
+  updateHyperControlsUi();
+  updateHyperTelemetryUi(rate);
+  persistState();
+  chart.draw(sim.history, sim.bestLapEver);
+  hubChart?.draw(sim.history, sim.bestLapEver);
+  hyperChart?.draw(sim.history, sim.bestLapEver);
+  refreshSavedInfo();
+  updateHud(sim.leader);
+
+  if (wasRunning && gensDone > 0) {
+    toast(`⏸ Simulation paused at Generation ${sim.generation} (${rate} gen/s)`, 'info');
+  }
+}
+
+function onMainHyperToggleClick() {
+  if (hyperRunning) {
+    stopAndResume3DView();
+  } else {
+    startHyperTraining();
+  }
+}
+
+function onExitHyperBtnClick() {
+  if (hyperRunning) {
+    pauseHyperTraining();
+  } else {
+    stopAndResume3DView();
+  }
+}
+
 function openHyperModal() {
   if (!hyperModal) return;
   hyperModal.hidden = false;
   refreshSavedInfo();
+
+  if (hyperRunningView) hyperRunningView.hidden = false;
+  if (!hyperChart && $('hyper-chart-canvas')) {
+    hyperChart = new FitnessChart($('hyper-chart-canvas'));
+  }
+  const curChartMode = hyperChart?.mode || 'lap';
+  updateChartLegendUi(curChartMode);
+  document.querySelectorAll('#hyper-chart-tabs .chart-tab').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === curChartMode);
+  });
+
+  requestAnimationFrame(() => {
+    hyperChart?.resize();
+    hyperChart?.draw(sim.history, sim.bestLapEver);
+  });
+  updateHyperControlsUi();
+  updateHyperTelemetryUi(hyperRunning ? undefined : '0');
+
   if (currentHubTab === 'analytics') {
     requestAnimationFrame(() => {
       hubChart?.resize();
-      hubChart?.draw(sim.history);
+      hubChart?.draw(sim.history, sim.bestLapEver);
       hubNnViz?.resize();
       updateHubAnalytics();
     });
   }
-  if (!hyperRunning) {
-    if (hyperSetupView) hyperSetupView.hidden = false;
-    if (hyperRunningView) hyperRunningView.hidden = true;
+}
+
+function updateChartLegendUi(mode) {
+  const legend = $('hyper-legend-items');
+  if (!legend) return;
+  if (mode === 'speed') {
+    legend.innerHTML = `
+      <span><i class="sw-trend-cyan"></i>Top Speed</span>
+      <span><i class="sw-dash-emerald"></i>Apex Speed</span>
+      <span><i class="sw-band-cyan"></i>Speed Band</span>
+    `;
+  } else if (mode === 'survival') {
+    legend.innerHTML = `
+      <span><i class="sw-pack-emerald"></i>Survival Trend</span>
+      <span><i class="sw-band-emerald"></i>Finisher Density</span>
+    `;
+  } else if (mode === 'fitness') {
+    legend.innerHTML = `
+      <span><i class="sw-mono-white"></i>All-Time Peak</span>
+      <span><i class="sw-trend-cyan"></i>Lead Car EMA</span>
+      <span><i class="sw-pack-emerald"></i>Pack Median</span>
+      <span><i class="sw-breakthrough-star">★</i>Breakthrough</span>
+    `;
+  } else {
+    // lap (default)
+    legend.innerHTML = `
+      <span><i class="sw-mono-white"></i>Record Lap</span>
+      <span><i class="sw-trend-cyan"></i>Lead Best</span>
+      <span><i class="sw-pack-emerald"></i>Pack Avg</span>
+      <span><i class="sw-breakthrough-star">★</i>Record Drop</span>
+    `;
   }
 }
 
 function closeHyperModal() {
-  if (hyperRunning) {
-    stopHyperTraining();
-  }
-  if (hyperModal) hyperModal.hidden = true;
+  stopAndResume3DView();
 }
 
 $('btn-fast-forward')?.addEventListener('click', openHyperModal);
 $('btn-hyper-train')?.addEventListener('click', openHyperModal);
 $('btn-hyper-close')?.addEventListener('click', closeHyperModal);
+$('btn-hyper-toggle')?.addEventListener('click', onMainHyperToggleClick);
+$('btn-hyper-exit')?.addEventListener('click', onExitHyperBtnClick);
+function updateBurstButtonUi() {
+  const rem = getBurstGensRemaining();
+  const burstBtn = $('btn-hyper-burst');
+  const txt = $('hyper-burst-text');
+  if (burstBtn && txt) {
+    if (rem > 0) {
+      burstBtn.classList.add('active');
+      txt.textContent = `Burst Active (${rem}G)`;
+    } else {
+      burstBtn.classList.remove('active');
+      txt.textContent = 'Exploration Burst';
+    }
+  }
+}
+
+$('btn-hyper-burst')?.addEventListener('click', () => {
+  const rem = triggerExplorationBurst(150);
+  updateBurstButtonUi();
+  toast('🚀 Exploration Burst Active: 150 generations of elevated mutation injected to break lap time plateau!', 'success');
+});
+$('btn-hyper-reset-running')?.addEventListener('click', () => resetAllLearning(true));
+
+const hyperChartTabsContainer = $('hyper-chart-tabs');
+if (hyperChartTabsContainer) {
+  hyperChartTabsContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chart-tab');
+    if (!btn) return;
+    const mode = btn.dataset.mode;
+    if (!mode) return;
+    hyperChartTabsContainer.querySelectorAll('.chart-tab').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    hyperChart?.setMode(mode);
+    updateChartLegendUi(mode);
+  });
+}
 
 // Generation presets
 document.querySelectorAll('#hyper-gen-presets .btn-chip').forEach((btn) => {
@@ -1131,147 +1483,276 @@ function getTargetDurationMs() {
   return Math.max(1000, totalSecs * 1000);
 }
 
+let hyperChannel = null;
+let prevAudioEnabled = true;
+let lastHyperUiUpdate = 0;
+let lastHyperChartDraw = 0;
+let frameActive = true;
+
+function scheduleNextHyperBatch() {
+  if (!hyperRunning) return;
+  if (!hyperChannel) {
+    hyperChannel = new MessageChannel();
+    hyperChannel.port1.onmessage = () => {
+      if (hyperRunning) runHyperBatch();
+    };
+  }
+  hyperChannel.port2.postMessage(null);
+}
+
+let prevStartDelay = 2.0;
+let prevMaxLaps = 5;
+let prevTimeLimit = 85;
+let prevTireBarriers = null;
+let headlessPostFinishTimer = null;
+
 function startHyperTraining() {
   hyperRunning = true;
   state.hyperRunning = true;
   sim.hyperRunning = true;
+  headlessPostFinishTimer = null;
+
+  prevStartDelay = CONFIG.generation?.startDelay ?? 2.0;
+  prevMaxLaps = CONFIG.generation?.maxLaps ?? 5;
+  prevTimeLimit = CONFIG.generation?.timeLimit ?? 85;
+  prevTireBarriers = sim.tireBarriers;
+
+  if (CONFIG.generation) {
+    CONFIG.generation.startDelay = 0.0001; // Bypass 120 stationary start ticks in headless mode
+    CONFIG.generation.maxLaps = 1; // 1-Lap Flying Sprint: maximum evolutionary throughput (~6.5–8.0 gen/s)
+    CONFIG.generation.timeLimit = 24; // Strict safety cutoff for 1 lap
+  }
+  sim.tireBarriers = null; // Bypass off-track tire physics during headless run
+
+  // Temporarily mute audio while fast-forwarding to avoid WebAudio oscillator thrashing
+  prevAudioEnabled = audio.enabled;
+  audio.enabled = false;
   audio.silenceAll();
+
   hyperStartGen = sim.generation;
   hyperStartTime = performance.now();
+  lastHyperUiUpdate = 0;
+  lastHyperChartDraw = 0;
+  lastHyperTelemetryUpdate = 0;
+
+  // Infinite continuous evolution: no gen limit, no time limit!
+  hyperGenGoal = Infinity;
+  hyperDurationGoalMs = Infinity;
 
   const targetInfo = $('hyper-target-info');
-
-  if (hyperMode === 'gens') {
-    const count = Math.max(1, Math.min(10000, Number(hyperTargetInput?.value) || 50));
-    hyperGenGoal = hyperStartGen + count;
-    if (targetInfo) {
-      targetInfo.innerHTML = `Gen <strong id="hyper-cur-gen">${sim.generation}</strong> / <span>${hyperGenGoal}</span> (+${count} gens)`;
-    }
-  } else {
-    hyperDurationGoalMs = getTargetDurationMs();
-    const durationFmt = fmtDuration(hyperDurationGoalMs / 1000);
-    if (targetInfo) {
-      targetInfo.innerHTML = `Gen <strong id="hyper-cur-gen">${sim.generation}</strong> · Target: <span>${durationFmt}</span>`;
-    }
+  if (targetInfo) {
+    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · CONTINUOUS EVOLUTION`;
   }
 
-  if (hyperSetupView) hyperSetupView.hidden = true;
   if (hyperRunningView) hyperRunningView.hidden = false;
 
   if (!hyperChart && $('hyper-chart-canvas')) {
     hyperChart = new FitnessChart($('hyper-chart-canvas'));
   }
-  hyperChart?.draw(sim.history);
+  requestAnimationFrame(() => {
+    hyperChart?.resize();
+    hyperChart?.draw(sim.history, sim.bestLapEver);
+  });
+  updateHyperControlsUi();
+  updateHyperTelemetryUi('0');
 
-  runHyperBatch();
+  scheduleNextHyperBatch();
 }
 
 function runHyperBatch() {
   if (!hyperRunning) return;
 
-  const t0 = performance.now();
-  // Run tight headless physics and neural forward-passes for 28ms per time slice
-  while (performance.now() - t0 < 28 && hyperRunning) {
-    for (let k = 0; k < 12; k++) {
-      sim.step();
-      if (hyperMode === 'gens' && sim.generation >= hyperGenGoal) {
-        finishHyperTraining();
-        return;
-      }
-      if (hyperMode === 'time' && (performance.now() - hyperStartTime) >= hyperDurationGoalMs) {
-        finishHyperTraining();
-        return;
+  try {
+    const t0 = performance.now();
+    // High-throughput simulation slice (100ms): maximizes V8 JIT physics throughput with zero VSYNC wait
+    while (performance.now() - t0 < 100 && hyperRunning) {
+      for (let k = 0; k < 60; k++) {
+        sim.step();
+
+        // In headless fast-forward, immediately bypass the human victory cooldown & fast-forward checkered timer
+        if (sim.postRaceTimer !== null && sim.postRaceTimer > 0) {
+          sim.postRaceTimer = 0;
+        }
+        if (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 1.5) {
+          sim.checkeredFlagTimer = 1.5;
+        }
+
+        // Fast-forward death slide of crashed cars so finished grids don't waste 180 simulation steps
+        if (sim.cars) {
+          for (let i = 0; i < sim.cars.length; i++) {
+            const c = sim.cars[i];
+            if (c && c.crashed && c.alive) {
+              c.deathTimer = 0;
+            }
+          }
+        }
+
+        // F1 Checkered Flag Rule in Headless Mode:
+        // When the race leader (P1) finishes, give a brief 1.5s window for trailing cars to finish, then conclude generation
+        if (sim.cars && sim.cars.some(c => c.finished)) {
+          if (headlessPostFinishTimer === null) {
+            headlessPostFinishTimer = 1.5;
+          } else {
+            headlessPostFinishTimer -= CONFIG.dt;
+            if (headlessPostFinishTimer <= 0) {
+              headlessPostFinishTimer = null;
+              sim.endGeneration();
+            }
+          }
+        } else {
+          headlessPostFinishTimer = null;
+        }
+
+        if (isFinite(hyperGenGoal) && sim.generation >= hyperGenGoal) {
+          finishHyperTraining();
+          return;
+        }
+        if (isFinite(hyperDurationGoalMs) && (performance.now() - hyperStartTime) >= hyperDurationGoalMs) {
+          finishHyperTraining();
+          return;
+        }
       }
     }
+  } catch (err) {
+    console.error('Fast-Forward physics step error:', err);
+    pauseHyperTraining();
+    toast('⚠️ Fast-Forward encountered an error and safely paused: ' + err.message, 'error');
+    return;
   }
 
-  // Update modal progress and stats
+  // Prevent memory accumulation of unrendered death event objects during headless run
+  if (sim.deathEvents && sim.deathEvents.length > 0) {
+    sim.deathEvents.length = 0;
+  }
+
   const now = performance.now();
   const elapsedMs = now - hyperStartTime;
   const elapsedSec = elapsedMs / 1000;
   const gensDone = sim.generation - hyperStartGen;
   const rate = elapsedSec > 0 ? (gensDone / elapsedSec).toFixed(1) : '0';
 
-  let pct = 0;
-  let remainingText = '–';
+  // Throttle DOM updates to ~120ms to keep UI responsive without layout thrashing
+  if (now - lastHyperUiUpdate >= 120) {
+    lastHyperUiUpdate = now;
 
-  if (hyperMode === 'gens') {
-    const totalGens = Math.max(1, hyperGenGoal - hyperStartGen);
-    pct = Math.min(100, Math.round((gensDone / totalGens) * 100));
-    const genRateNum = Number(rate);
-    if (genRateNum > 0 && gensDone < totalGens) {
-      const remSec = (totalGens - gensDone) / genRateNum;
-      remainingText = fmtDuration(remSec);
-    } else {
-      remainingText = '0.0s';
+    const progPct = $('hyper-prog-pct');
+    if (progPct) progPct.textContent = `${rate} gen/s`;
+    const curGen = $('hyper-cur-gen');
+    if (curGen) curGen.textContent = sim.generation;
+    const targetInfo = $('hyper-target-info');
+    if (targetInfo) {
+      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · <span>+${gensDone} gens simulated</span>`;
     }
-  } else {
-    pct = Math.min(100, Math.round((elapsedMs / hyperDurationGoalMs) * 100));
-    const remSec = Math.max(0, (hyperDurationGoalMs - elapsedMs) / 1000);
-    remainingText = fmtDuration(remSec);
+    const barFill = $('hyper-bar-fill');
+    if (barFill) barFill.style.width = '100%';
+
+    const lastRecord = sim.history.length ? sim.history[sim.history.length - 1] : null;
+
+    const statTime = $('hyper-stat-time');
+    if (statTime) statTime.textContent = fmtDuration(elapsedSec);
+    const statRate = $('hyper-stat-rate');
+    if (statRate) statRate.textContent = `${rate} gen/s`;
+    const statAdded = $('hyper-stat-added');
+    if (statAdded) statAdded.textContent = `+${gensDone} gens`;
+    const statFit = $('hyper-stat-fitness');
+    if (statFit) statFit.textContent = compact(sim.allTimeBest?.fitness);
+    const statCurvature = $('hyper-stat-curvature');
+    if (statCurvature) {
+      if (sim.bestLapEver && sim.bestLapEver < 999) {
+        const normLap = Math.max(0, Math.min(1.0, (sim.bestLapEver - 10.0) / (24.0 - 10.0)));
+        const sScore = Math.max(10.0, 94.0 - Math.pow(normLap, 0.85) * 58.0).toFixed(1);
+        statCurvature.textContent = `${sScore}%`;
+      } else {
+        const est = (12.0 + Math.min(1.0, (sim.allTimeBest?.fitness || 0) / 25000) * 22.0).toFixed(1);
+        statCurvature.textContent = `${est}%`;
+      }
+    }
+    const statLap = $('hyper-stat-lap');
+    if (statLap) statLap.textContent = fmtTime(sim.bestLapEver);
+
+    const statSpeed = $('hyper-stat-speed') || $('hyper-stat-pop-avg');
+    const deltaSpeed = $('hyper-delta-speed');
+    if (statSpeed) {
+      if (lastRecord && Number.isFinite(lastRecord.avgLap) && lastRecord.avgLap > 0 && lastRecord.avgLap < 60) {
+        statSpeed.textContent = `${lastRecord.avgLap.toFixed(2)}s`;
+        if (deltaSpeed && Number.isFinite(lastRecord.bestLap) && lastRecord.bestLap > 0) {
+          const gap = lastRecord.avgLap - lastRecord.bestLap;
+          if (gap <= 0.05) {
+            deltaSpeed.textContent = 'Tight Pack · Equal P1';
+            deltaSpeed.className = 'trend-badge improving';
+          } else if (gap <= 0.35) {
+            deltaSpeed.textContent = `Tight Pack · +${gap.toFixed(2)}s`;
+            deltaSpeed.className = 'trend-badge improving';
+          } else if (gap <= 0.85) {
+            deltaSpeed.textContent = `Δ +${gap.toFixed(2)}s to P1`;
+            deltaSpeed.className = 'trend-badge neutral';
+          } else {
+            deltaSpeed.textContent = `Spread +${gap.toFixed(2)}s`;
+            deltaSpeed.className = 'trend-badge declining';
+          }
+        }
+      } else if (sim.bestLapEver && sim.bestLapEver < 999) {
+        statSpeed.textContent = `${(sim.bestLapEver + 0.65).toFixed(2)}s`;
+        if (deltaSpeed) {
+          deltaSpeed.textContent = 'Pace Regrouping';
+          deltaSpeed.className = 'trend-badge neutral';
+        }
+      } else {
+        statSpeed.textContent = 'Learning';
+        if (deltaSpeed) {
+          deltaSpeed.textContent = 'In Training';
+          deltaSpeed.className = 'trend-badge neutral';
+        }
+      }
+    }
+
+    const statPopAvg = $('hyper-stat-pop-avg');
+    if (statPopAvg && !$('hyper-stat-speed')) statPopAvg.textContent = lastRecord ? compact(lastRecord.avg) : '–';
+
+    const statPopSurvival = $('hyper-stat-pop-survival');
+    if (statPopSurvival) {
+      if (lastRecord) {
+        const pop = lastRecord.population || 20;
+        const fin = lastRecord.finishers || 0;
+        const pct = Math.round((fin / pop) * 100);
+        statPopSurvival.textContent = `${fin}/${pop} (${pct}%)`;
+      } else {
+        statPopSurvival.textContent = '–';
+      }
+    }
+
+    const statPopPace = $('hyper-stat-pop-pace');
+    if (statPopPace) {
+      if (lastRecord && lastRecord.lapImprovementPct > 0) {
+        statPopPace.textContent = `+${lastRecord.lapImprovementPct.toFixed(1)}% faster`;
+      } else if (lastRecord && lastRecord.avgLap && Number.isFinite(lastRecord.avgLap) && lastRecord.avgLap < 999) {
+        statPopPace.textContent = `${lastRecord.avgLap.toFixed(2)}s avg`;
+      } else {
+        statPopPace.textContent = '–';
+      }
+    }
   }
 
-  const progPct = $('hyper-prog-pct');
-  if (progPct) progPct.textContent = `${pct}%`;
-  const curGen = $('hyper-cur-gen');
-  if (curGen) curGen.textContent = sim.generation;
-  const barFill = $('hyper-bar-fill');
-  if (barFill) barFill.style.width = `${pct}%`;
-
-  const lastRecord = sim.history.length ? sim.history[sim.history.length - 1] : null;
-
-  const statTime = $('hyper-stat-time');
-  if (statTime) statTime.textContent = fmtDuration(elapsedSec);
-  const statRem = $('hyper-stat-rem');
-  if (statRem) statRem.textContent = remainingText;
-  const statRate = $('hyper-stat-rate');
-  if (statRate) statRate.textContent = `${rate} gen/s`;
-  const statAdded = $('hyper-stat-added');
-  if (statAdded) statAdded.textContent = `+${gensDone}`;
-  const statFit = $('hyper-stat-fitness');
-  if (statFit) statFit.textContent = compact(sim.allTimeBest?.fitness);
-  const statLap = $('hyper-stat-lap');
-  if (statLap) statLap.textContent = fmtTime(sim.bestLapEver);
-
-  // Purple line population dynamics
-  const statPopAvg = $('hyper-stat-pop-avg');
-  if (statPopAvg) statPopAvg.textContent = lastRecord ? compact(lastRecord.avg) : '–';
-
-  const statPopMedian = $('hyper-stat-pop-median');
-  if (statPopMedian) statPopMedian.textContent = lastRecord && lastRecord.median !== undefined ? compact(lastRecord.median) : '–';
-
-  const statPopSurvival = $('hyper-stat-pop-survival');
-  if (statPopSurvival) {
-    if (lastRecord) {
-      const pop = lastRecord.population || 20;
-      const fin = lastRecord.finishers || 0;
-      const pct = Math.round((fin / pop) * 100);
-      statPopSurvival.textContent = `${fin}/${pop} (${pct}%)`;
-    } else {
-      statPopSurvival.textContent = '–';
-    }
+  // Throttle main fitness chart redraw to ~220ms intervals
+  if (now - lastHyperChartDraw >= 220) {
+    lastHyperChartDraw = now;
+    hyperChart?.draw(sim.history, sim.bestLapEver);
   }
 
-  const statPopPace = $('hyper-stat-pop-pace');
-  if (statPopPace) {
-    if (lastRecord && lastRecord.lapImprovementPct > 0) {
-      statPopPace.textContent = `+${lastRecord.lapImprovementPct.toFixed(1)}% faster`;
-    } else if (lastRecord && lastRecord.avgLap && Number.isFinite(lastRecord.avgLap) && lastRecord.avgLap < 999) {
-      statPopPace.textContent = `${lastRecord.avgLap.toFixed(2)}s avg`;
-    } else {
-      statPopPace.textContent = '–';
-    }
+  // Throttle 8 micro sparkline canvases to ~180ms intervals
+  if (now - lastHyperTelemetryUpdate > 180) {
+    lastHyperTelemetryUpdate = now;
+    updateHyperTelemetryUi(rate);
   }
 
-  hyperChart?.draw(sim.history);
-
+  // Yield to browser event loop via zero-delay MessageChannel (0ms delay, no VSYNC lock)
   if (hyperRunning) {
-    requestAnimationFrame(runHyperBatch);
+    scheduleNextHyperBatch();
   }
 }
 
 function stopHyperTraining() {
-  finishHyperTraining();
+  stopAndResume3DView();
 }
 
 function finishHyperTraining() {
@@ -1279,20 +1760,41 @@ function finishHyperTraining() {
   hyperRunning = false;
   state.hyperRunning = false;
   sim.hyperRunning = false;
+  headlessPostFinishTimer = null;
+
+  if (CONFIG.generation) {
+    CONFIG.generation.startDelay = prevStartDelay;
+    CONFIG.generation.maxLaps = prevMaxLaps;
+    CONFIG.generation.timeLimit = prevTimeLimit;
+  }
+  sim.tireBarriers = prevTireBarriers;
+
+  audio.enabled = prevAudioEnabled;
   audio.silenceAll();
+
   const elapsedSec = (performance.now() - hyperStartTime) / 1000;
   const elapsedFmt = fmtDuration(elapsedSec);
   const gensDone = sim.generation - hyperStartGen;
+  const rate = elapsedSec > 0 ? (gensDone / elapsedSec).toFixed(1) : '0';
 
+  updateHyperControlsUi();
+  updateHyperTelemetryUi(rate);
   persistState();
-  chart.draw(sim.history);
-  hubChart?.draw(sim.history);
+  chart.draw(sim.history, sim.bestLapEver);
+  hubChart?.draw(sim.history, sim.bestLapEver);
+  hyperChart?.draw(sim.history, sim.bestLapEver);
   refreshSavedInfo();
   updateHud(sim.leader);
 
-  if (hyperModal) hyperModal.hidden = true;
-  if (wasRunning) {
-    toast(`⚡ Hyper training completed: +${gensDone} generations in ${elapsedFmt}!`, 'success');
+  // Resume 3D animation frame loop if it was suspended
+  if (!frameActive) {
+    frameActive = true;
+    last = performance.now();
+    requestAnimationFrame(frame);
+  }
+
+  if (wasRunning && gensDone > 0) {
+    toast(`⚡ Simulation paused: +${gensDone} generations completed (${rate} gen/s)!`, 'info');
   }
 }
 
@@ -1949,9 +2451,10 @@ function frame(now) {
   last = now;
 
   if (hyperRunning) {
-    requestAnimationFrame(frame);
+    frameActive = false;
     return;
   }
+  frameActive = true;
 
   sim.playerControls.steer = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
   sim.playerControls.throttle = keys.ArrowUp ? 1 : keys.ArrowDown ? -1 : 0;
@@ -2049,5 +2552,5 @@ updateStatus();
 setCameraPreset(state.cameraPreset, false);
 renderGenPresetsRibbon();
 updateHud(sim.leader);
-chart.draw(sim.history);
+chart.draw(sim.history, sim.bestLapEver);
 requestAnimationFrame(frame);

@@ -206,6 +206,7 @@ export class Simulation {
     });
     this.time = 0;
     this.postRaceTimer = null;
+    this.checkeredFlagTimer = null;
     this.aliveCount = this.cars.length;
     this.deathEvents = [];
     this.tireBarriers?.reset();
@@ -449,6 +450,25 @@ export class Simulation {
     this.time += dt;
     this.aliveCount = aliveRacing;
 
+    // F1 Checkered Flag Rule:
+    // Once any car crosses the line to finish the race (taking the checkered flag),
+    // enforce a 5.0s window for trailing cars to finish before concluding the race.
+    const anyCarFinished = this.cars.some((c) => c.finished);
+    if (anyCarFinished) {
+      if (this.checkeredFlagTimer === null || this.checkeredFlagTimer === undefined) {
+        this.checkeredFlagTimer = 5.0; // 5-second F1 Chequered Flag cooldown window
+      } else {
+        this.checkeredFlagTimer -= dt;
+        if (this.checkeredFlagTimer <= 0) {
+          this.checkeredFlagTimer = null;
+          this.endGeneration();
+          return;
+        }
+      }
+    } else {
+      this.checkeredFlagTimer = null;
+    }
+
     // Check if race has concluded: no cars actively racing, and no cars actively in a crash slide
     const isCrashingSliding = this.cars.some((c) => c.crashed && c.alive);
     const isRaceComplete = aliveRacing === 0 && !isCrashingSliding;
@@ -461,6 +481,7 @@ export class Simulation {
         if (this.postRaceTimer <= 0) {
           this.postRaceTimer = null;
           this.endGeneration();
+          return;
         }
       }
     } else {

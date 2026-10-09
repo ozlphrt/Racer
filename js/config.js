@@ -10,16 +10,16 @@ export const CONFIG = {
   car: {
     length: 26,
     width: 13,
-    accel: 300, // High-performance F1 acceleration (units/s²)
-    brake: 550, // Responsive braking
-    drag: 0.26, // Low aerodynamic drag for high top speeds
-    maxSpeed: 440, // Blistering top speed
-    turnRate: 3.6, // High-agility steering
+    accel: 345, // High-performance F1 acceleration (units/s²)
+    brake: 640, // Deeper, more responsive braking
+    drag: 0.23, // Lower aerodynamic drag for blistering top speeds
+    maxSpeed: 480, // Higher top speed ceiling (unlocks sub-8.5s potential)
+    turnRate: 3.9, // Higher agility apex steering
     minTurnSpeed: 50, // Low speed steering authority threshold
-    highSpeedTurnLoss: 0.38, // Downforce-stabilized high speed steering
-    tireGrip: 12.5, // High downforce lateral tire grip
-    understeerFactor: 0.0025,
-    oversteerFactor: 0.20,
+    highSpeedTurnLoss: 0.36, // Downforce-stabilized high speed steering
+    tireGrip: 14.2, // Upgraded downforce lateral tire grip for apex cornering
+    understeerFactor: 0.0022,
+    oversteerFactor: 0.18,
   },
 
   collision: {
@@ -40,10 +40,10 @@ export const CONFIG = {
 
   ga: {
     population: 20, // 20-Car F1 Grid (blistering fast simulation speed & clean racing lines)
-    elites: 1, // Keep #1 champion unchanged
+    elites: 2, // Keep top 2 champions unchanged (guarantees proven race pace survival)
     tournamentK: 3, // Tournament selection size
-    mutationRate: 0.16, // Adaptive mutation rate to quickly master multi-car dynamics
-    mutationSigma: 0.32,
+    mutationRate: 0.16, // Elevated mutation rate to discover new braking and apex lines
+    mutationSigma: 0.24, // Expanded precision micro-tuning
   },
 
   generation: {
@@ -58,7 +58,7 @@ export const CONFIG = {
   fitness: {
     lapBonus: 4500, // Large reward per completed lap
     fullRaceBonus: 30000, // Massive milestone bonus for completing all 5 laps
-    targetLapTime: 10.0, // Target lap time; faster laps earn exponential extra speed bonus
+    targetLapTime: 8.8, // Aggressive target lap time; exponentially rewards sub-9.0s pace
     crashPenalty: 600, // Strict penalty for crashing into walls/runoff (rewards staying on track)
     contactPenalty: 50, // Penalty per contact after grace period (penalizes collisions)
     cleanRaceBonus: 3500, // Massive bonus for completing laps with 0 collision contacts

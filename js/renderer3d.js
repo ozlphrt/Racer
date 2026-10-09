@@ -296,7 +296,7 @@ export class Renderer3D {
 
     // 1. Three.js Scene, Camera, Renderer
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a3b5c);
+    this.scene.background = new THREE.Color(0x8ac0f4);
 
     this.camera = new THREE.PerspectiveCamera(42, this.w / this.h, 5, 24000);
     this.camera.filmGauge = 35;
@@ -339,28 +339,28 @@ export class Renderer3D {
   }
 
   setupSky() {
-    // 1. Procedural atmospheric daytime sky canvas (balanced, non-glaring)
+    // 1. Procedural atmospheric vibrant afternoon sky canvas
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 1024;
     const ctx = canvas.getContext('2d');
 
-    // Natural, realistic sky gradient from deep space zenith to rich horizon
+    // Natural, vibrant afternoon sky gradient: rich azure zenith down to warm golden-blue horizon
     const grad = ctx.createLinearGradient(0, 0, 0, 1024);
-    grad.addColorStop(0.00, '#0a1628'); // Deep space zenith
-    grad.addColorStop(0.18, '#102d54'); // Dark royal blue
-    grad.addColorStop(0.40, '#1a497b'); // Deep azure
-    grad.addColorStop(0.62, '#2d659e'); // Natural sky blue
-    grad.addColorStop(0.78, '#4f85ba'); // Soft horizon transition
-    grad.addColorStop(0.88, '#6a97c4'); // Atmospheric horizon mist
-    grad.addColorStop(0.94, '#3b5f48'); // Soft mountain/meadow horizon blend
-    grad.addColorStop(1.00, '#1c361a'); // Terrain fade
+    grad.addColorStop(0.00, '#1a5ea8'); // Clear rich azure zenith
+    grad.addColorStop(0.25, '#2875c4'); // Vibrant afternoon cobalt
+    grad.addColorStop(0.50, '#4695db'); // Bright open sky blue
+    grad.addColorStop(0.70, '#74b6ed'); // Soft cerulean
+    grad.addColorStop(0.83, '#aed9f7'); // Luminous lower sky
+    grad.addColorStop(0.91, '#fae1bd'); // Warm golden afternoon sun haze
+    grad.addColorStop(0.96, '#f3d1a3'); // Gentle horizon warmth
+    grad.addColorStop(1.00, '#b8cfbd'); // Grassy horizon blend
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 1024);
 
-    // Soft procedural cirrus cloud bands
-    ctx.fillStyle = 'rgba(215, 230, 245, 0.16)';
+    // Soft procedural cirrus cloud bands with bright afternoon sunlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
     for (let i = 0; i < 14; i++) {
       const cy = 200 + i * 36 + Math.sin(i * 1.8) * 14;
       const ch = 10 + (i % 4) * 7;
@@ -369,8 +369,8 @@ export class Renderer3D {
       ctx.fill();
     }
 
-    // Distant soft mountain silhouette along the horizon
-    ctx.fillStyle = 'rgba(16, 32, 22, 0.55)';
+    // Distant soft mountain silhouette along the horizon in airy afternoon haze
+    ctx.fillStyle = 'rgba(70, 95, 115, 0.45)';
     ctx.beginPath();
     ctx.moveTo(0, 930);
     for (let x = 0; x <= 512; x += 16) {
@@ -402,26 +402,29 @@ export class Renderer3D {
     this.skyMesh.renderOrder = -100;
     this.scene.add(this.skyMesh);
 
-    // Atmospheric Depth Fog for distant trees and terrain blending
-    this.scene.fog = new THREE.Fog(0x3a6080, 2400, 9500);
+    // Soft airy blue afternoon aerial perspective
+    this.scene.fog = new THREE.Fog(0xc2daf0, 4000, 16000);
   }
 
   setupLighting() {
-    const hemiLight = new THREE.HemisphereLight(0x8cb8df, 0x1a2e18, 0.75);
+    // Bright afternoon hemisphere: crisp sky blue dome with warm grassy ground bounce
+    const hemiLight = new THREE.HemisphereLight(0x8ac0f4, 0x628455, 1.05);
     this.scene.add(hemiLight);
 
-    this.dirLight = new THREE.DirectionalLight(0xfff5e8, 1.35);
+    // Bright, crisp warm golden-white afternoon sunlight
+    this.dirLight = new THREE.DirectionalLight(0xfff6e8, 2.05);
     this.dirLight.castShadow = true;
     this.dirLight.shadow.mapSize.width = 2048;
     this.dirLight.shadow.mapSize.height = 2048;
-    this.dirLight.shadow.camera.near = 50;
-    this.dirLight.shadow.camera.far = 5000;
-    this.dirLight.shadow.bias = -0.00008;
-    this.dirLight.shadow.normalBias = 0.002;
+    this.dirLight.shadow.camera.near = 100;
+    this.dirLight.shadow.camera.far = 8000;
+    this.dirLight.shadow.bias = -0.0001;
+    this.dirLight.shadow.normalBias = 0.02;
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
-    const ambLight = new THREE.AmbientLight(0x162216, 0.30);
+    // Daylight ambient fill keeping shadowed surfaces and car underbodies clean and readable
+    const ambLight = new THREE.AmbientLight(0x607488, 0.48);
     this.scene.add(ambLight);
 
     this.updateLightPosition();
@@ -436,11 +439,21 @@ export class Renderer3D {
     const spanY = (b.maxY - b.minY) * 0.6;
     const span = Math.max(spanX, spanY) + 300;
 
-    // High midday sun angle ensuring shadows anchor directly under each car's chassis & tires
-    this.dirLight.position.set(cx + span * 0.25, cy - span * 0.35, 2400);
+    // Pleasant afternoon sun angle (~40 deg above horizon) from South-West
+    // Generates distinct angled shadows revealing terrain relief, barriers, and cars,
+    // while keeping the track and landscape bright, clear, and vibrant (not dark dusk).
+    const sunDistance = span * 1.9;
+    const sunAngle = 2.10; // South-West azimuth (~120 degrees)
+    const sunX = cx + Math.cos(sunAngle) * sunDistance;
+    const sunY = cy + Math.sin(sunAngle) * sunDistance;
+    const sunZ = span * 1.55; // Natural ~40 deg afternoon elevation
+
+    this.dirLight.position.set(sunX, sunY, sunZ);
     this.dirLight.target.position.set(cx, cy, 0);
 
-    const d = span * 1.15;
+    const d = span * 1.35;
+    this.dirLight.shadow.camera.near = 100;
+    this.dirLight.shadow.camera.far = sunDistance * 2.6;
     this.dirLight.shadow.camera.left = -d;
     this.dirLight.shadow.camera.right = d;
     this.dirLight.shadow.camera.top = d;
@@ -477,7 +490,6 @@ export class Renderer3D {
     }
 
     const size = 512;
-    const TWO_PI = Math.PI * 2;
 
     const dCanvas = document.createElement('canvas');
     dCanvas.width = size;
@@ -500,41 +512,71 @@ export class Renderer3D {
     const rImg = rCtx.createImageData(size, size);
     const rData = rImg.data;
 
-    // Harmonic wave components: strictly integer multiples of 2PI across (u, v) in [0, 1)
-    // Distributed isotropically across multiple angles to eliminate directional grid / plaid seams
-    const harmonics = [
-      { kx: 3, ky: 4, weight: 0.22, phase: 0.4 },
-      { kx: 5, ky: -3, weight: 0.18, phase: 1.1 },
-      { kx: -4, ky: 6, weight: 0.15, phase: 2.3 },
-      { kx: 7, ky: 5, weight: 0.12, phase: 0.8 },
-      { kx: 10, ky: -8, weight: 0.09, phase: 1.7 },
-      { kx: 14, ky: 11, weight: 0.08, phase: 0.2 },
-      { kx: -18, ky: 13, weight: 0.06, phase: 2.9 },
-      { kx: 22, ky: -17, weight: 0.05, phase: 1.4 },
-      { kx: 32, ky: 25, weight: 0.04, phase: 0.6 },
-      { kx: -42, ky: 35, weight: 0.03, phase: 3.1 },
-      { kx: 60, ky: -48, weight: 0.02, phase: 1.9 },
-      { kx: 80, ky: 68, weight: 0.015, phase: 0.5 },
+    // High-performance integer hashing for non-repeating stochastic lattice
+    function hash2D(i, j, seed) {
+      let n = (Math.imul(i + 137, 374761393) + Math.imul(j + 283, 668265263) + Math.imul(seed + 541, 1013904223)) | 0;
+      n = Math.imul(n ^ (n >>> 13), 1274126177);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967296.0;
+    }
+
+    // Seamless continuous periodic Value Noise on torus [0, 1) x [0, 1)
+    function periodicNoise(u, v, freq, seed) {
+      const px = u * freq;
+      const py = v * freq;
+      const x0 = Math.floor(px);
+      const y0 = Math.floor(py);
+      const fx = px - x0;
+      const fy = py - y0;
+      // Quintic smootherstep curve: 6t^5 - 15t^4 + 10t^3
+      const sx = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+      const sy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+      const i0 = ((x0 % freq) + freq) % freq;
+      const j0 = ((y0 % freq) + freq) % freq;
+      const i1 = (i0 + 1) % freq;
+      const j1 = (j0 + 1) % freq;
+      const v00 = hash2D(i0, j0, seed);
+      const v10 = hash2D(i1, j0, seed);
+      const v01 = hash2D(i0, j1, seed);
+      const v11 = hash2D(i1, j1, seed);
+      const vx0 = v00 + sx * (v10 - v00);
+      const vx1 = v01 + sx * (v11 - v01);
+      return vx0 + sy * (vx1 - vx0);
+    }
+
+    // Micro-scale turf grain frequencies for seamless isotropic surface detail (no macro periodic spots)
+    const octaves = [
+      { freq: 16, weight: 0.38 },
+      { freq: 32, weight: 0.30 },
+      { freq: 64, weight: 0.20 },
+      { freq: 128, weight: 0.12 },
     ];
 
     const heights = new Float32Array(size * size);
+
+    // Compute seamless fine organic micro-surface
     for (let y = 0; y < size; y++) {
       const v = y / size;
       for (let x = 0; x < size; x++) {
         const u = x / size;
+
+        // Continuous organic multi-frequency domain warp for completely irregular, non-geometric micro-bumps
+        const warpU = (periodicNoise(u, v, 8, 101) - 0.5) * 0.10 + (periodicNoise(u, v, 16, 303) - 0.5) * 0.05;
+        const warpV = (periodicNoise(u, v, 8, 203) - 0.5) * 0.10 + (periodicNoise(u, v, 16, 404) - 0.5) * 0.05;
+        const wu = ((u + warpU) % 1.0 + 1.0) % 1.0;
+        const wv = ((v + warpV) % 1.0 + 1.0) % 1.0;
+
         let sum = 0;
-        for (let i = 0; i < harmonics.length; i++) {
-          const h = harmonics[i];
-          sum += Math.sin(TWO_PI * (h.kx * u + h.ky * v) + h.phase) * h.weight;
+        for (let o = 0; o < octaves.length; o++) {
+          const { freq, weight } = octaves[o];
+          sum += periodicNoise(wu, wv, freq, o * 19 + 7) * weight;
         }
-        heights[y * size + x] = sum * 0.5 + 0.5;
+        heights[y * size + x] = sum;
       }
     }
 
+    // Generate balanced, seamless diffuse albedo, normal, and roughness
     for (let y = 0; y < size; y++) {
-      const v = y / size;
       for (let x = 0; x < size; x++) {
-        const u = x / size;
         const idx = (y * size + x) * 4;
         const h = heights[y * size + x];
 
@@ -548,9 +590,9 @@ export class Renderer3D {
         const hU = heights[y0 * size + x];
         const hD = heights[y1 * size + x];
 
-        // Smooth continuous tangent normal
-        const dx = (hR - hL) * 2.8;
-        const dy = (hD - hU) * 2.8;
+        // Natural pronounced micro-bump normal relief (completely irregular, organic clumps and sod)
+        const dx = (hR - hL) * 3.0;
+        const dy = (hD - hU) * 3.0;
         const dz = 1.0;
         const len = Math.hypot(dx, dy, dz) || 1;
 
@@ -559,24 +601,25 @@ export class Renderer3D {
         nData[idx + 2] = ((dz / len) * 0.5 + 0.5) * 255;
         nData[idx + 3] = 255;
 
-        // Seamless micro-grain with integer harmonics
-        const g1 = Math.sin(TWO_PI * (120 * u + 95 * v)) * 0.05;
-        const g2 = Math.cos(TWO_PI * (160 * u - 130 * v) + 1.2) * 0.035;
-        const grain = g1 + g2;
-        const val = Math.max(0, Math.min(1, h + grain));
+        // Fine blade fiber grain: smooth, subtle, and uniform (NO dark circles or speckles)
+        const bladeNoise = (hash2D(x, y, 777) - 0.5) * 14;
+        const bladeRelief = (h - 0.5) * 24;
 
-        // Neutral earthy ground albedo micro-texture (modulates vertex colors cleanly without tint shifting)
-        const lum = Math.floor(128 + (val - 0.5) * 55);
-        dData[idx] = Math.min(255, Math.max(0, lum + 2));
-        dData[idx + 1] = Math.min(255, Math.max(0, lum));
-        dData[idx + 2] = Math.min(255, Math.max(0, lum - 3));
+        // Darker, desaturated organic turf base with gentle blade variation
+        const rOut = Math.min(255, Math.max(0, Math.round(92 + bladeRelief * 0.7 + bladeNoise * 0.5)));
+        const gOut = Math.min(255, Math.max(0, Math.round(118 + bladeRelief * 0.8 + bladeNoise * 0.6)));
+        const bOut = Math.min(255, Math.max(0, Math.round(74 + bladeRelief * 0.5 + bladeNoise * 0.4)));
+
+        dData[idx] = rOut;
+        dData[idx + 1] = gOut;
+        dData[idx + 2] = bOut;
         dData[idx + 3] = 255;
 
-        // Roughness: 0.74 to 0.92
-        const rough = Math.floor(190 + (1 - val) * 45);
-        rData[idx] = rough;
-        rData[idx + 1] = rough;
-        rData[idx + 2] = rough;
+        // Realistic matte turf roughness (0.84 - 0.90)
+        const rough = Math.floor(218 + (0.5 - h) * 24);
+        rData[idx] = Math.min(255, Math.max(0, rough));
+        rData[idx + 1] = rData[idx];
+        rData[idx + 2] = rData[idx];
         rData[idx + 3] = 255;
       }
     }
@@ -587,21 +630,22 @@ export class Renderer3D {
 
     const maxAniso = (this.renderer && this.renderer.capabilities) ? this.renderer.capabilities.getMaxAnisotropy() : 8;
 
+    // High repeat count for fine, seamless micro-detail across the landscape
     const diffuseMap = new THREE.CanvasTexture(dCanvas);
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
-    diffuseMap.repeat.set(160, 160);
+    diffuseMap.repeat.set(120, 120);
     diffuseMap.generateMipmaps = true;
     diffuseMap.anisotropy = maxAniso;
 
     const normalMap = new THREE.CanvasTexture(nCanvas);
     normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
-    normalMap.repeat.set(160, 160);
+    normalMap.repeat.set(120, 120);
     normalMap.generateMipmaps = true;
     normalMap.anisotropy = maxAniso;
 
     const roughnessMap = new THREE.CanvasTexture(rCanvas);
     roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-    roughnessMap.repeat.set(160, 160);
+    roughnessMap.repeat.set(120, 120);
     roughnessMap.generateMipmaps = true;
     roughnessMap.anisotropy = maxAniso;
 
@@ -708,24 +752,65 @@ export class Renderer3D {
 
     const distToTrack = this.getMinDistToTrack(trackX, trackY);
 
-    // Completely flat where track is passing by + 4 full car lengths on both sides of the track
     const trackHalf = (t.width || 84) * 0.5; // ~42m
-    const carLength = 26.0;                  // 1 car length (26m)
-    const flatRadius = trackHalf + carLength * 4 + 25.0; // ~171m flat radius from centerline (4 cars length on both sides)
+    const carLength = 26.0;                  // 1 car length (~26m)
+    // Strictly flat across track + at least 2 full car lengths outside track edges
+    const flatRadius = trackHalf + carLength * 2.0 + 4.0; // ~100m from centerline (>= 2 car lengths away from track edges)
 
-    if (distToTrack <= flatRadius) return 0; // Strictly flat at ground zero across track & run-off
+    if (distToTrack <= flatRadius) return 0; // Guaranteed 100% flat
 
-    // Smooth continuous ease-in curve starting strictly after flat perimeter
-    const blendDist = 380.0;
-    const blendRatio = Math.min(1.0, (distToTrack - flatRadius) / blendDist);
-    // C^2 continuous smootherstep (6t^5 - 15t^4 + 10t^3) with 0 first and second derivatives at boundary
-    const smoothBlend = blendRatio * blendRatio * blendRatio * (blendRatio * (blendRatio * 6 - 15) + 10);
+    // 1. Regional Macro Topography (original gentle countryside - NO new or shifted hills)
+    // Preserves the wide ~171m flat buffer and 380m gradual ease-in for high hills
+    const macroFlatRadius = trackHalf + carLength * 4 + 25.0; // ~171m flat radius from centerline
+    let macroElevation = 0;
+    if (distToTrack > macroFlatRadius) {
+      const blendDist = 380.0;
+      const blendRatio = Math.min(1.0, (distToTrack - macroFlatRadius) / blendDist);
+      const macroBlend = blendRatio * blendRatio * blendRatio * (blendRatio * (blendRatio * 6 - 15) + 10);
 
-    // Multi-octave organic rolling hills and countryside
-    const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
-    const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
-    const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
-    let elevation = Math.max(0, h1 + h2 + h3 + 18.0);
+      // Original unrotated macro hills (exact original landscape)
+      const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
+      const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
+      const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
+      macroElevation = Math.max(0, h1 + h2 + h3 + 18.0) * macroBlend;
+    }
+
+    // 2. Irregular Micro Hills & Valleys (rolling 3.5m - 9.0m countryside knolls & shallow dale dips)
+    // Domain warping continuously twists the coordinate space to eliminate any rectilinear or geometric repetition
+    const hillBlendDist = 120.0;
+    const hillRatio = Math.min(1.0, (distToTrack - flatRadius) / hillBlendDist);
+    const hillBlend = hillRatio * hillRatio * (3.0 - 2.0 * hillRatio);
+
+    const rx1 = x * 0.857 - y * 0.515;
+    const ry1 = x * 0.515 + y * 0.857;
+    const rx2 = x * 0.292 + y * 0.956;
+    const ry2 = -x * 0.956 + y * 0.292;
+
+    // Continuous non-linear turbulent coordinate warping for natural flowing landscape features
+    const warpX = Math.sin(rx1 * 0.0028 + 1.7) * 75.0 + Math.cos(ry2 * 0.0048 - 0.8) * 45.0;
+    const warpY = Math.cos(rx2 * 0.0031 - 1.1) * 75.0 + Math.sin(ry1 * 0.0044 + 2.3) * 45.0;
+    const wx = x + warpX;
+    const wy = y + warpY;
+
+    // Organic micro hills & valleys (rolling mounds and shallow valleys, wavelength ~300m - 700m)
+    const hv1 = Math.sin(wx * 0.0024 + wy * 0.0019 + 0.8) * 4.8;
+    const hv2 = Math.sin(wx * -0.0041 + wy * 0.0053 + 2.4) * 3.2;
+    const hv3 = Math.cos(wx * 0.0068 - wy * 0.0059 + 1.6) * 1.8;
+    const microHillsValleys = (hv1 + hv2 + hv3) * hillBlend;
+
+    // 3. Pronounced Organic Micro Bumps (tactile 0.6m - 2.8m surface ripples and turf knolls)
+    const bumpBlendDist = 65.0;
+    const bumpRatio = Math.min(1.0, (distToTrack - flatRadius) / bumpBlendDist);
+    const bumpBlend = bumpRatio * bumpRatio * (3.0 - 2.0 * bumpRatio);
+
+    const mb1 = Math.sin(wx * 0.0078 + wy * 0.0062 + 1.3) * 1.60;
+    const mb2 = Math.sin(wx * -0.0135 + wy * 0.0158 + 2.1) * 1.05;
+    const mb3 = Math.sin(wx * 0.0242 - wy * 0.0215 + 0.6) * 0.65;
+    const mb4 = Math.sin(wx * 0.0384 + wy * 0.0351 + 3.2) * 0.35;
+
+    const microBumps = (mb1 + mb2 + mb3 + mb4) * bumpBlend;
+
+    let elevation = macroElevation + microHillsValleys + microBumps;
 
     // Horizon mountain ridges
     const distFromCenter = Math.hypot(x - cx, y - cy);
@@ -763,8 +848,7 @@ export class Renderer3D {
       }
     }
 
-    // ALL terrain features are scaled by smoothBlend so the entire track corridor is strictly 0.0
-    return elevation * smoothBlend;
+    return Math.max(0, elevation);
   }
 
   setupTerrain() {
@@ -810,96 +894,200 @@ export class Renderer3D {
         }
       }
 
-      // Multi-octave continuous 2D procedural noise for natural desaturated biomes & micro-mottling
-      const n1 = Math.sin(vx * 0.0018 + vy * 0.0014) * 0.5 + Math.cos(vx * 0.0013 - vy * 0.0020) * 0.5;
-      const n2 = Math.sin(vx * 0.0055 - vy * 0.0042 + 1.2) * 0.35 + Math.cos(vx * 0.0038 + vy * 0.0061) * 0.25;
-      const n3 = Math.sin(vx * 0.016 + vy * 0.013) * 0.15 + Math.cos(vx * 0.024 - vy * 0.019) * 0.10;
-      const nMicro = Math.sin(vx * 0.065 - vy * 0.052) * 0.04 + Math.cos(vx * 0.088 + vy * 0.076) * 0.03;
+      // Multi-octave continuous 2D procedural noise with non-orthogonal rotated frames
+      // Rotated by 31 deg, 73 deg, 119 deg to eliminate ANY rectilinear or geometric alignment
+      const rx1 = vx * 0.857 - vy * 0.515;
+      const ry1 = vx * 0.515 + vy * 0.857;
+      const rx2 = vx * 0.292 + vy * 0.956;
+      const ry2 = -vx * 0.956 + vy * 0.292;
+      const rx3 = vx * -0.485 + vy * 0.875;
+      const ry3 = -vx * 0.875 - vy * 0.485;
+      const rx4 = vx * 0.731 + vy * 0.682;
+      const ry4 = -vx * 0.682 + vy * 0.731;
 
-      const macroBiome = n1 * 0.60 + n2 * 0.40; // Macro biome distribution (-1 to +1)
-      const mesoPatch = n2 * 0.50 + n3 * 0.50;  // Medium soil/grass patches (-0.5 to +0.5)
-      const microGrain = nMicro;                 // High-frequency ground grain (-0.07 to +0.07)
+      // Multi-frequency continuous organic FBM noise (Golden ratio & irrational frequency multipliers)
+      const b1 = Math.sin(rx1 * 0.00047 + 0.7) * Math.cos(ry1 * 0.00053 - 0.4);
+      const b2 = Math.sin(rx2 * 0.00118 + 1.9) * Math.cos(ry2 * 0.00109 + 0.6);
+      const b3 = Math.sin(rx3 * 0.00283 - ry3 * 0.00247 + 2.4) * 0.6 + Math.cos(rx1 * 0.00312 + ry1 * 0.00278) * 0.4;
+      const b4 = Math.sin(rx4 * 0.00715 + ry4 * 0.00642 + 1.1) * 0.5 + Math.cos(rx2 * 0.00831 - ry2 * 0.00754) * 0.5;
+      const b5 = Math.sin(rx1 * 0.0183 - ry1 * 0.0167 + 0.8) * 0.5 + Math.cos(rx3 * 0.0215 + ry3 * 0.0198) * 0.5;
+      const b6 = Math.sin(rx2 * 0.0452 + ry2 * 0.0495) * 0.5 + Math.cos(rx4 * 0.0561 - ry4 * 0.0484) * 0.5;
+      const b7 = Math.sin(rx3 * 0.118 - ry3 * 0.104 + 1.4) * 0.5 + Math.cos(rx1 * 0.135 + ry4 * 0.122) * 0.5;
+
+      const macroBiome = b1 * 0.55 + b2 * 0.45; // Broad regional variation (-1 to +1)
+      const mesoPatch = b3 * 0.60 + b4 * 0.40;   // Medium continuous meadow/loam patches (-1 to +1)
+      // High-frequency multi-frequency random noise and chromatic dappling
+      const microNoise1 = b5 * 0.12 + b6 * 0.08 + b7 * 0.05;
+      const microNoise2 = Math.sin(rx4 * 0.082 - ry1 * 0.076 + 2.1) * 0.10 + Math.cos(rx2 * 0.145 + ry3 * 0.138) * 0.06;
+      const microJitter = (Math.sin(rx1 * 0.28 + ry2 * 0.24) * Math.cos(rx3 * 0.31 - ry4 * 0.27)) * 0.07;
+
+      // Independent multi-scale random spatial noise fields for separate Saturation and Luminance modulation
+      const sn1 = Math.sin(rx1 * 0.0035 + 1.7) * Math.cos(ry3 * 0.0041 - 0.8);
+      const sn2 = Math.sin(rx2 * 0.0125 - ry1 * 0.0112 + 2.3) * 0.6 + Math.cos(rx4 * 0.0154 + ry2 * 0.0138) * 0.4;
+      const sn3 = Math.sin(rx3 * 0.048 - ry4 * 0.042) * 0.5 + Math.cos(rx1 * 0.062 + ry2 * 0.055) * 0.5;
+      const satNoise = sn1 * 0.55 + sn2 * 0.30 + sn3 * 0.15; // [-1, 1]
+
+      const ln1 = Math.sin(rx3 * 0.0029 - 0.9) * Math.cos(ry2 * 0.0033 + 1.4);
+      const ln2 = Math.sin(rx4 * 0.0098 + ry3 * 0.0087 - 1.6) * 0.6 + Math.cos(rx1 * 0.0142 - ry4 * 0.0128) * 0.4;
+      const ln3 = Math.sin(rx2 * 0.041 + ry1 * 0.037 + 0.5) * 0.5 + Math.cos(rx3 * 0.057 - ry2 * 0.049) * 0.5;
+      const lumNoise = ln1 * 0.55 + ln2 * 0.30 + ln3 * 0.15; // [-1, 1]
+
+      // Irregular multi-scale continuous noise specifically modulating green darkness and saturation
+      const gn1 = Math.sin(rx1 * 0.0019 + 2.1) * Math.cos(ry2 * 0.0016 - 1.1);
+      const gn2 = Math.sin(rx3 * 0.0054 - ry1 * 0.0047 + 0.7) * 0.6 + Math.cos(rx2 * 0.0067 + ry4 * 0.0059) * 0.4;
+      const gn3 = Math.sin(rx4 * 0.017 + ry3 * 0.015) * 0.5 + Math.cos(rx1 * 0.021 - ry2 * 0.018) * 0.5;
+      const greenVariance = gn1 * 0.55 + gn2 * 0.30 + gn3 * 0.15; // [-1, 1], irregular non-uniform spatial distribution
+
+      // Organic wildflower bloom fields
+      const bloomField1 = Math.sin(rx3 * 0.0042 + 1.2) * Math.cos(ry4 * 0.0038 - 0.9);
+      const bloomField2 = Math.sin(rx2 * 0.0075 - 0.8) * Math.cos(rx1 * 0.0068 + 1.5);
 
       let r, g, b;
       if (nearShore) {
         // Wet riverstone sand & gravel shore
-        r = 0.48 + mesoPatch * 0.10 + microGrain;
-        g = 0.44 + mesoPatch * 0.08 + microGrain;
-        b = 0.35 + mesoPatch * 0.06 + microGrain;
-      } else if (nz < 0.74) {
-        // Steep granite & slate cliff face (faceted mineral rock)
-        const rockTone = 0.31 + (1.0 - nz) * 0.16 + macroBiome * 0.04 + microGrain;
-        r = rockTone * 1.04;
+        r = 0.48 + mesoPatch * 0.08 + microNoise1;
+        g = 0.42 + mesoPatch * 0.06 + microNoise2;
+        b = 0.32 + mesoPatch * 0.05 + microJitter;
+      } else if (nz < 0.68) {
+        // Steep craggy granite & slate cliff face (faceted mineral rock)
+        const rockTone = 0.34 + (1.0 - nz) * 0.22 + macroBiome * 0.06 + microNoise1 * 0.8;
+        r = rockTone * 1.05;
         g = rockTone * 1.00;
-        b = rockTone * 1.08;
-      } else if (nz < 0.86) {
-        // Transitional rocky hillsides and upland slopes
-        if (macroBiome > 0.1) {
-          // Mossy hill slope
-          r = 0.25 + macroBiome * 0.04 + mesoPatch * 0.06 + microGrain;
-          g = 0.33 + macroBiome * 0.04 + mesoPatch * 0.06 + microGrain;
-          b = 0.21 + mesoPatch * 0.04 + microGrain;
+        b = rockTone * 1.07;
+      } else if (nz < 0.84) {
+        // Transitional rocky hillsides, scree, and upland slopes
+        if (macroBiome > 0.05) {
+          // Mossy rock slope (darker, desaturated olive-moss)
+          r = 0.18 + macroBiome * 0.04 + mesoPatch * 0.04 + microNoise1;
+          g = 0.24 + macroBiome * 0.04 + mesoPatch * 0.05 + microNoise2;
+          b = 0.15 + mesoPatch * 0.03;
         } else {
-          // Earthy scree & clay slope
-          r = 0.33 - macroBiome * 0.05 + mesoPatch * 0.08 + microGrain;
-          g = 0.32 - macroBiome * 0.04 + mesoPatch * 0.06 + microGrain;
-          b = 0.24 - macroBiome * 0.03 + mesoPatch * 0.04 + microGrain;
+          // Earthy scree & clay slope (warm stone & terracotta clay)
+          r = 0.44 - macroBiome * 0.05 + mesoPatch * 0.08 + microNoise1;
+          g = 0.33 - macroBiome * 0.04 + mesoPatch * 0.06 + microNoise2;
+          b = 0.23 - macroBiome * 0.03 + mesoPatch * 0.05;
         }
       } else if (h > 240.0) {
         // High mountain frost & snow-dusted ridges
         const sNorm = Math.min(1.0, (h - 240.0) / 100.0);
-        r = 0.52 + sNorm * 0.38 + macroBiome * 0.03;
-        g = 0.54 + sNorm * 0.36 + macroBiome * 0.03;
-        b = 0.58 + sNorm * 0.34 + macroBiome * 0.02;
+        r = 0.54 + sNorm * 0.36 + macroBiome * 0.03 + microNoise1 * 0.3;
+        g = 0.57 + sNorm * 0.34 + macroBiome * 0.03 + microNoise1 * 0.3;
+        b = 0.62 + sNorm * 0.32 + macroBiome * 0.03 + microNoise1 * 0.3;
       } else if (h > 120.0) {
-        // Alpine moorland / steppe
+        // Alpine moorland / steppe (weathered heather & dusky moss steppe)
         const aNorm = Math.min(1.0, (h - 120.0) / 120.0);
-        r = 0.30 + aNorm * 0.14 + mesoPatch * 0.08 + microGrain;
-        g = 0.33 + aNorm * 0.08 + mesoPatch * 0.06 + microGrain;
-        b = 0.25 + aNorm * 0.12 + mesoPatch * 0.06 + microGrain;
+        r = 0.24 + aNorm * 0.08 + mesoPatch * 0.06 + microNoise1;
+        g = 0.27 + aNorm * 0.06 + mesoPatch * 0.05 + microNoise2;
+        b = 0.19 + aNorm * 0.07 + mesoPatch * 0.05;
       } else {
-        // Lowland & Rolling Pasture: Natural, desaturated organic landscape
+        // Lowland & Rolling Pasture: Organic landscape with irregularly darker, less saturated greens
         const hLow = Math.min(1.0, h / 120.0);
-        if (macroBiome > 0.25) {
-          // Biome A: Deep Clover & Dense Forest Turf
-          r = 0.21 + hLow * 0.04 + mesoPatch * 0.05 + microGrain;
-          g = 0.32 + hLow * 0.04 + mesoPatch * 0.06 + microGrain;
-          b = 0.19 + hLow * 0.03 + mesoPatch * 0.04 + microGrain;
-        } else if (macroBiome < -0.22) {
-          // Biome B: Sun-bleached Golden Prairie / Dry Straw Turf
-          r = 0.34 + hLow * 0.05 + mesoPatch * 0.07 + microGrain;
-          g = 0.35 + hLow * 0.04 + mesoPatch * 0.05 + microGrain;
-          b = 0.23 + hLow * 0.03 + mesoPatch * 0.04 + microGrain;
-        } else if (mesoPatch > 0.06) {
-          // Biome C: Warm Ochre Loam / Earthy Clearing
-          r = 0.31 + hLow * 0.04 + mesoPatch * 0.08 + microGrain;
-          g = 0.31 + hLow * 0.03 + mesoPatch * 0.06 + microGrain;
-          b = 0.22 + hLow * 0.03 + mesoPatch * 0.04 + microGrain;
+
+        // Knoll sun-facing highlight
+        const knollSun = Math.max(0, Math.sin(rx2 * 0.022 + 1.2) * Math.cos(ry1 * 0.019));
+
+        if (mesoPatch > 0.18) {
+          // Biome: Warm Earthy Loam, Terracotta Clay & Exposed Silt
+          r = 0.48 + hLow * 0.04 + mesoPatch * 0.12 + microNoise1;
+          g = 0.30 + hLow * 0.03 + mesoPatch * 0.06 + microNoise2 * 0.6;
+          b = 0.18 + hLow * 0.02 + mesoPatch * 0.04;
+        } else if (macroBiome > 0.18) {
+          // Biome: Deep Moss, Conifer & Forest Swales (irregularly darker and muted)
+          const gLvl = 0.20 + (greenVariance + 1.0) * 0.04; // 0.20 - 0.28 (dark forest greens)
+          const rLvl = 0.13 + (greenVariance + 1.0) * 0.02;
+          r = rLvl + hLow * 0.03 + mesoPatch * 0.04 + microNoise1 * 0.5;
+          g = gLvl + hLow * 0.03 + mesoPatch * 0.05 + microNoise2;
+          b = 0.12 + hLow * 0.02 + mesoPatch * 0.03;
+        } else if (macroBiome < -0.18) {
+          // Biome: Sun-Drenched Golden Prairie & Amber Fescue Grass
+          r = 0.48 + hLow * 0.05 + mesoPatch * 0.07 + microNoise1 + knollSun * 0.06;
+          g = 0.42 + hLow * 0.04 + mesoPatch * 0.06 + microNoise2 + knollSun * 0.04;
+          b = 0.19 + hLow * 0.03 + mesoPatch * 0.03;
+        } else if (mesoPatch < -0.16) {
+          // Biome: Highland Moorland with Heather Lilac & Slate Purple Tones
+          r = 0.34 + hLow * 0.03 + mesoPatch * 0.05 + microNoise1;
+          g = 0.29 + hLow * 0.03 + mesoPatch * 0.04 + microNoise2 * 0.7;
+          b = 0.42 + hLow * 0.04 + mesoPatch * 0.06 + microJitter;
         } else {
-          // Biome D: Natural Temperate Meadow Grass
-          r = 0.25 + hLow * 0.05 + mesoPatch * 0.06 + microGrain;
-          g = 0.33 + hLow * 0.04 + mesoPatch * 0.07 + microGrain;
-          b = 0.21 + hLow * 0.03 + mesoPatch * 0.05 + microGrain;
+          // Biome: Grounded Pasture Meadow (irregularly darker, earthy, less saturated)
+          const gLvl = 0.22 + (greenVariance + 1.0) * 0.045; // 0.22 - 0.31 (much darker than earlier 0.42)
+          const rLvl = 0.16 + (greenVariance + 1.0) * 0.025;
+          r = rLvl + hLow * 0.03 + mesoPatch * 0.05 + microNoise1 + knollSun * 0.03;
+          g = gLvl + hLow * 0.03 + mesoPatch * 0.05 + microNoise2 + knollSun * 0.03;
+          b = 0.13 + hLow * 0.02 + mesoPatch * 0.03;
+        }
+
+        // Distinct organic wildflower bloom flecks (gentle natural hues)
+        if (bloomField1 > 0.58 && h < 75) {
+          // Golden Buttercups and Yellow Marigolds
+          const s = (bloomField1 - 0.58) / 0.42;
+          r += 0.13 * s;
+          g += 0.09 * s;
+          b -= 0.03 * s;
+        } else if (bloomField2 > 0.64 && h > 20 && h < 95) {
+          // Heather & Wild Clover Blossom (Lilac/Rose)
+          const s = (bloomField2 - 0.64) / 0.36;
+          r += 0.11 * s;
+          g += 0.03 * s;
+          b += 0.11 * s;
         }
       }
 
-      colors[i * 3] = Math.max(0, Math.min(1, r));
-      colors[i * 3 + 1] = Math.max(0, Math.min(1, g));
-      colors[i * 3 + 2] = Math.max(0, Math.min(1, b));
+      // 1. Calculate perceived luminance (Rec. 709)
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+      // 2. Reduce saturation: specifically make greens darker and less saturated, applied IRREGULARLY across the world
+      let satFactor = 0.65;
+      if (g > r && g > b) {
+        // Green surface: apply irregular non-uniform desaturation
+        // Areas with lower greenVariance drop down to ~0.38 - 0.44 (deep desaturated moss/peat)
+        // Areas with higher greenVariance sit around ~0.52 - 0.58
+        satFactor = 0.48 + greenVariance * 0.12;
+      }
+      if (satNoise < -0.10) {
+        // Dedicated desaturated coloration spots (faded, dusty, dry earth patches)
+        const t = Math.min(1.0, (-0.10 - satNoise) / 0.65);
+        satFactor -= t * 0.18;
+      }
+      satFactor = Math.max(0.28, Math.min(0.78, satFactor));
+
+      r = lum + (r - lum) * satFactor;
+      g = lum + (g - lum) * satFactor;
+      b = lum + (b - lum) * satFactor;
+
+      // 3. Reduce luminance separately: targeted low-luminance spots
+      let lumFactor = 1.0; // Baseline retains natural brightness
+      if (lumNoise < -0.15) {
+        // Subtle natural earth tone variation (never harsh dark spots)
+        const t = Math.min(1.0, (-0.15 - lumNoise) / 0.65);
+        lumFactor = 1.0 - t * 0.16;
+      } else if (lumNoise > 0.40) {
+        // Sunlit clearing/ridge highlight
+        const t = Math.min(1.0, (lumNoise - 0.40) / 0.60);
+        lumFactor = 1.0 + t * 0.15;
+      }
+
+      r *= lumFactor;
+      g *= lumFactor;
+      b *= lumFactor;
+
+      colors[i * 3] = Math.max(0.04, Math.min(0.98, r));
+      colors[i * 3 + 1] = Math.max(0.04, Math.min(0.98, g));
+      colors[i * 3 + 2] = Math.max(0.04, Math.min(0.98, b));
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const { diffuseMap, normalMap, roughnessMap } = this.createTerrainDetailMaps();
 
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshPhongMaterial({
       map: diffuseMap,
       vertexColors: true,
-      roughness: 0.84,
-      metalness: 0.04,
+      specular: 0x000000, // Strictly non-reflective, black specular = zero shiny light reflection
+      shininess: 0,       // No specular glossiness or glare
+      reflectivity: 0,    // No environment reflections
       normalMap: normalMap,
-      normalScale: new THREE.Vector2(0.9, 0.9),
-      roughnessMap: roughnessMap,
+      normalScale: new THREE.Vector2(0.85, 0.85),
       flatShading: false,
     });
 
@@ -1477,79 +1665,276 @@ export class Renderer3D {
     startBar.rotation.z = roadAngle;
     this.decorGroup.add(startBar);
 
-    // 3. Sleek 3D Overhead Gantry Arch with 5 F1 Starting Light Pods & Double-Sided LED Scoreboard OVER the Arch
+    // 3. Heavy-Duty Motorsport Pipe Scaffold Arch & Overhead Box Truss
     const gantryGroup = new THREE.Group();
     const archBeamZ = 15.5; // High clearance under the main arch beam
     const plateHeight = 6.2;
     const plateDepth = 1.8;
 
     // Scoreboard is mounted OVER the arch crossbeam
-    const scoreboardZ = archBeamZ + 1.0 + (plateHeight * 0.5) + 0.4;
-    const totalColHeight = scoreboardZ + plateHeight * 0.5 + 0.8;
-    const pillarRadius = 1.3;
-    const pillarClearance = 7.5; // Margin outside road edge
+    const scoreboardZ = archBeamZ + 1.2 + (plateHeight * 0.5) + 0.4;
+    const totalColHeight = scoreboardZ + plateHeight * 0.5 + 1.2;
+    const pillarClearance = 8.5; // Margin outside road edge
 
-    const innerPillarPos = new THREE.Vector3(ix - nx * pillarClearance, iy - ny * pillarClearance, totalColHeight / 2);
-    const outerPillarPos = new THREE.Vector3(ox + nx * pillarClearance, oy + ny * pillarClearance, totalColHeight / 2);
-    const spanDist = innerPillarPos.distanceTo(outerPillarPos);
+    const innerCenter = new THREE.Vector3(ix - nx * pillarClearance, iy - ny * pillarClearance, 0);
+    const outerCenter = new THREE.Vector3(ox + nx * pillarClearance, oy + ny * pillarClearance, 0);
+    const spanDist = innerCenter.distanceTo(outerCenter);
     const plateWidth = Math.min(38.0, spanDist * 0.72);
 
-    const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8, // Brushed titanium / aluminum steel
-      metalness: 0.60,
-      roughness: 0.32,
+    const latDir = new THREE.Vector3().subVectors(outerCenter, innerCenter);
+    latDir.z = 0;
+    latDir.normalize();
+    const longDir = new THREE.Vector3(tx, ty, 0).normalize();
+    const beamAngle = Math.atan2(latDir.y, latDir.x);
+
+    // Premium Galvanized Steel & Aluminum Pipe Scaffold Materials
+    const scaffoldMat = new THREE.MeshStandardMaterial({
+      color: 0xc8d1dc, // Galvanized tubular steel pipe
+      metalness: 0.88,
+      roughness: 0.24,
     });
-    const beamMat = new THREE.MeshStandardMaterial({
-      color: 0xcfd8dc, // Bright aerospace silver aluminum truss
-      metalness: 0.65,
-      roughness: 0.28,
+    const chordMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0, // Structural aluminum heavy main chords
+      metalness: 0.82,
+      roughness: 0.20,
+    });
+    const couplerMat = new THREE.MeshStandardMaterial({
+      color: 0x475569, // Forged steel scaffolding coupler clamps
+      metalness: 0.70,
+      roughness: 0.40,
+    });
+    const safetyMat = new THREE.MeshStandardMaterial({
+      color: 0xe11d48, // FIA motorsport crimson high-vis clamp rings
+      metalness: 0.35,
+      roughness: 0.30,
     });
     const podHousingMat = new THREE.MeshStandardMaterial({
-      color: 0x334155, // Clean graphite pod housing
-      metalness: 0.50,
-      roughness: 0.35,
+      color: 0x1e293b,
+      metalness: 0.60,
+      roughness: 0.30,
     });
 
-    // Left & Right Vertical Columns extending full height
-    const cylGeo = new THREE.CylinderGeometry(pillarRadius, pillarRadius, totalColHeight, 16);
-    cylGeo.rotateX(Math.PI / 2);
+    // Helper to add a 3D tubular pipe connecting two 3D vector points
+    const addPipe = (p1, p2, radius = 0.16, mat = scaffoldMat) => {
+      const v = new THREE.Vector3().subVectors(p2, p1);
+      const len = v.length();
+      if (len < 0.05) return null;
+      const geo = new THREE.CylinderGeometry(radius, radius, len, 8);
+      geo.rotateX(Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.addVectors(p1, p2).multiplyScalar(0.5);
+      mesh.lookAt(p2);
+      mesh.castShadow = true;
+      gantryGroup.add(mesh);
+      return mesh;
+    };
 
-    const innerCol = new THREE.Mesh(cylGeo, pillarMat);
-    innerCol.position.copy(innerPillarPos);
-    innerCol.castShadow = true;
-    gantryGroup.add(innerCol);
+    // Helper to add coupler clamp collar at node junctions
+    const addCoupler = (pos, r = 0.28, mat = couplerMat) => {
+      const geo = new THREE.CylinderGeometry(r, r, 0.32, 8);
+      geo.rotateX(Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      gantryGroup.add(mesh);
+      return mesh;
+    };
 
-    const outerCol = new THREE.Mesh(cylGeo, pillarMat);
-    outerCol.position.copy(outerPillarPos);
-    outerCol.castShadow = true;
-    gantryGroup.add(outerCol);
+    // Helper to add heavy base-jack footplates on ground
+    const addBaseJack = (pos) => {
+      const plateGeo = new THREE.BoxGeometry(0.85, 0.85, 0.14);
+      const plate = new THREE.Mesh(plateGeo, couplerMat);
+      plate.position.set(pos.x, pos.y, 0.07);
+      gantryGroup.add(plate);
 
-    // Pillar Base Footing Collar (FIA red/white motorsport styling)
-    const baseMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.35, metalness: 0.2 });
-    const baseGeo = new THREE.CylinderGeometry(pillarRadius * 1.35, pillarRadius * 1.45, 2.4, 16);
-    baseGeo.rotateX(Math.PI / 2);
-    const innerBase = new THREE.Mesh(baseGeo, baseMat);
-    innerBase.position.set(innerPillarPos.x, innerPillarPos.y, 1.2);
-    gantryGroup.add(innerBase);
-    const outerBase = new THREE.Mesh(baseGeo, baseMat);
-    outerBase.position.set(outerPillarPos.x, outerPillarPos.y, 1.2);
-    gantryGroup.add(outerBase);
+      const collarGeo = new THREE.CylinderGeometry(0.28, 0.32, 0.45, 8);
+      collarGeo.rotateX(Math.PI / 2);
+      const collar = new THREE.Mesh(collarGeo, safetyMat);
+      collar.position.set(pos.x, pos.y, 0.35);
+      gantryGroup.add(collar);
+    };
 
-    // Main Arch Horizontal Crossbeam spanning across the pillars
-    const beamGeo = new THREE.BoxGeometry(spanDist + 3.0, 2.0, 1.8);
-    const beam = new THREE.Mesh(beamGeo, beamMat);
+    // -------------------------------------------------------------
+    // 1. Two Quad-Tube Scaffold Pillar Towers (Inner & Outer)
+    // -------------------------------------------------------------
+    const towerW = 2.4; // width across track
+    const towerD = 2.8; // depth along track
+    const towerH = totalColHeight;
+    const towerLevels = [0.8, 3.2, 5.6, 8.0, 10.4, 12.8, 15.2, 17.6, 20.0, towerH];
 
-    const gantryCenter = new THREE.Vector3().addVectors(innerPillarPos, outerPillarPos).multiplyScalar(0.5);
-    const archBeamPos = gantryCenter.clone();
-    archBeamPos.z = archBeamZ;
-    beam.position.copy(archBeamPos);
+    const buildScaffoldTower = (towerCenter, isOuter = false) => {
+      // 4 Corner Verticals (Standards)
+      const offsets = [
+        { dx: -towerW * 0.5, dy: -towerD * 0.5 },
+        { dx:  towerW * 0.5, dy: -towerD * 0.5 },
+        { dx:  towerW * 0.5, dy:  towerD * 0.5 },
+        { dx: -towerW * 0.5, dy:  towerD * 0.5 },
+      ];
 
-    const beamAngle = Math.atan2(outerPillarPos.y - innerPillarPos.y, outerPillarPos.x - innerPillarPos.x);
-    beam.rotation.z = beamAngle;
-    beam.castShadow = true;
-    gantryGroup.add(beam);
+      const corners = offsets.map(o => {
+        const pt = towerCenter.clone();
+        pt.addScaledVector(latDir, o.dx);
+        pt.addScaledVector(longDir, o.dy);
+        return pt;
+      });
 
-    // 4. Digital Overhead Scoreboard Housing (Mounted OVER the arch crossbeam)
+      // Standards (Vertical Pipes) & Base Jacks
+      for (const c of corners) {
+        addBaseJack(c);
+        const pBottom = c.clone();
+        pBottom.z = 0.1;
+        const pTop = c.clone();
+        pTop.z = towerH;
+        addPipe(pBottom, pTop, 0.22, chordMat);
+      }
+
+      // Horizontal Ledger/Transom Rungs & Couplers at each elevation level
+      for (const z of towerLevels) {
+        const ring = corners.map(c => {
+          const pt = c.clone();
+          pt.z = z;
+          addCoupler(pt, 0.30, z % 4.8 < 1.0 ? safetyMat : couplerMat);
+          return pt;
+        });
+
+        for (let j = 0; j < 4; j++) {
+          const next = (j + 1) % 4;
+          addPipe(ring[j], ring[next], 0.15, scaffoldMat);
+        }
+      }
+
+      // Diagonal X-Bracing on Tower Faces
+      for (let i = 0; i < towerLevels.length - 1; i++) {
+        const z1 = towerLevels[i];
+        const z2 = towerLevels[i + 1];
+
+        // Diagonal on Front Face (facing incoming cars)
+        const f0_b = corners[0].clone(); f0_b.z = z1;
+        const f1_t = corners[1].clone(); f1_t.z = z2;
+        const f0_t = corners[0].clone(); f0_t.z = z2;
+        const f1_b = corners[1].clone(); f1_b.z = z1;
+        addPipe(f0_b, f1_t, 0.13, scaffoldMat);
+        addPipe(f0_t, f1_b, 0.13, scaffoldMat);
+
+        // Diagonal on Back Face
+        const b3_b = corners[3].clone(); b3_b.z = z1;
+        const b2_t = corners[2].clone(); b2_t.z = z2;
+        const b3_t = corners[3].clone(); b3_t.z = z2;
+        const b2_b = corners[2].clone(); b2_b.z = z1;
+        addPipe(b3_b, b2_t, 0.13, scaffoldMat);
+        addPipe(b3_t, b2_b, 0.13, scaffoldMat);
+
+        // Outside face bracing
+        const outIdxA = isOuter ? 1 : 0;
+        const outIdxB = isOuter ? 2 : 3;
+        const oA_b = corners[outIdxA].clone(); oA_b.z = z1;
+        const oB_t = corners[outIdxB].clone(); oB_t.z = z2;
+        const oA_t = corners[outIdxA].clone(); oA_t.z = z2;
+        const oB_b = corners[outIdxB].clone(); oB_b.z = z1;
+        addPipe(oA_b, oB_t, 0.13, scaffoldMat);
+        addPipe(oA_t, oB_b, 0.13, scaffoldMat);
+      }
+
+      // Outer maintenance pipe ladder
+      if (isOuter) {
+        const ladSideA = corners[1].clone().addScaledVector(latDir, 0.45);
+        const ladSideB = corners[2].clone().addScaledVector(latDir, 0.45);
+        const lAb = ladSideA.clone(); lAb.z = 0.2;
+        const lAt = ladSideA.clone(); lAt.z = towerH;
+        const lBb = ladSideB.clone(); lBb.z = 0.2;
+        const lBt = ladSideB.clone(); lBt.z = towerH;
+        addPipe(lAb, lAt, 0.10, chordMat);
+        addPipe(lBb, lBt, 0.10, chordMat);
+        for (let lz = 1.0; lz < towerH - 0.5; lz += 0.75) {
+          const r1 = ladSideA.clone(); r1.z = lz;
+          const r2 = ladSideB.clone(); r2.z = lz;
+          addPipe(r1, r2, 0.08, scaffoldMat);
+        }
+      }
+    };
+
+    buildScaffoldTower(innerCenter, false);
+    buildScaffoldTower(outerCenter, true);
+
+    // -------------------------------------------------------------
+    // 2. Overhead Modular Pipe Scaffold Box Truss (Cross-Track Span)
+    // -------------------------------------------------------------
+    const trussH = 2.4; // 2.4m vertical height of box truss
+    const trussD = 2.2; // 2.2m depth along track
+    const trussZBottom = archBeamZ - trussH * 0.5;
+    const trussZTop = archBeamZ + trussH * 0.5;
+
+    // 4 Long Continuous Chords across the full track width
+    const chordOffsets = [
+      { dy: -trussD * 0.5, z: trussZBottom }, // Bottom-Front
+      { dy:  trussD * 0.5, z: trussZBottom }, // Bottom-Back
+      { dy: -trussD * 0.5, z: trussZTop },    // Top-Front
+      { dy:  trussD * 0.5, z: trussZTop },    // Top-Back
+    ];
+
+    for (const co of chordOffsets) {
+      const pStart = innerCenter.clone().addScaledVector(longDir, co.dy);
+      pStart.z = co.z;
+      const pEnd = outerCenter.clone().addScaledVector(longDir, co.dy);
+      pEnd.z = co.z;
+      addPipe(pStart, pEnd, 0.22, chordMat);
+    }
+
+    // Modular Cross-Bays across the track span
+    const baySpacing = 3.2; // Every ~3.2m along the span
+    const numBays = Math.max(8, Math.floor(spanDist / baySpacing));
+
+    for (let b = 0; b <= numBays; b++) {
+      const frac = b / numBays;
+      const bayCenter = new THREE.Vector3().lerpVectors(innerCenter, outerCenter, frac);
+
+      const pBF = bayCenter.clone().addScaledVector(longDir, -trussD * 0.5); pBF.z = trussZBottom;
+      const pBB = bayCenter.clone().addScaledVector(longDir,  trussD * 0.5); pBB.z = trussZBottom;
+      const pTF = bayCenter.clone().addScaledVector(longDir, -trussD * 0.5); pTF.z = trussZTop;
+      const pTB = bayCenter.clone().addScaledVector(longDir,  trussD * 0.5); pTB.z = trussZTop;
+
+      // Vertical & transverse ring struts at bay divider
+      addPipe(pBF, pTF, 0.15, scaffoldMat);
+      addPipe(pBB, pTB, 0.15, scaffoldMat);
+      addPipe(pBF, pBB, 0.15, scaffoldMat);
+      addPipe(pTF, pTB, 0.15, scaffoldMat);
+
+      addCoupler(pBF, 0.28, couplerMat);
+      addCoupler(pBB, 0.28, couplerMat);
+      addCoupler(pTF, 0.28, couplerMat);
+      addCoupler(pTB, 0.28, couplerMat);
+
+      // Diagonal X-Braces in each bay
+      if (b < numBays) {
+        const nextFrac = (b + 1) / numBays;
+        const nextCenter = new THREE.Vector3().lerpVectors(innerCenter, outerCenter, nextFrac);
+
+        const npBF = nextCenter.clone().addScaledVector(longDir, -trussD * 0.5); npBF.z = trussZBottom;
+        const npBB = nextCenter.clone().addScaledVector(longDir,  trussD * 0.5); npBB.z = trussZBottom;
+        const npTF = nextCenter.clone().addScaledVector(longDir, -trussD * 0.5); npTF.z = trussZTop;
+        const npTB = nextCenter.clone().addScaledVector(longDir,  trussD * 0.5); npTB.z = trussZTop;
+
+        // Front Face X-Brace (facing oncoming cars)
+        addPipe(pBF, npTF, 0.13, scaffoldMat);
+        addPipe(pTF, npBF, 0.13, scaffoldMat);
+
+        // Back Face X-Brace
+        addPipe(pBB, npTB, 0.13, scaffoldMat);
+        addPipe(pTB, npBB, 0.13, scaffoldMat);
+
+        // Bottom Face X-Brace (visible when driving directly under gantry)
+        addPipe(pBF, npBB, 0.13, scaffoldMat);
+        addPipe(pBB, npBF, 0.13, scaffoldMat);
+
+        // Top Face X-Brace
+        addPipe(pTF, npTB, 0.13, scaffoldMat);
+        addPipe(pTB, npTF, 0.13, scaffoldMat);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 3. Digital Overhead Scoreboard Housing (Mounted ATOP Scaffold Truss)
+    // -------------------------------------------------------------
+    const gantryCenter = new THREE.Vector3().addVectors(innerCenter, outerCenter).multiplyScalar(0.5);
     const scoreboardCenter = gantryCenter.clone();
     scoreboardCenter.z = scoreboardZ;
 
@@ -1565,20 +1950,23 @@ export class Renderer3D {
     plateHousing.castShadow = true;
     gantryGroup.add(plateHousing);
 
-    // Heavy-duty Steel Mounting Pylons connecting Scoreboard down into Arch Crossbeam
-    const strutMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.2 });
-    const strutH = (scoreboardZ - plateHeight * 0.5) - (archBeamZ + 0.9);
+    // Heavy-duty Steel Mounting Pylons clamping Scoreboard down to Scaffold Truss
+    const strutH = (scoreboardZ - plateHeight * 0.5) - trussZTop;
     for (const sx of [-plateWidth * 0.38, -plateWidth * 0.14, plateWidth * 0.14, plateWidth * 0.38]) {
-      const strutGeo = new THREE.CylinderGeometry(0.35, 0.35, strutH + 0.3, 8);
-      strutGeo.rotateX(Math.PI / 2);
-      const strut = new THREE.Mesh(strutGeo, strutMat);
-      const sOffset = new THREE.Vector3(
-        Math.cos(beamAngle) * sx,
-        Math.sin(beamAngle) * sx,
-        -plateHeight * 0.5 - strutH * 0.5
-      );
-      strut.position.addVectors(scoreboardCenter, sOffset);
-      gantryGroup.add(strut);
+      for (const sy of [-plateDepth * 0.35, plateDepth * 0.35]) {
+        const sBottom = scoreboardCenter.clone();
+        sBottom.addScaledVector(latDir, sx);
+        sBottom.addScaledVector(longDir, sy);
+        sBottom.z = trussZTop;
+
+        const sTop = scoreboardCenter.clone();
+        sTop.addScaledVector(latDir, sx);
+        sTop.addScaledVector(longDir, sy);
+        sTop.z = scoreboardZ - plateHeight * 0.5;
+
+        addPipe(sBottom, sTop, 0.18, chordMat);
+        addCoupler(sBottom, 0.28, couplerMat);
+      }
     }
 
     // Glowing Cyan Racing Neon Trim Framing Border around the Scoreboard
@@ -1598,31 +1986,55 @@ export class Renderer3D {
     plateHousing.add(btmTrim);
 
     // 5 F1 Starting Light Pods mounted under the arch crossbeam facing incoming cars
+    // 5 F1 Starting Light Pods mounted on Cantilever Scaffolding Booms OUT IN FRONT of the truss
+    // Suspended below and forward towards oncoming cars so no truss pipes or chords ever block line-of-sight!
     this.gantryLedMats = [];
     this.gantryLeds = [];
     this._lastStartLightStep = -1;
+    const podClearZ = trussZBottom - 1.4; // 1.4m below the lowest truss pipe
+    const podForwardOffset = -trussD * 0.5 - 1.6; // 1.6m out in front towards oncoming traffic
+
     for (let i = -2; i <= 2; i++) {
       const housingGeo = new THREE.BoxGeometry(2.2, 1.4, 2.2);
       const housing = new THREE.Mesh(housingGeo, podHousingMat);
-      const offset = new THREE.Vector3(
-        Math.cos(beamAngle) * (i * 5.8),
-        Math.sin(beamAngle) * (i * 5.8),
-        0
-      );
-      housing.position.set(gantryCenter.x + offset.x, gantryCenter.y + offset.y, archBeamZ - 1.2);
+      const latOffset = new THREE.Vector3().copy(latDir).multiplyScalar(i * 5.8);
+
+      // Position pod forward and down, completely outside and clear of all truss pipes
+      const podPos = gantryCenter.clone()
+        .add(latOffset)
+        .addScaledVector(longDir, podForwardOffset);
+      podPos.z = podClearZ;
+
+      housing.position.copy(podPos);
       housing.rotation.z = beamAngle;
       gantryGroup.add(housing);
 
-      // LED bulb facing incoming cars
-      const ledGeo = new THREE.SphereGeometry(0.75, 14, 14);
+      // Cantilevered pipe scaffold boom extending from bottom-front truss chord out to the pod
+      const chordAnchor = gantryCenter.clone()
+        .add(latOffset)
+        .addScaledVector(longDir, -trussD * 0.5);
+      chordAnchor.z = trussZBottom;
+
+      addPipe(chordAnchor, podPos, 0.13, chordMat);
+      addCoupler(chordAnchor, 0.26, safetyMat);
+      addCoupler(podPos, 0.24, couplerMat);
+
+      // Secondary vertical support strut from top-front chord for extra industrial realism
+      const upperChordAnchor = chordAnchor.clone();
+      upperChordAnchor.z = trussZTop;
+      addPipe(upperChordAnchor, podPos, 0.10, scaffoldMat);
+
+      // Large High-Intensity LED bulb facing directly incoming cars
+      const ledGeo = new THREE.SphereGeometry(0.85, 16, 16);
       const ledMat = new THREE.MeshStandardMaterial({
         color: 0xef4444,
         emissive: 0xef4444,
-        emissiveIntensity: 3.2,
+        emissiveIntensity: 3.5,
         roughness: 0.1,
       });
       const led = new THREE.Mesh(ledGeo, ledMat);
-      led.position.addVectors(housing.position, new THREE.Vector3(-tx * 0.8, -ty * 0.8, 0));
+      // Place LED on the front face pointing directly towards approaching cars
+      led.position.addVectors(housing.position, new THREE.Vector3(-tx * 0.95, -ty * 0.95, 0));
       gantryGroup.add(led);
       this.gantryLedMats.push(ledMat);
       this.gantryLeds.push(led);
@@ -1840,10 +2252,13 @@ export class Renderer3D {
       subText = 'GREEN LIGHTS · RACE ON';
       color = '#22c55e'; // Bright Green
       isFinal = true;
-    } else if (isFinished || lapsDone >= maxLaps) {
-      mainText = 'FINISH';
-      subText = 'CHEQUERED FLAG · RACE WINNER';
-      color = '#a3e635'; // Neon Lime Green
+    } else if (isFinished || lapsDone >= maxLaps || (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 0)) {
+      mainText = 'CHEQUERED FLAG';
+      const rem = (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 0)
+        ? `${Math.ceil(sim.checkeredFlagTimer)}s FINISH WINDOW`
+        : 'RACE WINNER';
+      subText = `FINISH · ${rem}`;
+      color = '#fbbf24'; // Radiant Gold
       isFinal = true;
     } else if (lapsRemaining === 1) {
       // 1 lap to go IS the Final Lap (driving lap 5 of 5)
@@ -2469,34 +2884,34 @@ export class Renderer3D {
       textColor = '#ffedd5';
     }
 
-    // High quality translucent glass circular badge
+    // High quality translucent glass circular badge (compact, sleek size)
     ctx.beginPath();
-    ctx.arc(64, 64, 54, 0, Math.PI * 2);
+    ctx.arc(64, 64, 42, 0, Math.PI * 2);
     ctx.fillStyle = badgeBg;
     ctx.fill();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 4.5;
     ctx.strokeStyle = borderColor;
     ctx.stroke();
 
     // Subtle inner accent ring
     ctx.beginPath();
-    ctx.arc(64, 64, 47, 0, Math.PI * 2);
-    ctx.lineWidth = 1.8;
+    ctx.arc(64, 64, 36, 0, Math.PI * 2);
+    ctx.lineWidth = 1.4;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.stroke();
 
-    // Text: position number with extra bold font (clean number without P. prefix)
+    // Text: position number with clean, refined typography (smaller, proportional font)
     const posStr = `${pos}`;
-    const fontSize = posStr.length === 1 ? 58 : posStr.length === 2 ? 48 : 38;
+    const fontSize = posStr.length === 1 ? 40 : posStr.length === 2 ? 32 : 24;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `900 ${fontSize}px "Outfit", "JetBrains Mono", Impact, "Arial Black", sans-serif`;
 
     // Drop shadow
     ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 6;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowOffsetY = 1.5;
 
     ctx.fillStyle = textColor;
     ctx.fillText(posStr, 64, 65);
@@ -2514,12 +2929,12 @@ export class Renderer3D {
       depthTest: true,
       depthWrite: false,
       transparent: true,
-      opacity: 0.78, // Translucent: allows skidmarks and track details to show through clearly
+      opacity: 0.82,
     });
     const sprite = new THREE.Sprite(mat);
-    sprite.renderOrder = 999; // Render on top with alpha transparency after track and skidmarks
-    sprite.scale.set(3.8, 3.8, 1);
-    sprite.position.set(0, 0, 5.8);
+    sprite.renderOrder = 999;
+    sprite.scale.set(2.3, 2.3, 1); // Reduced size: compact, unobtrusive floating standing badge
+    sprite.position.set(0, 0, 4.4); // Floats closer to the car roof
     sprite.visible = false;
     return sprite;
   }
@@ -4240,76 +4655,88 @@ export class Renderer3D {
         continue;
       }
 
-      // Detect skid conditions: heavy/trail braking, cornering slip/drift, burnout launch, or crash slide
-      const isBraking = car.throttle < -0.14 && car.speed > 22;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.055 && car.speed > 24;
-      const isWheelspin = car.throttle > 0.80 && car.speed < 85 && !car.crashed;
-      const isCrashSlide = car.crashed && car.speed > 8;
+      // Smooth, gradual skid intensity modeling (no harsh binary on/off)
+      // 1. Lateral cornering slip: starts with a very soft, faint trace and smoothly darkens as slip increases
+      const slipMag = Math.abs(car.slipAngle || 0);
+      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.025) / 0.14));
+      const slipInt = Math.pow(slipNorm, 1.8) * 0.88;
 
-      if (isBraking || isSlip || isWheelspin || isCrashSlide) {
-        const brakeInt = isBraking ? Math.min(0.85, (-car.throttle - 0.12) * 1.6) : 0;
-        const slipInt = isSlip ? Math.min(0.90, (Math.abs(car.slipAngle || 0) - 0.045) * 3.5) : 0;
-        const spinInt = isWheelspin ? Math.min(0.80, (1.0 - car.speed / 85) * 0.90) : 0;
-        const crashInt = isCrashSlide ? 0.90 : 0;
-        const intensity = Math.min(0.95, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      // 2. Trail braking & heavy lockup: smooth quadratic progression
+      const brakeNorm = (car.throttle < -0.05 && car.speed > 20)
+        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.85))
+        : 0;
+      const brakeInt = Math.pow(brakeNorm, 1.9) * 0.82;
 
-        const cos = Math.cos(car.angle);
-        const sin = Math.sin(car.angle);
-        // Contact patch of Left and Right rear tires (aligned with 3D F1 rear axle)
-        const lx = car.x - cos * 5.6 - sin * 4.6;
-        const ly = -car.y + sin * 5.6 + cos * 4.6;
-        const rx = car.x - cos * 5.6 + sin * 4.6;
-        const ry = -car.y + sin * 5.6 - cos * 4.6;
+      // 3. Launch wheelspin / burnout
+      const spinNorm = (car.throttle > 0.60 && car.speed < 90 && !car.crashed)
+        ? Math.max(0, Math.min(1.0, (car.throttle - 0.60) / 0.40 * (1.0 - car.speed / 90)))
+        : 0;
+      const spinInt = Math.pow(spinNorm, 1.6) * 0.78;
 
-        const prev = this.carPrevTires.get(car);
-        if (prev) {
-          const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.35 && dL < 35) {
-            const hw = 1.05; // half width of tire skid mark (~2.1m wide contact patch)
-            const nx = -sin * hw;
-            const ny = -cos * hw;
+      // 4. Off-track crash slide
+      const crashInt = (car.crashed && car.speed > 6) ? Math.min(0.88, car.speed / 80) : 0;
 
-            // Left tire skid quad
-            this.addSkidQuad(
-              prev.lx - nx, prev.ly - ny,
-              prev.lx + nx, prev.ly + ny,
-              lx - nx, ly - ny,
-              lx + nx, ly + ny,
-              intensity
-            );
+      // Combined continuous intensity (0.00 .. 0.92)
+      const intensity = Math.min(0.92, Math.max(slipInt, brakeInt, spinInt, crashInt));
 
-            // Right tire skid quad
-            this.addSkidQuad(
-              prev.rx - nx, prev.ry - ny,
-              prev.rx + nx, prev.ry + ny,
-              rx - nx, ry - ny,
-              rx + nx, ry + ny,
-              intensity
-            );
+      const cos = Math.cos(car.angle);
+      const sin = Math.sin(car.angle);
+      // Contact patch of Left and Right rear tires (aligned with 3D F1 rear axle)
+      const lx = car.x - cos * 5.6 - sin * 4.6;
+      const ly = -car.y + sin * 5.6 + cos * 4.6;
+      const rx = car.x - cos * 5.6 + sin * 4.6;
+      const ry = -car.y + sin * 5.6 - cos * 4.6;
 
-            // Emit continuous dense vapor plume interpolated along the tyre trajectory
+      const prev = this.carPrevTires.get(car);
+      if (prev && intensity > 0.015) {
+        const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
+        if (dL > 0.35 && dL < 35) {
+          const hw = 1.05; // half width of tire skid mark (~2.1m wide contact patch)
+          const nx = -sin * hw;
+          const ny = -cos * hw;
+
+          // Left tire skid quad
+          this.addSkidQuad(
+            prev.lx - nx, prev.ly - ny,
+            prev.lx + nx, prev.ly + ny,
+            lx - nx, ly - ny,
+            lx + nx, ly + ny,
+            intensity
+          );
+
+          // Right tire skid quad
+          this.addSkidQuad(
+            prev.rx - nx, prev.ry - ny,
+            prev.rx + nx, prev.ry + ny,
+            rx - nx, ry - ny,
+            rx + nx, ry + ny,
+            intensity
+          );
+
+          // Emit continuous vapor plume on heavier scrubbing / slides
+          if (intensity > 0.32) {
             const camDistSq = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
             if (camDistSq < 600 || car === sim.player) {
               const carVx = car.vx || 0;
               const carVy = -(car.vy || 0);
               const numPuffs = Math.max(1, Math.min(3, Math.ceil(dL / 1.4)));
+              const smokeAlpha = (intensity - 0.32) / 0.68;
               for (let s = 1; s <= numPuffs; s++) {
                 const frac = s / numPuffs;
                 const pxL = prev.lx + (lx - prev.lx) * frac;
                 const pyL = prev.ly + (ly - prev.ly) * frac;
                 const pxR = prev.rx + (rx - prev.rx) * frac;
                 const pyR = prev.ry + (ry - prev.ry) * frac;
-                this.addTireSmokePuff(pxL, pyL, 0.40, carVx, carVy, intensity);
-                this.addTireSmokePuff(pxR, pyR, 0.40, carVx, carVy, intensity);
+                this.addTireSmokePuff(pxL, pyL, 0.40, carVx, carVy, smokeAlpha);
+                this.addTireSmokePuff(pxR, pyR, 0.40, carVx, carVy, smokeAlpha);
               }
             }
-            added = true;
           }
+          added = true;
         }
-        this.carPrevTires.set(car, { lx, ly, rx, ry });
-      } else {
-        if (this.carPrevTires.has(car)) this.carPrevTires.delete(car);
       }
+      // Always maintain smooth tire tracking across frames for active cars
+      this.carPrevTires.set(car, { lx, ly, rx, ry });
     }
 
     if (added && this.skidMesh) {
@@ -5068,14 +5495,14 @@ export class Renderer3D {
             if (badge.material.map !== this.eliminatedTexture) {
               badge.material.map = this.eliminatedTexture;
             }
-            badge.scale.set(13.6, 3.8, 1);
+            badge.scale.set(8.2, 2.3, 1);
           } else if (showBadge && rank) {
             badge.visible = true;
             const tex = this.posTextures[rank] || this.posTextures[80];
             if (badge.material.map !== tex) {
               badge.material.map = tex;
             }
-            badge.scale.set(3.8, 3.8, 1);
+            badge.scale.set(2.3, 2.3, 1);
           } else {
             badge.visible = false;
           }
@@ -5163,14 +5590,14 @@ export class Renderer3D {
           if (badge.material.map !== this.eliminatedTexture) {
             badge.material.map = this.eliminatedTexture;
           }
-          badge.scale.set(13.6, 3.8, 1);
+          badge.scale.set(8.2, 2.3, 1);
         } else if (showBadge && rank) {
           badge.visible = true;
           const tex = this.posTextures[rank] || this.posTextures[80];
           if (badge.material.map !== tex) {
             badge.material.map = tex;
           }
-          badge.scale.set(3.8, 3.8, 1);
+          badge.scale.set(2.3, 2.3, 1);
         } else {
           badge.visible = false;
         }

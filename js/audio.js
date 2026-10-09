@@ -673,6 +673,10 @@ export class SpatialAudioEngine {
       osc.stop(now + 0.24);
     } catch {}
   }
+
+  playSuccess() {
+    // Optional success chime
+  }
 }
 
 export const audio = new SpatialAudioEngine();

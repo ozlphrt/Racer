@@ -178,25 +178,41 @@ export class Car {
     // A car is heading in the wrong way if angled > 72° (0.40π rad) away from forward track tangent
     const isWrongWay = Math.abs(headingDiff) > Math.PI * 0.40;
 
-    // If car has crossed finish line: smooth celebration cooldown rollout along track, slowly coming to a complete stop
+    // If car has crossed finish line: smooth F1 in-lap cooldown cruise around the track
     if (this.finished) {
-      if (this.speed > 0.05) {
-        // Natural progressive rollout braking: smooth deceleration until full stop
-        this.speed = Math.max(0, this.speed - (this.speed * 0.35 + 16) * dt);
-        let diff = targetHeading - this.angle;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.angle += diff * Math.min(1, 4.0 * dt);
-        this.vx = Math.cos(this.angle) * this.speed;
-        this.vy = Math.sin(this.angle) * this.speed;
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
-        this.idx = t.nearestIndex(this.x, this.y, this.idx);
-      } else {
-        this.speed = 0;
-        this.vx = 0;
-        this.vy = 0;
+      const targetCooldownSpeed = 130; // ~25% of top speed: smooth in-lap parade/cooldown pace
+
+      if (this.speed > targetCooldownSpeed) {
+        // Smooth progressive throttle lift-off & gentle engine braking (no sudden slamming of brakes)
+        const decel = Math.min(220, (this.speed - targetCooldownSpeed) * 1.5 + 35);
+        this.speed = Math.max(targetCooldownSpeed, this.speed - decel * dt);
+      } else if (this.speed < targetCooldownSpeed * 0.90) {
+        // Gently feed throttle to maintain the relaxing cooldown cruise speed
+        this.speed = Math.min(targetCooldownSpeed, this.speed + 80 * dt);
       }
+
+      // Smooth track centerline guidance: gracefully follow track curvature through all turns
+      const cx = (t.cx && t.cx[this.idx] !== undefined) ? t.cx[this.idx] : this.x;
+      const cy = (t.cy && t.cy[this.idx] !== undefined) ? t.cy[this.idx] : this.y;
+      const tx = (t.tx && t.tx[this.idx] !== undefined) ? t.tx[this.idx] : 1;
+      const ty = (t.ty && t.ty[this.idx] !== undefined) ? t.ty[this.idx] : 0;
+      const nx = -ty;
+      const ny = tx;
+      const lateralDist = (this.x - cx) * nx + (this.y - cy) * ny;
+      // Proportional correction to glide smoothly down the middle of the track
+      const centerCorrection = Math.max(-0.55, Math.min(0.55, -lateralDist * 0.04));
+      const desiredHeading = targetHeading + centerCorrection;
+
+      let diff = desiredHeading - this.angle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.angle += diff * Math.min(1.0, 5.0 * dt);
+
+      this.vx = Math.cos(this.angle) * this.speed;
+      this.vy = Math.sin(this.angle) * this.speed;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.idx = t.nearestIndex(this.x, this.y, this.idx);
       return;
     }
 

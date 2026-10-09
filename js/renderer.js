@@ -879,7 +879,7 @@ export class Renderer {
       ctx.save();
       // Keep badge horizontally upright relative to screen orientation
       ctx.rotate(-car.angle);
-      ctx.translate(0, -W * 0.9 - 9);
+      ctx.translate(0, -W * 0.9 - 6.5);
 
       let badgeBg = 'rgba(8, 14, 26, 0.45)';
       let badgeBorder = 'rgba(56, 189, 248, 0.85)';
@@ -899,18 +899,18 @@ export class Renderer {
 
       ctx.fillStyle = badgeBg;
       ctx.strokeStyle = badgeBorder;
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.arc(0, 0, 8.5, 0, Math.PI * 2);
+      ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = textCol;
-      const fSize = posRank >= 10 ? '9.0px' : '10.5px';
+      const fSize = posRank >= 10 ? '6.5px' : '7.5px';
       ctx.font = `900 ${fSize} "Outfit", "Arial Black", Impact, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${posRank}`, 0, 0.6);
+      ctx.fillText(`${posRank}`, 0, 0.5);
       ctx.restore();
     }
 
@@ -978,53 +978,62 @@ export class Renderer {
         continue;
       }
 
-      const isBraking = car.throttle < -0.16 && car.speed > 25;
-      const isSlip = Math.abs(car.slipAngle || 0) > 0.065 && car.speed > 28;
-      const isWheelspin = car.throttle > 0.85 && car.speed < 75 && !car.crashed;
-      const isCrashSlide = car.crashed && car.speed > 10;
+      // Smooth, gradual skid intensity modeling (no harsh binary on/off)
+      const slipMag = Math.abs(car.slipAngle || 0);
+      const slipNorm = Math.max(0, Math.min(1.0, (slipMag - 0.025) / 0.14));
+      const slipInt = Math.pow(slipNorm, 1.8) * 0.88;
 
-      if (isBraking || isSlip || isWheelspin || isCrashSlide) {
-        const brakeInt = isBraking ? Math.min(0.85, (-car.throttle - 0.14) * 1.6) : 0;
-        const slipInt = isSlip ? Math.min(0.90, (Math.abs(car.slipAngle || 0) - 0.055) * 3.5) : 0;
-        const spinInt = isWheelspin ? Math.min(0.75, (1.0 - car.speed / 75) * 0.85) : 0;
-        const crashInt = isCrashSlide ? 0.85 : 0;
-        const intensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
+      const brakeNorm = (car.throttle < -0.05 && car.speed > 20)
+        ? Math.max(0, Math.min(1.0, (-car.throttle - 0.05) / 0.85))
+        : 0;
+      const brakeInt = Math.pow(brakeNorm, 1.9) * 0.82;
 
-        const cos = Math.cos(car.angle);
-        const sin = Math.sin(car.angle);
-        // Contact patch of Left and Right rear tires
-        const lx = car.x - cos * 8.0 - sin * 5.2;
-        const ly = car.y - sin * 8.0 + cos * 5.2;
-        const rx = car.x - cos * 8.0 + sin * 5.2;
-        const ry = car.y - sin * 8.0 - cos * 5.2;
+      const spinNorm = (car.throttle > 0.60 && car.speed < 90 && !car.crashed)
+        ? Math.max(0, Math.min(1.0, (car.throttle - 0.60) / 0.40 * (1.0 - car.speed / 90)))
+        : 0;
+      const spinInt = Math.pow(spinNorm, 1.6) * 0.78;
 
-        const prev = this.carPrevTires.get(car);
-        if (prev) {
-          const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
-          if (dL > 0.35 && dL < 35) {
-            this.skidmarks.push({
-              x0: prev.lx, y0: prev.ly,
-              x1: lx, y1: ly,
-              alpha: intensity * 0.85
-            });
-            this.skidmarks.push({
-              x0: prev.rx, y0: prev.ry,
-              x1: rx, y1: ry,
-              alpha: intensity * 0.85
-            });
-            if (this.skidmarks.length > maxSkidSegments) {
-              this.skidmarks.splice(0, this.skidmarks.length - maxSkidSegments);
-            }
+      const crashInt = (car.crashed && car.speed > 6) ? Math.min(0.88, car.speed / 80) : 0;
 
-            // Emit continuous ribbon quad smoke
+      const intensity = Math.min(0.90, Math.max(slipInt, brakeInt, spinInt, crashInt));
+
+      const cos = Math.cos(car.angle);
+      const sin = Math.sin(car.angle);
+      // Contact patch of Left and Right rear tires
+      const lx = car.x - cos * 8.0 - sin * 5.2;
+      const ly = car.y - sin * 8.0 + cos * 5.2;
+      const rx = car.x - cos * 8.0 + sin * 5.2;
+      const ry = car.y - sin * 8.0 - cos * 5.2;
+
+      const prev = this.carPrevTires.get(car);
+      if (prev && intensity > 0.015) {
+        const dL = Math.hypot(lx - prev.lx, ly - prev.ly);
+        if (dL > 0.35 && dL < 35) {
+          this.skidmarks.push({
+            x0: prev.lx, y0: prev.ly,
+            x1: lx, y1: ly,
+            alpha: intensity * 0.85
+          });
+          this.skidmarks.push({
+            x0: prev.rx, y0: prev.ry,
+            x1: rx, y1: ry,
+            alpha: intensity * 0.85
+          });
+          if (this.skidmarks.length > maxSkidSegments) {
+            this.skidmarks.splice(0, this.skidmarks.length - maxSkidSegments);
+          }
+
+          // Emit continuous ribbon quad smoke on heavier scrubbing
+          if (intensity > 0.32) {
             const normX = -sin;
             const normY = -cos;
+            const smokeAlpha = (intensity - 0.32) / 0.68 * 0.35;
             this.tireSmokes.push({
               p0x: prev.lx, p0y: prev.ly,
               p1x: lx, p1y: ly,
               nx: normX, ny: normY,
               w0: 1.0, w1: 1.0,
-              alpha: intensity * 0.32,
+              alpha: smokeAlpha,
               life: 1.0,
               decay: 1.45 + Math.random() * 0.35,
             });
@@ -1033,7 +1042,7 @@ export class Renderer {
               p1x: rx, p1y: ry,
               nx: normX, ny: normY,
               w0: 1.0, w1: 1.0,
-              alpha: intensity * 0.32,
+              alpha: smokeAlpha,
               life: 1.0,
               decay: 1.45 + Math.random() * 0.35,
             });
@@ -1042,10 +1051,8 @@ export class Renderer {
             }
           }
         }
-        this.carPrevTires.set(car, { lx, ly, rx, ry });
-      } else {
-        if (this.carPrevTires.has(car)) this.carPrevTires.delete(car);
       }
+      this.carPrevTires.set(car, { lx, ly, rx, ry });
     }
   }
 

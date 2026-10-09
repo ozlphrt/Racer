@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>3D Tree Catalog & Selector · AI Racer</title>
+  <meta name="description" content="Interactive 3D Catalog with 20 distinct procedural tree species. Inspect in 3D, compare styles, and select which trees to feature in the AI Racer terrain.">
+  <meta name="theme-color" content="#070a14">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌲</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/controls/OrbitControls.js"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #070a14;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-border: rgba(148, 163, 184, 0.14);
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.28);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --gold: #f59e0b;
+      --danger: #ef4444;
+      --font: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.12), transparent 70%),
+        radial-gradient(circle at 10% 80%, rgba(56, 189, 248, 0.08), transparent 50%),
+        radial-gradient(circle at 90% 40%, rgba(245, 158, 11, 0.06), transparent 50%);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation Header */
+    header {
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(7, 10, 20, 0.85);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      font-size: 28px;
+      filter: drop-shadow(0 0 12px var(--accent-glow));
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 40%, #10b981 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .counter-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      font-size: 14px;
+      font-weight: 600;
+      color: #34d399;
+      font-family: var(--mono);
+    }
+    .counter-num {
+      font-size: 16px;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+      font-family: var(--font);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(30, 41, 59, 0.8);
+      border-color: var(--card-border);
+      color: var(--text);
+    }
+    .btn-secondary:hover {
+      background: rgba(51, 65, 85, 0.8);
+      border-color: rgba(148, 163, 184, 0.3);
+    }
+
+    /* Main Container */
+    .catalog-container {
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      flex: 1;
+      height: calc(100vh - 73px);
+      overflow: hidden;
+    }
+
+    @media (max-width: 1100px) {
+      .catalog-container {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
+    }
+
+    /* Left Inspection Sidebar */
+    .inspection-sidebar {
+      background: rgba(11, 17, 32, 0.7);
+      border-right: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .viewport-box {
+      width: 100%;
+      height: 380px;
+      background: radial-gradient(circle at 50% 40%, #1e293b 0%, #090d16 100%);
+      position: relative;
+      cursor: grab;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .viewport-box:active {
+      cursor: grabbing;
+    }
+    #tree-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .viewport-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+    .view-badge {
+      background: rgba(5, 7, 15, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      pointer-events: auto;
+    }
+    .view-controls {
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+    }
+    .icon-btn {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    .icon-btn:hover {
+      background: rgba(30, 41, 59, 1);
+      border-color: var(--accent);
+    }
+    .icon-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    .inspection-meta {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      flex: 1;
+    }
+
+    .meta-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .meta-id {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .meta-name {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .meta-cat-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      white-space: nowrap;
+    }
+
+    .meta-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    .meta-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-family: var(--mono);
+    }
+    .stat-val {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-top: 2px;
+    }
+
+    .toggle-select-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      border: 2px solid transparent;
+      margin-top: auto;
+    }
+    .toggle-select-btn.selected {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .toggle-select-btn.selected:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: #ef4444;
+      color: #f87171;
+    }
+    .toggle-select-btn.unselected {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .toggle-select-btn.unselected:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Right Gallery Grid */
+    .gallery-main {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 24px 32px 64px 32px;
+      gap: 20px;
+    }
+
+    .gallery-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .filter-btn:hover {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .filter-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .batch-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .text-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    .text-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Trees Grid */
+    .trees-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    .tree-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      position: relative;
+    }
+    .tree-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(148, 163, 184, 0.35);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    }
+    .tree-card.active-inspected {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.4);
+    }
+    .tree-card.is-selected {
+      border-color: rgba(16, 185, 129, 0.6);
+      background: rgba(16, 185, 129, 0.04);
+    }
+    .tree-card.is-selected::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--accent);
+    }
+
+    .card-thumb-wrap {
+      width: 100%;
+      height: 190px;
+      background: radial-gradient(circle at 50% 60%, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.9));
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card-thumb-canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .card-select-checkbox {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      color: #ffffff;
+      z-index: 5;
+    }
+    .tree-card.is-selected .card-select-checkbox {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .check-icon {
+      display: none;
+      width: 16px;
+      height: 16px;
+    }
+    .tree-card.is-selected .check-icon {
+      display: block;
+    }
+
+    .card-num-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(6px);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .card-info {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+    .card-cat {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .card-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      margin-top: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-footer {
+      padding: 10px 16px 14px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-inspect-hint {
+      font-size: 12px;
+      color: #38bdf8;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .card-status-text {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--mono);
+    }
+    .tree-card.is-selected .card-status-text {
+      color: #34d399;
+    }
+    .tree-card:not(.is-selected) .card-status-text {
+      color: #64748b;
+    }
+
+    /* Export Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(12px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 680px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.95);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .modal-backdrop.open .modal-card {
+      transform: scale(1);
+    }
+    .modal-head {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .modal-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .code-box {
+      background: #060913;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: #38bdf8;
+      max-height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .modal-foot {
+      padding: 16px 24px;
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      background: rgba(11, 17, 32, 0.5);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #10b981;
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="brand">
+      <span class="brand-icon">🌲</span>
+      <div>
+        <h1 class="brand-title">3D Tree Species Catalog</h1>
+        <div class="brand-sub">AI Racer · Terrain Foliage Selector</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="counter-badge">
+        <span>Active:</span>
+        <span class="counter-num" id="selected-counter">0 / 20</span>
+      </div>
+
+      <button class="btn btn-secondary" id="btn-toggle-grove" title="Preview all chosen trees together in a forest grove">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 22h20L12 2z"/><path d="M12 18v4"/></svg>
+        <span>Grove View</span>
+      </button>
+
+      <button class="btn btn-primary" id="btn-export">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export Selection</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Split Layout -->
+  <div class="catalog-container">
+    
+    <!-- Left: 3D Live Turntable Inspector -->
+    <aside class="inspection-sidebar">
+      <div class="viewport-box" id="viewport-box">
+        <canvas id="tree-canvas"></canvas>
+        <div class="viewport-overlay">
+          <span class="view-badge" id="view-mode-tag">3D Orbit Inspector</span>
+          <div class="view-controls">
+            <button class="icon-btn active" id="btn-rotate" title="Toggle Auto-Spin">⟳</button>
+            <button class="icon-btn" id="btn-wireframe" title="Toggle Wireframe">⊞</button>
+            <button class="icon-btn" id="btn-reset-cam" title="Reset Camera">⊙</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="inspection-meta">
+        <div class="meta-header">
+          <div>
+            <div class="meta-id" id="meta-id">SPECIES #01</div>
+            <h2 class="meta-name" id="meta-name">English Broadleaf Oak</h2>
+          </div>
+          <span class="meta-cat-badge" id="meta-cat">Deciduous</span>
+        </div>
+
+        <p class="meta-desc" id="meta-desc">
+          Majestic sprawling multi-bough decurrent crown with a thick gnarled trunk and deep forest canopy clusters.
+        </p>
+
+        <div class="meta-stats">
+          <div>
+            <div class="stat-label">Height Profile</div>
+            <div class="stat-val" id="stat-height">16m – 24m</div>
+          </div>
+          <div>
+            <div class="stat-label">Canopy Spread</div>
+            <div class="stat-val" id="stat-spread">Wide Sprawling</div>
+          </div>
+          <div>
+            <div class="stat-label">Foliage Tone</div>
+            <div class="stat-val" id="stat-tone">Forest Moss Green</div>
+          </div>
+          <div>
+            <div class="stat-label">Botanical Type</div>
+            <div class="stat-val" id="stat-botanical">Quercus Robur</div>
+          </div>
+        </div>
+
+        <button class="toggle-select-btn selected" id="btn-toggle-active">
+          <svg class="check-icon" style="display:block;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="toggle-active-text">Selected for Track</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Right: Species Grid & Filtering -->
+    <main class="gallery-main">
+      <div class="gallery-toolbar">
+        <div class="filter-group">
+          <button class="filter-btn active" data-filter="all">All Species (20)</button>
+          <button class="filter-btn" data-filter="deciduous">Deciduous</button>
+          <button class="filter-btn" data-filter="conifer">Conifers & Pines</button>
+          <button class="filter-btn" data-filter="exotic">Ornamental & Exotic</button>
+          <button class="filter-btn" data-filter="selected">Selected Only</button>
+        </div>
+
+        <div class="batch-actions">
+          <button class="text-btn" id="btn-select-all">Select All</button>
+          <span style="color:var(--card-border)">•</span>
+          <button class="text-btn" id="btn-deselect-all">Deselect All</button>
+        </div>
+      </div>
+
+      <!-- 20 Tree Cards Grid -->
+      <div class="trees-grid" id="trees-grid"></div>
+    </main>
+  </div>
+
+  <!-- Export Modal -->
+  <div class="modal-backdrop" id="export-modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 class="modal-title">Selected Trees Configuration</h3>
+        <button class="icon-btn" id="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:14px; color:var(--text-muted);">
+          Here is your chosen list of trees. You can copy this directly to paste into our conversation, or export as code:
+        </p>
+        <div class="code-box" id="export-code-box"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" id="btn-copy-code">Copy to Clipboard</button>
+        <button class="btn btn-primary" id="btn-done-modal">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    <span id="toast-msg">Copied to clipboard!</span>
+  </div>
+
+  <!-- Three.js Interactive Catalog Logic -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+    // =========================================================================
+    // 20 DISTINCT PROCEDURAL TREE SPECIES DEFINITIONS
+    // =========================================================================
+    const TREE_SPECIES = [
+      {
+        id: 'oak-broadleaf',
+        num: 1,
+        name: 'English Broadleaf Oak',
+        cat: 'deciduous',
+        botanical: 'Quercus robur',
+        height: '18m – 24m',
+        spread: 'Wide Sprawling',
+        tone: 'Deep Forest Green',
+        desc: 'Stalwart European hardwood featuring a heavy flaring trunk and 4 massive spreading boughs with volumetric icosahedral cloud domes.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x4a3728, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x244f28, specular: 0x000000, shininess: 0, flatShading: true });
+          
+          // Trunk
+          const trunkGeo = new THREE.CylinderGeometry(0.7, 1.5, 9.0, 8);
+          const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+          trunk.position.y = 4.5;
+          group.add(trunk);
+
+          // Canopies
+          const crownGeo = new THREE.IcosahedronGeometry(4.2, 1);
+          const c1 = new THREE.Mesh(crownGeo, leafMat);
+          c1.position.set(0, 10.5, 0); c1.scale.set(1.1, 0.85, 1.05);
+          group.add(c1);
+
+          const c2 = new THREE.Mesh(crownGeo, leafMat);
+          c2.position.set(-2.8, 8.8, 1.2); c2.scale.set(0.85, 0.75, 0.85);
+          group.add(c2);
+
+          const c3 = new THREE.Mesh(crownGeo, leafMat);
+          c3.position.set(2.6, 9.2, -1.0); c3.scale.set(0.82, 0.72, 0.82);
+          group.add(c3);
+
+          const c4 = new THREE.Mesh(crownGeo, leafMat);
+          c4.position.set(0.5, 12.8, -0.4); c4.scale.set(0.75, 0.65, 0.75);
+          group.add(c4);
+          return group;
+        }
+      },
+      {
+        id: 'alpine-spruce',
+        num: 2,
+        name: 'Alpine Tiered Spruce',
+        cat: 'conifer',
+        botanical: 'Picea abies',
+        height: '22m – 28m',
+        spread: 'Conical Skirted',
+        tone: 'Dark Pine Needle',
+        desc: 'Tall conical mountain evergreen with 5 descending tiered skirts and a slender tapering spire.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3d2b1f, specular: 0x000000, shininess: 0, flatShading: true });
+          const needleMat = new THREE.MeshPhongMaterial({ color: 0x1b3b22, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunkGeo = new THREE.CylinderGeometry(0.35, 0.9, 14.0, 7);
+          const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+          trunk.position.y = 7.0;
+          group.add(trunk);
+
+          const tiers = [
+            { r: 4.8, h: 4.2, y: 5.5 },
+            { r: 4.0, h: 3.8, y: 8.0 },
+            { r: 3.2, h: 3.4, y: 10.5 },
+            { r: 2.4, h: 3.0, y: 13.0 },
+            { r: 1.4, h: 2.8, y: 15.2 }
+          ];
+          for (const t of tiers) {
+            const coneGeo = new THREE.ConeGeometry(t.r, t.h, 7);
+            const cone = new THREE.Mesh(coneGeo, needleMat);
+            cone.position.y = t.y;
+            group.add(cone);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'stone-pine',
+        num: 3,
+        name: 'Mediterranean Stone Pine',
+        cat: 'conifer',
+        botanical: 'Pinus pinea',
+        height: '14m – 18m',
+        spread: 'Umbrella Parasol',
+        tone: 'Warm Sage Evergreen',
+        desc: 'Classic Italian stone pine with tall rugged trunk fanning out into an iconic umbrella canopy dome.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x5a4231, specular: 0x000000, shininess: 0, flatShading: true });
+          const pineMat = new THREE.MeshPhongMaterial({ color: 0x2f5233, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunkGeo = new THREE.CylinderGeometry(0.55, 1.2, 10.5, 8);
+          const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+          trunk.position.y = 5.25;
+          trunk.rotation.z = 0.05;
+          group.add(trunk);
+
+          const canopyGeo = new THREE.CylinderGeometry(1.2, 6.2, 3.2, 9);
+          const c1 = new THREE.Mesh(canopyGeo, pineMat);
+          c1.position.y = 11.2;
+          group.add(c1);
+
+          const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 4.2, 2.2, 8), pineMat);
+          c2.position.set(1.2, 12.8, -0.6);
+          group.add(c2);
+
+          const c3 = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 3.2, 1.8, 7), pineMat);
+          c3.position.set(-1.4, 12.4, 0.8);
+          group.add(c3);
+          return group;
+        }
+      },
+      {
+        id: 'silver-birch',
+        num: 4,
+        name: 'Autumn Golden Birch',
+        cat: 'deciduous',
+        botanical: 'Betula pendula',
+        height: '15m – 20m',
+        spread: 'Slender Layered',
+        tone: 'Golden Amber & Ochre',
+        desc: 'Graceful silver-white bark trunk crowned with fluttering tiers of golden-yellow and warm amber foliage.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0xe2ded4, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0xd98c1e, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunkGeo = new THREE.CylinderGeometry(0.3, 0.7, 12.0, 7);
+          const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+          trunk.position.y = 6.0;
+          group.add(trunk);
+
+          const tiers = [
+            { r: 3.2, y: 8.5, col: 0xd48818 },
+            { r: 2.6, y: 11.0, col: 0xe5a324 },
+            { r: 1.8, y: 13.4, col: 0xf5be38 }
+          ];
+          for (const t of tiers) {
+            const mat = new THREE.MeshPhongMaterial({ color: t.col, specular: 0x000000, shininess: 0, flatShading: true });
+            const sphere = new THREE.Mesh(new THREE.IcosahedronGeometry(t.r, 1), mat);
+            sphere.position.y = t.y;
+            sphere.scale.set(1.0, 0.75, 1.0);
+            group.add(sphere);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'weeping-willow',
+        num: 5,
+        name: 'Weeping Willow',
+        cat: 'deciduous',
+        botanical: 'Salix babylonica',
+        height: '12m – 16m',
+        spread: 'Cascading Pendulous',
+        tone: 'Pale Chartreuse Lime',
+        desc: 'Broad spreading crown with romantic drooping branches and long pendulous boughs sweeping down toward the soil.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3d352e, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x486b36, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.4, 7.5, 8), trunkMat);
+          trunk.position.y = 3.75;
+          group.add(trunk);
+
+          // Central dome
+          const main = new THREE.Mesh(new THREE.IcosahedronGeometry(3.6, 1), leafMat);
+          main.position.y = 9.0;
+          main.scale.set(1.2, 0.7, 1.2);
+          group.add(main);
+
+          // 6 Drooping pendulous boughs
+          for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI * 2;
+            const bough = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 0.4, 6.5, 6), leafMat);
+            bough.position.set(Math.cos(ang) * 3.4, 6.2, Math.sin(ang) * 3.4);
+            bough.rotation.x = Math.cos(ang) * 0.15;
+            bough.rotation.z = Math.sin(ang) * 0.15;
+            group.add(bough);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'italian-cypress',
+        num: 6,
+        name: 'Italian Architectural Cypress',
+        cat: 'conifer',
+        botanical: 'Cupressus sempervirens',
+        height: '18m – 24m',
+        spread: 'Columnar Flame Spire',
+        tone: 'Deep Slate Emerald',
+        desc: 'Sleek, ultra-slender columnar spire tree iconic to Mediterranean landscapes and racing circuits.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x30251c, specular: 0x000000, shininess: 0, flatShading: true });
+          const foliageMat = new THREE.MeshPhongMaterial({ color: 0x183824, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.6, 3.5, 6), trunkMat);
+          trunk.position.y = 1.75;
+          group.add(trunk);
+
+          const spire = new THREE.Mesh(new THREE.ConeGeometry(1.4, 17.0, 7), foliageMat);
+          spire.position.y = 10.5;
+          spire.scale.set(1.0, 1.0, 0.85);
+          group.add(spire);
+
+          const lowBulge = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, 6.0, 7), foliageMat);
+          lowBulge.position.y = 6.0;
+          group.add(lowBulge);
+          return group;
+        }
+      },
+      {
+        id: 'japanese-maple',
+        num: 7,
+        name: 'Japanese Sculptural Maple',
+        cat: 'exotic',
+        botanical: 'Acer palmatum',
+        height: '8m – 12m',
+        spread: 'Tiered Horizontal Pads',
+        tone: 'Vibrant Scarlet Crimson',
+        desc: 'Artistic twisting trunk bearing tiered horizontal cloud shelves of brilliant autumn scarlet foliage.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x2b2420, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x9e1b1b, specular: 0x000000, shininess: 0, flatShading: true });
+
+          // Bent sculptural trunk
+          const t1 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.8, 5.0, 6), trunkMat);
+          t1.position.set(-0.6, 2.5, 0); t1.rotation.z = -0.22;
+          group.add(t1);
+
+          const t2 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 4.0, 6), trunkMat);
+          t2.position.set(0.6, 5.8, 0); t2.rotation.z = 0.35;
+          group.add(t2);
+
+          // Horizontal cloud shelves
+          const shelves = [
+            { x: -2.4, y: 5.5, z: 0.5, r: 2.4, col: 0xa82020 },
+            { x: 1.8, y: 6.8, z: -0.6, r: 2.2, col: 0xba2525 },
+            { x: -0.4, y: 8.5, z: 0.2, r: 2.8, col: 0x8f1515 }
+          ];
+          for (const s of shelves) {
+            const mat = new THREE.MeshPhongMaterial({ color: s.col, specular: 0x000000, shininess: 0, flatShading: true });
+            const cloud = new THREE.Mesh(new THREE.CylinderGeometry(0.6, s.r, 1.2, 7), mat);
+            cloud.position.set(s.x, s.y, s.z);
+            group.add(cloud);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'savannah-acacia',
+        num: 8,
+        name: 'African Savannah Acacia',
+        cat: 'exotic',
+        botanical: 'Vachellia tortilis',
+        height: '11m – 15m',
+        spread: 'Flat-Topped Umbrella',
+        tone: 'Warm Olive Khaki',
+        desc: 'Classic umbrella-thorn savannah tree with dramatic bifurcated arms supporting wide, flat-topped foliage discs.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x4f3f33, specular: 0x000000, shininess: 0, flatShading: true });
+          const foliageMat = new THREE.MeshPhongMaterial({ color: 0x4b5c32, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const base = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.1, 5.0, 7), trunkMat);
+          base.position.y = 2.5;
+          group.add(base);
+
+          const branch1 = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 5.5, 6), trunkMat);
+          branch1.position.set(-1.6, 6.5, 0.4); branch1.rotation.z = -0.55;
+          group.add(branch1);
+
+          const branch2 = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 5.2, 6), trunkMat);
+          branch2.position.set(1.5, 6.4, -0.3); branch2.rotation.z = 0.52;
+          group.add(branch2);
+
+          // Wide flat-top canopy plates
+          const p1 = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 5.4, 1.2, 8), foliageMat);
+          p1.position.set(-2.2, 9.2, 0.5);
+          group.add(p1);
+
+          const p2 = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.8, 1.1, 8), foliageMat);
+          p2.position.set(2.0, 9.0, -0.4);
+          group.add(p2);
+          return group;
+        }
+      },
+      {
+        id: 'giant-redwood',
+        num: 9,
+        name: 'Giant California Redwood',
+        cat: 'conifer',
+        botanical: 'Sequoiadendron giganteum',
+        height: '28m – 38m',
+        spread: 'Massive Columnar',
+        tone: 'Deep Conifer Moss',
+        desc: 'Monolithic ancient conifer with colossal tapering cinnamon trunk and dense tiered columnar foliage crowning the heights.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x6e3825, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x1d3824, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 2.8, 26.0, 9), trunkMat);
+          trunk.position.y = 13.0;
+          group.add(trunk);
+
+          const tiers = [
+            { r: 4.2, y: 14.0 }, { r: 3.8, y: 17.5 }, { r: 3.2, y: 21.0 },
+            { r: 2.6, y: 24.2 }, { r: 1.8, y: 27.2 }
+          ];
+          for (const t of tiers) {
+            const cone = new THREE.Mesh(new THREE.ConeGeometry(t.r, 4.5, 7), leafMat);
+            cone.position.y = t.y;
+            group.add(cone);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'lombardy-poplar',
+        num: 10,
+        name: 'Lombardy Poplar',
+        cat: 'deciduous',
+        botanical: 'Populus nigra',
+        height: '20m – 26m',
+        spread: 'Fastigiate Oval Flame',
+        tone: 'Fresh Sage Olive',
+        desc: 'Tall, narrow, columnar deciduous tree forming majestic rhythmic windbreaks along European lanes.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x484239, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x3d5c34, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.75, 5.0, 7), trunkMat);
+          trunk.position.y = 2.5;
+          group.add(trunk);
+
+          const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 1), leafMat);
+          crown.position.y = 13.0;
+          crown.scale.set(1.1, 3.8, 1.1);
+          group.add(crown);
+          return group;
+        }
+      },
+      {
+        id: 'silver-fir',
+        num: 11,
+        name: 'Nordmann Silver Fir',
+        cat: 'conifer',
+        botanical: 'Abies nordmanniana',
+        height: '20m – 25m',
+        spread: 'Dense Layered Fir',
+        tone: 'Silvery Pine Blue',
+        desc: 'Lush, dense, perfectly balanced evergreen fir with horizontal bough tiers and a rich bluish-green sheen.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x362c24, specular: 0x000000, shininess: 0, flatShading: true });
+          const needleMat = new THREE.MeshPhongMaterial({ color: 0x224234, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.85, 12.0, 7), trunkMat);
+          trunk.position.y = 6.0;
+          group.add(trunk);
+
+          for (let i = 0; i < 6; i++) {
+            const r = 4.5 - i * 0.65;
+            const y = 4.8 + i * 2.5;
+            const skirt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.3, r, 2.2, 7), needleMat);
+            skirt.position.y = y;
+            group.add(skirt);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'jacaranda-bloom',
+        num: 12,
+        name: 'Jacaranda in Bloom',
+        cat: 'exotic',
+        botanical: 'Jacaranda mimosifolia',
+        height: '14m – 18m',
+        spread: 'Sprawling Floral Cloud',
+        tone: 'Vibrant Lilac Lavender',
+        desc: 'Stunning ornamental tree enveloped in dramatic clouds of bright violet-lavender trumpet blossoms.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3c3228, specular: 0x000000, shininess: 0, flatShading: true });
+          const blossomMat = new THREE.MeshPhongMaterial({ color: 0x6d4cb8, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.1, 7.5, 7), trunkMat);
+          trunk.position.y = 3.75;
+          group.add(trunk);
+
+          const clouds = [
+            { x: 0, y: 9.5, z: 0, r: 3.8, col: 0x6842b8 },
+            { x: -2.2, y: 8.2, z: 1.0, r: 2.8, col: 0x7852c7 },
+            { x: 2.0, y: 8.5, z: -1.0, r: 2.6, col: 0x5e38ad },
+            { x: 0.4, y: 11.8, z: -0.4, r: 2.5, col: 0x825cd4 }
+          ];
+          for (const c of clouds) {
+            const mat = new THREE.MeshPhongMaterial({ color: c.col, specular: 0x000000, shininess: 0, flatShading: true });
+            const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(c.r, 1), mat);
+            puff.position.set(c.x, c.y, c.z);
+            puff.scale.set(1.1, 0.78, 1.05);
+            group.add(puff);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'european-beech',
+        num: 13,
+        name: 'European Beech',
+        cat: 'deciduous',
+        botanical: 'Fagus sylvatica',
+        height: '18m – 24m',
+        spread: 'Stately Wide Dome',
+        tone: 'Lush Meadow Green',
+        desc: 'Smooth silvery-grey bark supporting an immense, architectural rounded dome of deep vibrant foliage.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x7c7c82, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x2e5c2b, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 1.3, 8.5, 8), trunkMat);
+          trunk.position.y = 4.25;
+          group.add(trunk);
+
+          const dome = new THREE.Mesh(new THREE.IcosahedronGeometry(5.2, 1), leafMat);
+          dome.position.y = 11.5;
+          dome.scale.set(1.25, 0.9, 1.2);
+          group.add(dome);
+          return group;
+        }
+      },
+      {
+        id: 'cherry-blossom',
+        num: 14,
+        name: 'Japanese Cherry Blossom',
+        cat: 'exotic',
+        botanical: 'Prunus serrulata',
+        height: '9m – 13m',
+        spread: 'Airy Blossom Cloud',
+        tone: 'Soft Luminous Pink',
+        desc: 'Delicate dark artistic trunk holding aloft clouds of luminous pale rose-pink cherry blossoms.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x2b221f, specular: 0x000000, shininess: 0, flatShading: true });
+          const pinkMat = new THREE.MeshPhongMaterial({ color: 0xdea0af, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.85, 6.0, 7), trunkMat);
+          trunk.position.y = 3.0;
+          trunk.rotation.z = -0.12;
+          group.add(trunk);
+
+          const clouds = [
+            { x: 0, y: 7.2, z: 0, r: 3.2, col: 0xdea0af },
+            { x: -1.8, y: 6.2, z: 0.8, r: 2.4, col: 0xebb4c2 },
+            { x: 1.6, y: 6.5, z: -0.6, r: 2.2, col: 0xd492a2 },
+            { x: 0.2, y: 8.8, z: -0.3, r: 2.1, col: 0xf5c4d0 }
+          ];
+          for (const c of clouds) {
+            const mat = new THREE.MeshPhongMaterial({ color: c.col, specular: 0x000000, shininess: 0, flatShading: true });
+            const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(c.r, 1), mat);
+            puff.position.set(c.x, c.y, c.z);
+            puff.scale.set(1.15, 0.8, 1.1);
+            group.add(puff);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'ancient-olive',
+        num: 15,
+        name: 'Gnarled Ancient Olive',
+        cat: 'deciduous',
+        botanical: 'Olea europaea',
+        height: '7m – 10m',
+        spread: 'Low Sprawling Knolls',
+        tone: 'Silvery Sage Foliage',
+        desc: 'Ancient split and hollow gnarled trunk carrying low terraced pads of shimmering silver-green leaves.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x473b30, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x4a5e42, specular: 0x000000, shininess: 0, flatShading: true });
+
+          // Gnarled split trunk
+          const b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.4, 4.2, 7), trunkMat);
+          b1.position.set(-0.3, 2.1, 0); b1.rotation.z = -0.18;
+          group.add(b1);
+
+          const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 3.8, 6), trunkMat);
+          b2.position.set(0.6, 2.6, 0.3); b2.rotation.z = 0.35;
+          group.add(b2);
+
+          const pads = [
+            { x: -1.6, y: 4.8, z: 0.4, r: 2.2 },
+            { x: 1.5, y: 5.2, z: -0.4, r: 2.0 },
+            { x: 0, y: 6.2, z: 0.1, r: 2.4 }
+          ];
+          for (const p of pads) {
+            const pad = new THREE.Mesh(new THREE.IcosahedronGeometry(p.r, 1), leafMat);
+            pad.position.set(p.x, p.y, p.z);
+            pad.scale.set(1.2, 0.65, 1.15);
+            group.add(pad);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'tropical-palm',
+        num: 16,
+        name: 'Tropical Date Palm',
+        cat: 'exotic',
+        botanical: 'Phoenix dactylifera',
+        height: '14m – 19m',
+        spread: 'Arching Frond Fountain',
+        tone: 'Vibrant Emerald Fronds',
+        desc: 'Tall curved ring-segmented trunk with a fountainhead of radiating arching green feather fronds.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x5a483a, specular: 0x000000, shininess: 0, flatShading: true });
+          const frondMat = new THREE.MeshPhongMaterial({ color: 0x2d6332, specular: 0x000000, shininess: 0, flatShading: true, side: THREE.DoubleSide });
+
+          // Curved trunk segments
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.8, 12.0, 7), trunkMat);
+          trunk.position.set(0.6, 6.0, 0);
+          trunk.rotation.z = -0.08;
+          group.add(trunk);
+
+          // Top heart bud
+          const bud = new THREE.Mesh(new THREE.IcosahedronGeometry(1.2, 1), frondMat);
+          bud.position.set(1.1, 12.0, 0);
+          group.add(bud);
+
+          // 8 Arching frond blades
+          for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            const frondGeo = new THREE.PlaneGeometry(1.2, 5.5, 1, 4);
+            const frond = new THREE.Mesh(frondGeo, frondMat);
+            frond.position.set(1.1 + Math.cos(ang) * 1.8, 11.8 - 0.4, Math.sin(ang) * 1.8);
+            frond.rotation.y = -ang;
+            frond.rotation.x = 0.65;
+            group.add(frond);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'scots-pine',
+        num: 17,
+        name: 'Highland Scots Pine',
+        cat: 'conifer',
+        botanical: 'Pinus sylvestris',
+        height: '16m – 22m',
+        spread: 'Irregular High Crown',
+        tone: 'Blue-Green Resinous',
+        desc: 'Crooked bare reddish-orange upper trunk with an asymmetric, rugged crown of dense blue-green needle pads.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const lowerTrunkMat = new THREE.MeshPhongMaterial({ color: 0x3d3025, specular: 0x000000, shininess: 0, flatShading: true });
+          const upperTrunkMat = new THREE.MeshPhongMaterial({ color: 0x944a2c, specular: 0x000000, shininess: 0, flatShading: true }); // Cinnamon orange
+          const needleMat = new THREE.MeshPhongMaterial({ color: 0x1f4538, specular: 0x000000, shininess: 0, flatShading: true });
+
+          const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.1, 6.5, 7), lowerTrunkMat);
+          lower.position.y = 3.25;
+          group.add(lower);
+
+          const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.55, 6.5, 7), upperTrunkMat);
+          upper.position.set(0.4, 9.0, 0);
+          upper.rotation.z = -0.15;
+          group.add(upper);
+
+          // Asymmetric rugged crown
+          const p1 = new THREE.Mesh(new THREE.IcosahedronGeometry(2.8, 1), needleMat);
+          p1.position.set(1.2, 12.5, 0.4); p1.scale.set(1.1, 0.7, 1.0);
+          group.add(p1);
+
+          const p2 = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 1), needleMat);
+          p2.position.set(-0.8, 11.8, -0.6); p2.scale.set(1.0, 0.65, 0.95);
+          group.add(p2);
+          return group;
+        }
+      },
+      {
+        id: 'sugar-maple-autumn',
+        num: 18,
+        name: 'Crimson Sugar Maple',
+        cat: 'deciduous',
+        botanical: 'Acer saccharum',
+        height: '17m – 22m',
+        spread: 'Fluffy Blaze Crown',
+        tone: 'Blazing Orange & Scarlet',
+        desc: 'Stunning autumn spectacle ablaze with intense fiery orange, vermilion, and radiant flame gold foliage.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3d3126, specular: 0x000000, shininess: 0, flatShading: true });
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.2, 8.0, 7), trunkMat);
+          trunk.position.y = 4.0;
+          group.add(trunk);
+
+          const clouds = [
+            { x: 0, y: 10.2, z: 0, r: 4.0, col: 0xd95018 },
+            { x: -2.2, y: 8.8, z: 0.8, r: 2.8, col: 0xbf2c11 },
+            { x: 2.1, y: 9.0, z: -0.7, r: 2.7, col: 0xe67e17 },
+            { x: 0.3, y: 12.8, z: -0.2, r: 2.6, col: 0xf5a018 }
+          ];
+          for (const c of clouds) {
+            const mat = new THREE.MeshPhongMaterial({ color: c.col, specular: 0x000000, shininess: 0, flatShading: true });
+            const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(c.r, 1), mat);
+            puff.position.set(c.x, c.y, c.z);
+            puff.scale.set(1.1, 0.85, 1.05);
+            group.add(puff);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'bonsai-cloud-pine',
+        num: 19,
+        name: 'Windswept Cloud Pine',
+        cat: 'conifer',
+        botanical: 'Pinus thunbergii',
+        height: '9m – 13m',
+        spread: 'Terraced Cloud Shelves',
+        tone: 'Deep Pine Emerald',
+        desc: 'Dramatic zig-zag windswept trunk styled with manicured horizontal cloud-plate foliage terraces.',
+        selected: true,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x382c22, specular: 0x000000, shininess: 0, flatShading: true });
+          const pineMat = new THREE.MeshPhongMaterial({ color: 0x1f4728, specular: 0x000000, shininess: 0, flatShading: true });
+
+          // Dramatic angled zig-zag trunk
+          const b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 4.5, 6), trunkMat);
+          b1.position.set(-0.8, 2.2, 0); b1.rotation.z = -0.45;
+          group.add(b1);
+
+          const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 5.0, 6), trunkMat);
+          b2.position.set(0.8, 5.6, 0); b2.rotation.z = 0.52;
+          group.add(b2);
+
+          const plates = [
+            { x: -2.8, y: 4.8, z: 0.2, r: 2.2 },
+            { x: 1.6, y: 7.2, z: -0.4, r: 2.0 },
+            { x: 2.8, y: 8.8, z: 0.4, r: 1.8 }
+          ];
+          for (const p of plates) {
+            const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.5, p.r, 0.9, 7), pineMat);
+            plate.position.set(p.x, p.y, p.z);
+            group.add(plate);
+          }
+          return group;
+        }
+      },
+      {
+        id: 'bottle-baobab',
+        num: 20,
+        name: 'African Bottle Baobab',
+        cat: 'exotic',
+        botanical: 'Adansonia digitata',
+        height: '14m – 18m',
+        spread: 'Colossal Bulbous Trunk',
+        tone: 'Muted Savanna Sage',
+        desc: 'Unmistakable prehistoric giant with massive swollen barrel trunk and short, root-like crowning branches.',
+        selected: false,
+        createMesh: () => {
+          const group = new THREE.Group();
+          const trunkMat = new THREE.MeshPhongMaterial({ color: 0x5e5246, specular: 0x000000, shininess: 0, flatShading: true });
+          const leafMat = new THREE.MeshPhongMaterial({ color: 0x485c34, specular: 0x000000, shininess: 0, flatShading: true });
+
+          // Immense swollen bottle trunk
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 4.2, 10.0, 9), trunkMat);
+          trunk.position.y = 5.0;
+          group.add(trunk);
+
+          // Crown branches
+          for (let i = 0; i < 5; i++) {
+            const ang = (i / 5) * Math.PI * 2;
+            const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.9, 4.0, 6), trunkMat);
+            arm.position.set(Math.cos(ang) * 1.8, 11.2, Math.sin(ang) * 1.8);
+            arm.rotation.x = Math.cos(ang) * 0.4;
+            arm.rotation.z = Math.sin(ang) * 0.4;
+            group.add(arm);
+
+            const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 1), leafMat);
+            puff.position.set(Math.cos(ang) * 3.2, 12.8, Math.sin(ang) * 3.2);
+            group.add(puff);
+          }
+          return group;
+        }
+      }
+    ];
+
+    // =========================================================================
+    // 3D VIEWER SETUP (Single high-performance WebGL context)
+    // =========================================================================
+    const canvas = document.getElementById('tree-canvas');
+    const container = document.getElementById('viewport-box');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0c1322);
+
+    const camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(16, 12, 18);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2 + 0.02; // don't go below ground
+    controls.minDistance = 6;
+    controls.maxDistance = 60;
+    controls.target.set(0, 7.5, 0);
+
+    // Warm Sunlit Lighting
+    const hemiLight = new THREE.HemisphereLight(0x90b8f0, 0x36462d, 1.1);
+    scene.add(hemiLight);
+
+    const sun = new THREE.DirectionalLight(0xfffaed, 2.2);
+    sun.position.set(18, 28, 14);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 1024;
+    sun.shadow.mapSize.height = 1024;
+    sun.shadow.bias = -0.0005;
+    scene.add(sun);
+
+    const ambLight = new THREE.AmbientLight(0x445266, 0.5);
+    scene.add(ambLight);
+
+    // Ground Platform Pedestal
+    const groundGeo = new THREE.CylinderGeometry(8.5, 9.0, 0.6, 32);
+    const groundMat = new THREE.MeshPhongMaterial({
+      color: 0x18241b,
+      specular: 0x000000,
+      shininess: 0,
+      flatShading: true
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.position.y = -0.3;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Pedestal Rim Ring
+    const ringGeo = new THREE.RingGeometry(8.3, 8.7, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    scene.add(ring);
+
+    // Active Tree Display Container
+    const treeHolder = new THREE.Group();
+    scene.add(treeHolder);
+
+    let activeSpeciesIdx = 0;
+    let autoRotate = true;
+    let isWireframe = false;
+    let isGroveMode = false;
+
+    // Load active tree into 3D viewer
+    function loadTree(idx) {
+      activeSpeciesIdx = idx;
+      const sp = TREE_SPECIES[idx];
+      treeHolder.clear();
+
+      if (isGroveMode) {
+        loadGrove();
+        return;
+      }
+
+      const mesh = sp.createMesh();
+      mesh.traverse(c => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          c.receiveShadow = true;
+          c.material.wireframe = isWireframe;
+        }
+      });
+      treeHolder.add(mesh);
+
+      // Adjust camera focus
+      controls.target.set(0, 7.5, 0);
+
+      // Update sidebar metadata
+      document.getElementById('meta-id').textContent = `SPECIES #${String(sp.num).padStart(2, '0')}`;
+      document.getElementById('meta-name').textContent = sp.name;
+      document.getElementById('meta-cat').textContent = sp.cat;
+      document.getElementById('meta-desc').textContent = sp.desc;
+      document.getElementById('stat-height').textContent = sp.height;
+      document.getElementById('stat-spread').textContent = sp.spread;
+      document.getElementById('stat-tone').textContent = sp.tone;
+      document.getElementById('stat-botanical').textContent = sp.botanical;
+
+      updateActiveButton();
+      highlightActiveCard(idx);
+    }
+
+    // Grove View: Displays all currently selected trees together in a mini 3D forest!
+    function loadGrove() {
+      treeHolder.clear();
+      const selected = TREE_SPECIES.filter(s => s.selected);
+      if (selected.length === 0) {
+        document.getElementById('meta-name').textContent = 'No Trees Selected';
+        document.getElementById('meta-desc').textContent = 'Select some trees from the grid to preview them together in the forest grove!';
+        return;
+      }
+
+      const num = selected.length;
+      const radius = Math.max(5.5, Math.sqrt(num) * 3.8);
+
+      selected.forEach((sp, i) => {
+        const mesh = sp.createMesh();
+        const angle = (i / num) * Math.PI * 2 + (i % 2) * 0.4;
+        const rDist = (0.35 + (i % 3) * 0.3) * radius;
+        mesh.position.set(Math.cos(angle) * rDist, 0, Math.sin(angle) * rDist);
+        mesh.scale.set(0.72, 0.72, 0.72);
+        mesh.traverse(c => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+            c.material.wireframe = isWireframe;
+          }
+        });
+        treeHolder.add(mesh);
+      });
+
+      controls.target.set(0, 5.5, 0);
+      camera.position.set(24, 18, 26);
+      document.getElementById('meta-id').textContent = 'FOREST GROVE PREVIEW';
+      document.getElementById('meta-name').textContent = `Mixed Forest (${selected.length} Species)`;
+      document.getElementById('meta-desc').textContent = 'Real-time composition showing all your currently selected trees co-existing in a natural racing circuit biome.';
+    }
+
+    // Render snapshot to 2D image data for thumbnail
+    function renderThumbnail(mesh) {
+      const thumbScene = new THREE.Scene();
+      thumbScene.background = new THREE.Color(0x0c1322);
+
+      const tCam = new THREE.PerspectiveCamera(40, 260 / 190, 0.1, 100);
+      tCam.position.set(13, 10, 15);
+      tCam.lookAt(0, 6.5, 0);
+
+      thumbScene.add(new THREE.HemisphereLight(0x90b8f0, 0x36462d, 1.2));
+      const s = new THREE.DirectionalLight(0xfffaed, 2.0);
+      s.position.set(15, 22, 12);
+      thumbScene.add(s);
+      thumbScene.add(new THREE.AmbientLight(0x445266, 0.4));
+
+      const g = new THREE.Mesh(
+        new THREE.CylinderGeometry(6.5, 7.0, 0.4, 24),
+        new THREE.MeshPhongMaterial({ color: 0x141f17, specular: 0x000000, shininess: 0, flatShading: true })
+      );
+      g.position.y = -0.2;
+      thumbScene.add(g);
+
+      thumbScene.add(mesh);
+
+      const oldW = container.clientWidth;
+      const oldH = container.clientHeight;
+      renderer.setSize(260, 190, false);
+      renderer.render(thumbScene, tCam);
+      const url = renderer.domElement.toDataURL('image/jpeg', 0.85);
+      renderer.setSize(oldW, oldH, false);
+
+      return url;
+    }
+
+    // =========================================================================
+    // UI BUILDER & INTERACTIVITY
+    // =========================================================================
+    const gridEl = document.getElementById('trees-grid');
+
+    function buildCards() {
+      gridEl.innerHTML = '';
+
+      TREE_SPECIES.forEach((sp, idx) => {
+        const card = document.createElement('div');
+        card.className = `tree-card ${sp.selected ? 'is-selected' : ''}`;
+        card.id = `card-${idx}`;
+        card.dataset.idx = idx;
+        card.dataset.cat = sp.cat;
+
+        // Render preview image
+        const previewMesh = sp.createMesh();
+        const imgUrl = renderThumbnail(previewMesh);
+
+        card.innerHTML = `
+          <div class="card-thumb-wrap">
+            <span class="card-num-badge">#${String(sp.num).padStart(2, '0')}</span>
+            <div class="card-select-checkbox" title="Toggle Selection">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <img class="card-thumb-canvas" src="${imgUrl}" alt="${sp.name}">
+          </div>
+          <div class="card-info">
+            <span class="card-cat">${sp.cat}</span>
+            <h3 class="card-name">${sp.name}</h3>
+            <p class="card-desc">${sp.desc}</p>
+          </div>
+          <div class="card-footer">
+            <span class="card-inspect-hint">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Inspect 3D</span>
+            </span>
+            <span class="card-status-text">${sp.selected ? 'ACTIVE' : 'EXCLUDED'}</span>
+          </div>
+        `;
+
+        // Card Click: Load in 3D inspector
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.card-select-checkbox')) {
+            toggleSpecies(idx);
+          } else {
+            if (isGroveMode) {
+              isGroveMode = false;
+              document.getElementById('btn-toggle-grove').classList.remove('btn-primary');
+              document.getElementById('btn-toggle-grove').classList.add('btn-secondary');
+            }
+            loadTree(idx);
+          }
+        });
+
+        gridEl.appendChild(card);
+      });
+
+      updateCounter();
+    }
+
+    function toggleSpecies(idx) {
+      TREE_SPECIES[idx].selected = !TREE_SPECIES[idx].selected;
+      const card = document.getElementById(`card-${idx}`);
+      if (card) {
+        card.classList.toggle('is-selected', TREE_SPECIES[idx].selected);
+        card.querySelector('.card-status-text').textContent = TREE_SPECIES[idx].selected ? 'ACTIVE' : 'EXCLUDED';
+      }
+      if (idx === activeSpeciesIdx && !isGroveMode) {
+        updateActiveButton();
+      }
+      if (isGroveMode) {
+        loadGrove();
+      }
+      updateCounter();
+    }
+
+    function updateActiveButton() {
+      const btn = document.getElementById('btn-toggle-active');
+      const text = document.getElementById('toggle-active-text');
+      const isSel = TREE_SPECIES[activeSpeciesIdx].selected;
+
+      btn.className = `toggle-select-btn ${isSel ? 'selected' : 'unselected'}`;
+      text.textContent = isSel ? 'Selected for Track (Click to Exclude)' : '+ Add Tree to Track Selection';
+    }
+
+    function highlightActiveCard(idx) {
+      document.querySelectorAll('.tree-card').forEach(c => c.classList.remove('active-inspected'));
+      const active = document.getElementById(`card-${idx}`);
+      if (active) active.classList.add('active-inspected');
+    }
+
+    function updateCounter() {
+      const selCount = TREE_SPECIES.filter(s => s.selected).length;
+      document.getElementById('selected-counter').textContent = `${selCount} / ${TREE_SPECIES.length}`;
+    }
+
+    // Toggle selected state from inspector sidebar button
+    document.getElementById('btn-toggle-active').addEventListener('click', () => {
+      toggleSpecies(activeSpeciesIdx);
+    });
+
+    // Toolbar filters
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.dataset.filter;
+
+        document.querySelectorAll('.tree-card').forEach(card => {
+          const idx = parseInt(card.dataset.idx, 10);
+          const sp = TREE_SPECIES[idx];
+          let show = false;
+
+          if (filter === 'all') show = true;
+          else if (filter === 'selected') show = sp.selected;
+          else if (filter === sp.cat) show = true;
+
+          card.style.display = show ? 'flex' : 'none';
+        });
+      });
+    });
+
+    // Batch Actions
+    document.getElementById('btn-select-all').addEventListener('click', () => {
+      TREE_SPECIES.forEach((s, i) => {
+        s.selected = true;
+        const c = document.getElementById(`card-${i}`);
+        if (c) {
+          c.classList.add('is-selected');
+          c.querySelector('.card-status-text').textContent = 'ACTIVE';
+        }
+      });
+      updateCounter();
+      updateActiveButton();
+      if (isGroveMode) loadGrove();
+      showToast('All 20 tree species selected!');
+    });
+
+    document.getElementById('btn-deselect-all').addEventListener('click', () => {
+      TREE_SPECIES.forEach((s, i) => {
+        s.selected = false;
+        const c = document.getElementById(`card-${i}`);
+        if (c) {
+          c.classList.remove('is-selected');
+          c.querySelector('.card-status-text').textContent = 'EXCLUDED';
+        }
+      });
+      updateCounter();
+      updateActiveButton();
+      if (isGroveMode) loadGrove();
+      showToast('All tree species deselected.');
+    });
+
+    // 3D Viewport Controls
+    const btnRotate = document.getElementById('btn-rotate');
+    btnRotate.addEventListener('click', () => {
+      autoRotate = !autoRotate;
+      btnRotate.classList.toggle('active', autoRotate);
+    });
+
+    const btnWire = document.getElementById('btn-wireframe');
+    btnWire.addEventListener('click', () => {
+      isWireframe = !isWireframe;
+      btnWire.classList.toggle('active', isWireframe);
+      treeHolder.traverse(c => {
+        if (c.isMesh && c.material) {
+          c.material.wireframe = isWireframe;
+        }
+      });
+    });
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => {
+      camera.position.set(16, 12, 18);
+      controls.target.set(0, 7.5, 0);
+    });
+
+    // Grove View Button
+    const btnGrove = document.getElementById('btn-toggle-grove');
+    btnGrove.addEventListener('click', () => {
+      isGroveMode = !isGroveMode;
+      if (isGroveMode) {
+        btnGrove.classList.remove('btn-secondary');
+        btnGrove.classList.add('btn-primary');
+        loadGrove();
+      } else {
+        btnGrove.classList.remove('btn-primary');
+        btnGrove.classList.add('btn-secondary');
+        loadTree(activeSpeciesIdx);
+      }
+    });
+
+    // Export Modal & Code Generation
+    const modal = document.getElementById('export-modal');
+    const codeBox = document.getElementById('export-code-box');
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const chosen = TREE_SPECIES.filter(s => s.selected);
+      const namesList = chosen.map(s => `• #${s.num} ${s.name} (${s.cat})`).join('\n');
+      const idsList = JSON.stringify(chosen.map(s => s.id), null, 2);
+
+      codeBox.textContent = `// SELECTED TREES (${chosen.length} of ${TREE_SPECIES.length} chosen):\n${namesList}\n\n// IDs Array:\n${idsList}`;
+      modal.classList.add('open');
+    });
+
+    document.getElementById('btn-close-modal').addEventListener('click', () => modal.classList.remove('open'));
+    document.getElementById('btn-done-modal').addEventListener('click', () => modal.classList.remove('open'));
+    document.getElementById('btn-copy-code').addEventListener('click', () => {
+      navigator.clipboard.writeText(codeBox.textContent);
+      showToast('Selection copied to clipboard!');
+    });
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2600);
+    }
+
+    // Animation Loop
+    function animate() {
+      requestAnimationFrame(animate);
+      if (autoRotate) {
+        treeHolder.rotation.y += 0.008;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Handle Window Resize
+    window.addEventListener('resize', () => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    // Initialize
+    buildCards();
+    loadTree(0);
+    animate();
+  </script>
+</body>
+</html>
