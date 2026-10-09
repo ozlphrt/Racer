@@ -815,8 +815,8 @@ export class Renderer {
     ctx.closePath();
     ctx.fill();
 
-    // Race Number Roundel on Hood - 50% Translucent White
-    ctx.fillStyle = isLeader ? '#facc15' : isPlayer ? '#a3e635' : 'rgba(255, 255, 255, 0.50)';
+    // Race Number Roundel on Hood - 80% Translucent White (20% Opacity)
+    ctx.fillStyle = isLeader ? '#facc15' : isPlayer ? '#a3e635' : 'rgba(255, 255, 255, 0.20)';
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 1.2;
     ctx.beginPath();

@@ -2344,10 +2344,10 @@ export class Renderer3D {
     const numStr = String(num);
     const fontSize = numStr.length >= 3 ? 200 : numStr.length === 2 ? 260 : 310;
 
-    // 1. Classic Motorsport White Roundel Disc - 50% Translucent
+    // 1. Classic Motorsport White Roundel Disc - 80% Translucent (20% Opacity)
     ctx.beginPath();
     ctx.arc(256, 256, 230, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.50)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
     ctx.fill();
 
     // 2. Bold Black Outer Border
