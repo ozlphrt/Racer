@@ -5141,13 +5141,14 @@ export class Renderer3D {
     this._heliAngle = null;
     this._lastHeliFocus = null;
     this._autoPreset = 'heli';
-    this._autoNextSwitch = performance.now() + 8500;
+    this._autoNextSwitch = performance.now() + 22000;
     this._lastGantryCutTime = null;
     this._lastGantryCutLap = null;
     this._gantryRollLap = null;
     this._gantryCrossedLineTime = null;
     this._lastActivePreset = null;
     this._camTransition = null;
+    this._currentActionPair = null;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -5201,12 +5202,125 @@ export class Renderer3D {
     this.renderer.setSize(this.w, this.h, false);
   }
 
+  findActionFocusPair(sim, rankedCars, focusCar, opts) {
+    const isManual = Boolean(opts && opts.manual && sim && sim.player && (sim.player.alive || sim.player.finished));
+    const player = isManual ? sim.player : null;
+
+    const pool = [];
+    if (sim && sim.cars) {
+      for (let i = 0; i < sim.cars.length; i++) {
+        const c = sim.cars[i];
+        if (c && (c.alive || c.finished)) pool.push(c);
+      }
+    }
+    if (player && !pool.includes(player)) pool.push(player);
+
+    if (pool.length === 0) {
+      return { carA: focusCar || null, carB: null };
+    }
+    if (pool.length === 1) {
+      return { carA: pool[0], carB: null };
+    }
+
+    let bestScore = -1;
+    let bestPair = null;
+
+    for (let i = 0; i < pool.length; i++) {
+      const c1 = pool[i];
+      for (let j = i + 1; j < pool.length; j++) {
+        const c2 = pool[j];
+
+        const dist = Math.hypot(c1.x - c2.x, -c1.y - (-c2.y));
+        if (dist > 95) continue;
+
+        let score = 0;
+
+        // 1. Proximity score: closer cars = vastly higher battle intensity
+        if (dist < 32) {
+          const closeness = (32 - dist) / 32;
+          score += Math.pow(closeness, 1.3) * 85;
+        } else {
+          score += ((95 - dist) / 63) * 20;
+        }
+
+        // 2. Dynamic slip / sliding action
+        const slip1 = Math.abs(c1.slipAngle || 0);
+        const slip2 = Math.abs(c2.slipAngle || 0);
+        if (slip1 > 0.045 || slip2 > 0.045) {
+          score += Math.max(slip1, slip2) * 70;
+        }
+
+        // 3. Spinning / crash drama
+        if (c1.crashed || c2.crashed) {
+          score += 85;
+        }
+        const yaw1 = Math.abs(c1.yawRate || 0);
+        const yaw2 = Math.abs(c2.yawRate || 0);
+        if (yaw1 > 0.35 || yaw2 > 0.35) {
+          score += Math.max(yaw1, yaw2) * 50;
+        }
+
+        // 4. Pack bonus: multiple cars in close proximity
+        let packNeighbors = 0;
+        for (let k = 0; k < pool.length; k++) {
+          if (k !== i && k !== j) {
+            const c3 = pool[k];
+            if (Math.hypot(c1.x - c3.x, -c1.y - (-c3.y)) < 30) packNeighbors++;
+          }
+        }
+        score += Math.min(3, packNeighbors) * 20;
+
+        // 5. Mild rank bias
+        const rank1 = this._carRankMap ? (this._carRankMap.get(c1) || 99) : 99;
+        const rank2 = this._carRankMap ? (this._carRankMap.get(c2) || 99) : 99;
+        const avgRank = (rank1 + rank2) * 0.5;
+        score += Math.max(0, 14 - avgRank * 1.2);
+
+        // 6. Manual driving player focus
+        if (isManual && (c1 === player || c2 === player)) {
+          score += 35;
+        }
+
+        // 7. Hysteresis / Stability bonus: keeps camera focused on active battle without flip-flopping
+        if (this._currentActionPair &&
+            ((this._currentActionPair.carA === c1 && this._currentActionPair.carB === c2) ||
+             (this._currentActionPair.carA === c2 && this._currentActionPair.carB === c1))) {
+          score += 45;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestPair = { carA: c1, carB: c2 };
+        }
+      }
+    }
+
+    if (!bestPair) {
+      const leaderCar = rankedCars[0] || pool[0];
+      const secondCar = pool.find((c) => c !== leaderCar) || null;
+      bestPair = { carA: leaderCar, carB: secondCar };
+    }
+
+    if (bestPair.carB && this._carRankMap) {
+      const rA = this._carRankMap.get(bestPair.carA) || 99;
+      const rB = this._carRankMap.get(bestPair.carB) || 99;
+      if (rB < rA) {
+        const temp = bestPair.carA;
+        bestPair.carA = bestPair.carB;
+        bestPair.carB = temp;
+      }
+    }
+
+    this._currentActionPair = bestPair;
+    return bestPair;
+  }
+
   render(sim, opts, leader) {
     const isNewStart = (sim && (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)));
     if (isNewStart && sim) {
       this.lastGen = sim.generation;
       this._autoPreset = 'heli';
-      this._autoNextSwitch = performance.now() + 8500;
+      this._autoNextSwitch = performance.now() + 24000;
     }
     if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
@@ -5341,7 +5455,7 @@ export class Renderer3D {
             rnd -= item.weight;
           }
           this._autoPreset = chosen;
-          this._autoNextSwitch = now + 5500 + Math.random() * 2500;
+          this._autoNextSwitch = now + 18000 + Math.random() * 6000;
           this._gantryCrossedLineTime = null;
           this._gantryEntryLap = null;
         }
@@ -5349,7 +5463,7 @@ export class Renderer3D {
         // If at the start of race / session, ensure helicopter is selected
         if (!this._autoPreset || isStartPhase) {
           this._autoPreset = 'heli';
-          this._autoNextSwitch = now + 8500;
+          this._autoNextSwitch = now + 20000;
         } else {
           // General rotating pool (TV Gantry 'broadcast' is excluded so it ONLY triggers on 2-3s approach)
           const weightedPool = [
@@ -5375,16 +5489,16 @@ export class Renderer3D {
           }
           this._autoPreset = chosen;
 
-          // Dynamic shot duration per camera archetype
+          // Dynamic shot duration per camera archetype (Relaxed TV broadcast pacing)
           let duration;
           if (this._autoPreset === 'onboard') {
-            duration = 1800 + Math.random() * 1000; // 1.8s - 2.8s (brief action cut)
+            duration = 7000 + Math.random() * 4000; // 7s - 11s (brief action teaser)
           } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
-            duration = 7500 + Math.random() * 3500; // 7.5s - 11.0s (grand sweeping panoramic)
+            duration = 24000 + Math.random() * 10000; // 24s - 34s (sweeping panoramic)
           } else if (this._autoPreset === 'action_rear') {
-            duration = 6500 + Math.random() * 3000; // 6.5s - 9.5s (intense battle)
+            duration = 20000 + Math.random() * 8000; // 20s - 28s (intense battle)
           } else {
-            duration = 5000 + Math.random() * 2500; // 5.0s - 7.5s (standard follow/action)
+            duration = 18000 + Math.random() * 8000; // 18s - 26s (standard follow/action)
           }
           this._autoNextSwitch = now + duration;
         }
@@ -5393,20 +5507,10 @@ export class Renderer3D {
     }
     this.activeCameraPreset = cameraPreset;
 
-    // Dynamic P1 & P2 Battle Tracker (Primary focus for all following cameras)
-    // Objective: Keep P1 and P2 in the viewport at all times with ultra-smooth motion
-    // (no twitching or jerking on every car steering input or slide).
-    const p1 = (opts.manual && sim.player && (sim.player.alive || sim.player.finished))
-      ? sim.player
-      : (rankedCars[0] || leader || focusCar);
-
-    let p2 = null;
-    if (rankedCars.length > 1) {
-      p2 = rankedCars.find((c) => c !== p1 && (c.alive || c.finished)) || null;
-    }
-    if (!p2 && sim.cars) {
-      p2 = sim.cars.find((c) => c !== p1 && c.alive) || null;
-    }
+    // Dynamic Action Tracker (Focus where the live battle and action is across the grid)
+    const actionPair = this.findActionFocusPair(sim, rankedCars, focusCar, opts);
+    const p1 = actionPair.carA || focusCar;
+    const p2 = actionPair.carB;
 
     const p1X = p1 ? p1.x : 0;
     const p1Y = p1 ? -p1.y : 0;
