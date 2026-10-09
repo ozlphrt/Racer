@@ -4582,16 +4582,16 @@ export class Renderer3D {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 256, 256);
 
-    // Multi-lobed organic soft cloud vapor puffs (airy feathered wisps)
+    // Multi-lobed organic soft cloud vapor puffs (airy feathered wisps with solid center)
     const lobes = [
-      { x: 128, y: 128, r: 110, a: 0.42 },
-      { x: 104, y: 112, r: 84, a: 0.32 },
-      { x: 154, y: 108, r: 80, a: 0.32 },
-      { x: 108, y: 150, r: 76, a: 0.28 },
-      { x: 148, y: 146, r: 86, a: 0.28 },
-      { x: 128, y: 88, r: 68, a: 0.24 },
-      { x: 84, y: 132, r: 64, a: 0.20 },
-      { x: 172, y: 128, r: 64, a: 0.20 },
+      { x: 128, y: 128, r: 110, a: 0.75 },
+      { x: 104, y: 112, r: 84, a: 0.60 },
+      { x: 154, y: 108, r: 80, a: 0.60 },
+      { x: 108, y: 150, r: 76, a: 0.55 },
+      { x: 148, y: 146, r: 86, a: 0.55 },
+      { x: 128, y: 88, r: 68, a: 0.45 },
+      { x: 84, y: 132, r: 64, a: 0.40 },
+      { x: 172, y: 128, r: 64, a: 0.40 },
     ];
 
     for (const lobe of lobes) {
@@ -4642,7 +4642,7 @@ export class Renderer3D {
         vCosSin = cosSin;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         // Performance-tuned point size with clamp preventing GPU fill-rate chokes
-        gl_PointSize = clamp(size * (720.0 / -mvPosition.z), 2.0, 92.0);
+        gl_PointSize = clamp(size * (950.0 / -mvPosition.z), 3.0, 130.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -4659,11 +4659,11 @@ export class Renderer3D {
         );
         
         vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * vAlpha * 0.38;
-        if (alpha < 0.005) discard;
+        float alpha = texColor.a * vAlpha * 0.75;
+        if (alpha < 0.003) discard;
 
         // Rich motorsport white-grey tire friction vapor
-        vec3 smokeColor = vec3(0.93, 0.94, 0.96);
+        vec3 smokeColor = vec3(0.94, 0.95, 0.97);
         gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
@@ -4694,22 +4694,22 @@ export class Renderer3D {
     if (this.smokeParticles.length >= this.maxSmokeParticles) {
       this.smokeParticles.shift();
     }
-    // Eject smoke puff directly at tyre contact patch on tarmac surface (z = 0.04)
+    // Eject smoke puff directly at tyre contact patch on tarmac surface (z = 0.18)
     const angle = Math.random() * Math.PI * 2;
     this.smokeParticles.push({
       x: x + (Math.random() - 0.5) * 0.25,
       y: y + (Math.random() - 0.5) * 0.25,
-      z: z, // Exactly on tarmac contact plane (0.04)
-      vx: (carVx * 0.08) + (Math.random() - 0.5) * 1.2,
-      vy: (carVy * 0.08) + (Math.random() - 0.5) * 1.2,
-      vz: 0.9 + Math.random() * 1.4, // Gentle realistic upward thermal rise
-      size: 4.8 + Math.random() * 1.8, // Initial contact patch size
-      growthRate: 5.5 + Math.random() * 2.5, // Natural gradual plume expansion
+      z: z, // Exactly on tarmac contact plane (0.18)
+      vx: (carVx * 0.08) + (Math.random() - 0.5) * 1.4,
+      vy: (carVy * 0.08) + (Math.random() - 0.5) * 1.4,
+      vz: 1.1 + Math.random() * 1.5, // Gentle realistic upward thermal rise
+      size: 5.5 + Math.random() * 2.2, // Initial contact patch size
+      growthRate: 6.2 + Math.random() * 2.8, // Natural gradual plume expansion
       rot: angle,
       vRot: (Math.random() - 0.5) * 1.2,
-      alpha: Math.min(0.24, intensity * 0.24), // Airy translucent vapor
+      alpha: Math.min(0.70, 0.20 + intensity * 0.55), // Clearly visible, rich motorsport vapor
       life: 1.0,
-      decay: 0.42 + Math.random() * 0.12, // Long lingering duration (~2.2 to 2.8 seconds)
+      decay: 0.48 + Math.random() * 0.14, // Long lingering duration (~1.8 to 2.3 seconds)
     });
   }
 
@@ -4746,8 +4746,8 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      // Smooth gradual quadratic fade-out across lingering life
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 2.0);
+      // Smooth gradual fade-out across lingering life
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.4);
 
       const rIdx = writeIdx * 2;
       this.smokeCosSinArr[rIdx] = Math.cos(p.rot);
@@ -5040,13 +5040,12 @@ export class Renderer3D {
             // Smoke ONLY when a rear skid mark is actively being laid onto tarmac
             if (isRearMarking) {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-              const isRelevantCar = (car === sim.player || car === this._focusCar || car === this._actionCarA || camDist < 75);
-              if (isRelevantCar && dLR > 0.35) {
+              if (camDist < 500 && dLR > 0.25) {
                 const carVx = car.vx || 0;
                 const carVy = -(car.vy || 0);
-                // Smoke originates directly at tyre tarmac contact surface (z = 0.04)
-                this.addTireSmokePuff(rlx, rly, 0.04, carVx, carVy, curRearInt);
-                this.addTireSmokePuff(rrx, rry, 0.04, carVx, carVy, curRearInt);
+                // Smoke originates directly at tyre tarmac contact surface (z = 0.18)
+                this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, curRearInt);
+                this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, curRearInt);
               }
             }
             track.prevRearAlpha = isRearMarking ? curRearAlpha : 0.0;
@@ -5081,13 +5080,12 @@ export class Renderer3D {
             // Smoke ONLY when a front skid mark is actively being laid onto tarmac (understeer, lockup)
             if (isFrontMarking) {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-              const isRelevantCar = (car === sim.player || car === this._focusCar || car === this._actionCarA || camDist < 75);
-              if (isRelevantCar && dLF > 0.35) {
+              if (camDist < 500 && dLF > 0.25) {
                 const carVx = car.vx || 0;
                 const carVy = -(car.vy || 0);
-                // Smoke originates directly at tyre tarmac contact surface (z = 0.04)
-                this.addTireSmokePuff(flx, fly, 0.04, carVx, carVy, curFrontInt);
-                this.addTireSmokePuff(frx, fry, 0.04, carVx, carVy, curFrontInt);
+                // Smoke originates directly at tyre tarmac contact surface (z = 0.18)
+                this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, curFrontInt);
+                this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, curFrontInt);
               }
             }
             track.prevFrontAlpha = isFrontMarking ? curFrontAlpha : 0.0;
