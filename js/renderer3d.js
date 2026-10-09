@@ -1,10 +1,20 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 import { CONFIG } from './config.js';
 import { RAY_ANGLES } from './car.js';
 import { audio } from './audio.js';
 import { TireBarrierSystem } from './tireBarriers.js';
+
+// F1 Number Decals Configuration (Calibrated in 3D Decal Studio)
+export const F1_DECAL_CONFIG = {
+  front: { posX: -5.58, posY: 0.01,  posZ: 3.02, scaleX: 2.6,  scaleY: 1.7,  rotX: 70,  rotY: 0,   rotZ: -90 },
+  top:   { posX: 0.82,  posY: 0.24,  posZ: 3.29, scaleX: 3.75, scaleY: 3.9,  rotX: 0,   rotY: 10,  rotZ: -90 },
+  rear:  { posX: 12.14, posY: 0.03,  posZ: 4.24, scaleX: 3.45, scaleY: 2.75, rotX: 5,   rotY: 0,   rotZ: 90 },
+  left:  { posX: 5.1,   posY: -1.05, posZ: 2.06, scaleX: 3.25, scaleY: 2.85, rotX: 90,  rotY: 0,   rotZ: 0 },
+  right: { posX: 4.3,   posY: 2.0,   posZ: 1.84, scaleX: 3.0,  scaleY: 2.3,  rotX: -90, rotY: 180, rotZ: 0 }
+};
 
 export const TEAM_PALETTE = [
   // --- MULTI-COLOR LIVERIES (2 to 4 Vivid Contrasting Colors) ---
@@ -2977,6 +2987,7 @@ export class Renderer3D {
             this.f1Texture = child.material.map;
           }
         });
+        this.initF1DecalGeometries(gltf.scene);
         this.applyF1ModelToFleet(gltf.scene);
       },
       undefined,
@@ -2984,6 +2995,42 @@ export class Renderer3D {
         console.warn('Could not load full 2022 F1 3D model, using procedural race car mesh:', err);
       }
     );
+  }
+
+  initF1DecalGeometries(template) {
+    this.f1DecalGeometries = {};
+    let bodyMesh = null;
+    template.traverse((c) => {
+      if (c.isMesh && c.name === 'Object_6') bodyMesh = c;
+    });
+    if (!bodyMesh) return;
+
+    const m = bodyMesh.clone();
+    const s = 6.0;
+    m.scale.set(s, s, s);
+    m.rotation.set(Math.PI / 2, 0, 0);
+    m.position.set(0, 0, 0);
+    m.updateMatrixWorld(true);
+
+    Object.keys(F1_DECAL_CONFIG).forEach((key) => {
+      const d = F1_DECAL_CONFIG[key];
+      try {
+        const pos = new THREE.Vector3(d.posX, d.posY, d.posZ);
+        const euler = new THREE.Euler(
+          THREE.MathUtils.degToRad(d.rotX),
+          THREE.MathUtils.degToRad(d.rotY),
+          THREE.MathUtils.degToRad(d.rotZ),
+          'ZYX'
+        );
+        const size = new THREE.Vector3(d.scaleX, d.scaleY, 3.8);
+        const geo = new DecalGeometry(m, pos, euler, size);
+        if (geo.attributes.position && geo.attributes.position.count > 0) {
+          this.f1DecalGeometries[key] = geo;
+        }
+      } catch (err) {
+        console.warn('Decal generation failed for', key, err);
+      }
+    });
   }
 
   applyF1ModelToFleet(template) {
@@ -3016,14 +3063,15 @@ export class Renderer3D {
       : TEAM_PALETTE[teamIdx];
 
     const group = new THREE.Group();
+    const carSubGroup = new THREE.Group();
     const model = template.clone(true);
 
     // Scale and orient the 2022 F1 ground-effect car
     const s = 6.0;
     model.scale.set(s, s, s);
-    // Orient: Yaw 180 deg around vertical axis so front points forward along +X, while roof stays upright (+Z)
-    model.rotation.set(Math.PI / 2, Math.PI, 0);
-    model.position.set(0.6, 0, 0);
+    // Orient: Match Studio orientation
+    model.rotation.set(Math.PI / 2, 0, 0);
+    model.position.set(0, 0, 0);
 
     const cPri = new THREE.Color(tm.hex);
     const cSec = new THREE.Color(tm.secHex);
@@ -3213,7 +3261,34 @@ export class Renderer3D {
       }
     });
 
-    group.add(model);
+    carSubGroup.add(model);
+
+    // Apply calibrated 3D wrapped number decals (Front, Top, Rear, Left, Right)
+    if (this.f1DecalGeometries) {
+      const decalMat = new THREE.MeshBasicMaterial({
+        map: numTex,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
+      });
+
+      Object.keys(F1_DECAL_CONFIG).forEach((k) => {
+        const geo = this.f1DecalGeometries[k];
+        if (geo) {
+          const decalMesh = new THREE.Mesh(geo, decalMat);
+          decalMesh.renderOrder = 999;
+          carSubGroup.add(decalMesh);
+        }
+      });
+    }
+
+    // Yaw 180° so the car's nose points forward along velocity vector +X
+    carSubGroup.rotation.z = Math.PI;
+    group.add(carSubGroup);
     return group;
   }
 

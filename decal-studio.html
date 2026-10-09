@@ -719,59 +719,59 @@
     import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 
     // Default calibrated decal transforms
-    // Default calibrated decal transforms (World: -X=Front, +X=Rear, -Y=Left, +Y=Right, +Z=Up)
+    // Default calibrated decal transforms (User Studio Calibrated)
     const DEFAULT_DECALS = {
       front: {
         name: 'Front (Nose Tip)',
-        posX: -12.20,
-        posY: 0.00,
-        posZ: 1.10,
-        scaleX: 1.60,
-        scaleY: 1.60,
+        posX: -5.58,
+        posY: 0.01,
+        posZ: 3.02,
+        scaleX: 2.6,
+        scaleY: 1.7,
         rotX: 70,
         rotY: 0,
         rotZ: -90,
       },
       top: {
         name: 'Top (Nose Cone)',
-        posX: -6.20,
-        posY: 0.00,
-        posZ: 2.15,
-        scaleX: 2.20,
-        scaleY: 2.20,
+        posX: 0.82,
+        posY: 0.24,
+        posZ: 3.29,
+        scaleX: 3.75,
+        scaleY: 3.9,
         rotX: 0,
         rotY: 10,
         rotZ: -90,
       },
       rear: {
         name: 'Rear (Rear Wing Flap)',
-        posX: 7.50,
-        posY: 0.00,
-        posZ: 3.50,
-        scaleX: 2.40,
-        scaleY: 1.40,
-        rotX: 90,
+        posX: 12.14,
+        posY: 0.03,
+        posZ: 4.24,
+        scaleX: 3.45,
+        scaleY: 2.75,
+        rotX: 5,
         rotY: 0,
         rotZ: 90,
       },
       left: {
         name: 'Left (Sidepod / Fin)',
-        posX: 0.80,
-        posY: -2.30,
-        posZ: 1.85,
-        scaleX: 1.80,
-        scaleY: 1.80,
+        posX: 5.1,
+        posY: -1.05,
+        posZ: 2.06,
+        scaleX: 3.25,
+        scaleY: 2.85,
         rotX: 90,
         rotY: 0,
         rotZ: 0,
       },
       right: {
         name: 'Right (Sidepod / Fin)',
-        posX: 0.80,
-        posY: 2.30,
-        posZ: 1.85,
-        scaleX: 1.80,
-        scaleY: 1.80,
+        posX: 4.3,
+        posY: 2,
+        posZ: 1.84,
+        scaleX: 3,
+        scaleY: 2.3,
         rotX: -90,
         rotY: 180,
         rotZ: 0,
@@ -779,7 +779,7 @@
     };
 
     // Load saved or use defaults (version-checked to update cache on calibration changes)
-    const CONFIG_VERSION = 'v3_aligned_f1';
+    const CONFIG_VERSION = 'v4_user_calibrated_f1';
     let savedDecals = null;
     try {
       if (localStorage.getItem('f1_decal_studio_version') === CONFIG_VERSION) {
