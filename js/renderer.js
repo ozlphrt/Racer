@@ -979,33 +979,22 @@ export class Renderer {
         continue;
       }
 
-      // Exact physical tire sliding models (clean grip driving leaves 0 marks)
+      // Exact physical loss-of-grip models (clean grip driving leaves 0 marks)
       const slipMag = Math.abs(car.slipAngle || 0);
       const yawMag = Math.abs(car.yawRate || 0);
       let oversteerNorm = 0;
-      if (car.speed > 30) {
-        const slipSlide = slipMag > 0.11 ? Math.min(1.0, (slipMag - 0.11) / 0.12) : 0;
-        const yawSlide = yawMag > 0.75 ? Math.min(1.0, (yawMag - 0.75) / 0.80) : 0;
-        const powerSlide = (car.throttle > 0.75 && slipMag > 0.085)
-          ? Math.min(1.0, ((car.throttle - 0.75) / 0.25) * ((slipMag - 0.085) / 0.08))
-          : 0;
-        oversteerNorm = Math.max(slipSlide, yawSlide, powerSlide);
+      if (car.speed > 35) {
+        const slipSlide = slipMag > 0.13 ? Math.min(1.0, (slipMag - 0.13) / 0.12) : 0;
+        const yawSlide = yawMag > 0.85 ? Math.min(1.0, (yawMag - 0.85) / 0.80) : 0;
+        oversteerNorm = Math.max(slipSlide, yawSlide);
       }
       const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.2) : 0;
 
-      const isHardBraking = car.throttle < -0.72 && car.speed > 30;
-      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.72) / 0.28) : 0;
+      const isHardBraking = car.throttle < -0.75 && car.speed > 35;
+      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.75) / 0.25) : 0;
       const brakeLockInt = brakeLockNorm > 0 ? Math.pow(brakeLockNorm, 1.2) : 0;
 
-      const isRapidAccel = car.throttle > 0.85 && car.speed < 38 && !car.crashed;
-      const wheelspinNorm = isRapidAccel
-        ? Math.min(1.0, ((car.throttle - 0.85) / 0.15) * (1.0 - car.speed / 42))
-        : 0;
-      const wheelspinInt = wheelspinNorm > 0 ? Math.pow(wheelspinNorm, 1.2) : 0;
-
-      const crashInt = (car.crashed && car.speed > 8) ? Math.min(0.92, car.speed / 45) : 0;
-
-      const targetIntensity = Math.min(0.92, Math.max(oversteerInt, brakeLockInt * 0.90, wheelspinInt, crashInt));
+      const targetIntensity = Math.min(0.92, Math.max(oversteerInt, brakeLockInt * 0.90));
 
       let track = this.carPrevTires.get(car);
       if (!track) {
