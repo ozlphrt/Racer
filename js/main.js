@@ -269,7 +269,10 @@ sim.onGeneration = () => {
   hubChart?.draw(sim.history, sim.bestLapEver);
   if (renderer) {
     renderer.cam = null;
+    renderer.clearSkidmarks?.();
   }
+  renderer3d?.clearSkidmarks();
+  renderer3d?.clearTireSmoke();
   updateHighestGenAndLiveSnapshot();
   updateBurstButtonUi();
   persistState();

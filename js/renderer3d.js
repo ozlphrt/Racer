@@ -4916,36 +4916,37 @@ export class Renderer3D {
         continue;
       }
 
-      // Exact physical loss-of-grip models:
+      // Exact physical loss-of-grip models (zero straightaway marks; marks strictly on true loss of grip):
       // 1. Oversteer (Rear lateral breakaway / drift):
-      // Clean grip cornering operates with slip angle < 6.0 deg (0.10 rad).
-      // True oversteer breakaway occurs when rear slip angle exceeds grip threshold (> 7.5 deg / 0.13 rad)
-      // or during rapid yaw snap rotation (> 0.85 rad/s) at speed.
+      // Must have lateral cornering load (|steer| > 0.18) with slip angle breaking past peak grip limit (> 8.0 deg / 0.14 rad),
+      // OR violent sideways spin/drift across the track (|slipAngle| > 0.35).
+      // Straightaway driving and minor collision bumps do NOT trigger oversteer marks.
       const slipMag = Math.abs(car.slipAngle || 0);
-      const yawMag = Math.abs(car.yawRate || 0);
+      const steerMag = Math.abs(car.steer || 0);
       let oversteerNorm = 0;
       if (car.speed > 35) {
-        const slipSlide = slipMag > 0.13 ? Math.min(1.0, (slipMag - 0.13) / 0.12) : 0;
-        const yawSlide = yawMag > 0.85 ? Math.min(1.0, (yawMag - 0.85) / 0.80) : 0;
-        oversteerNorm = Math.max(slipSlide, yawSlide);
+        if (steerMag > 0.18 && slipMag > 0.14) {
+          oversteerNorm = Math.min(1.0, (slipMag - 0.14) / 0.12);
+        } else if (slipMag > 0.35) {
+          oversteerNorm = Math.min(1.0, (slipMag - 0.35) / 0.25);
+        }
       }
       const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.2) : 0;
 
-      // 2. Understeer (Front tire scrub / push):
-      // Occurs when driver aggressively locks steering into high-speed corner beyond front tire grip limit
-      const steerMag = Math.abs(car.steer || 0);
+      // 2. Understeer (Front tire scrub / push wide):
+      // Only when driver aggressively locks steering into high-speed corner beyond front grip limits
       let understeerNorm = 0;
-      if (steerMag > 0.82 && car.speed > 75 && !car.crashed) {
-        const steerPush = (steerMag - 0.82) / 0.18;
+      if (steerMag > 0.85 && car.speed > 75 && !car.crashed) {
+        const steerPush = (steerMag - 0.85) / 0.15;
         const speedPush = Math.min(1.0, (car.speed - 75) / 40);
         understeerNorm = Math.min(1.0, steerPush * speedPush);
       }
       const understeerInt = understeerNorm > 0 ? Math.pow(understeerNorm, 1.2) : 0;
 
-      // 3. Brake Locks (Threshold braking lockup / flatspotting):
-      // Only under heavy panic / maximum threshold braking
-      const isHardBraking = car.throttle < -0.75 && car.speed > 35;
-      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.75) / 0.25) : 0;
+      // 3. Brake Locks (Panic / maximum threshold braking lockup):
+      // Only under full hard braking at high speed
+      const isHardBraking = car.throttle < -0.80 && car.speed > 38;
+      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.80) / 0.20) : 0;
       const brakeLockInt = brakeLockNorm > 0 ? Math.pow(brakeLockNorm, 1.2) : 0;
 
       // Rear tires mark strictly on oversteer slides and heavy brake locks
@@ -5287,8 +5288,8 @@ export class Renderer3D {
     const prevA = prevPair?.carA;
     const prevAValid = prevA && (prevA.alive || prevA.finished) && !prevA.crashed;
 
-    // STRICT 5-SECOND LOCK: Camera target/focus cannot change earlier than 5.0 seconds (5000ms)
-    if (prevAValid && this._lastActionPairTime && (now - this._lastActionPairTime < 5000)) {
+    // STRICT 18-SECOND LOCK: Camera stays calmly focused on the active car and battle without rapid hopping
+    if (prevAValid && this._lastActionPairTime && (now - this._lastActionPairTime < 18000)) {
       // Keep tracking the same carA; if partner carB is dead/crashed/gone, find closest active opponent
       let partnerB = prevPair.carB;
       if (!partnerB || (!partnerB.alive && !partnerB.finished) || partnerB.crashed) {
