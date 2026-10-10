@@ -1582,16 +1582,17 @@ h1 {
   align-items: center;
 }
 
-.gen-dial-btn {
+.gen-dial-btn,
+.hub-pill-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 11px 0 9px;
+  gap: 8px;
+  height: 34px;
+  padding: 0 13px 0 10px;
   border-radius: 9999px;
-  background: rgba(15, 23, 42, 0.82);
-  border: 1px solid rgba(192, 132, 252, 0.45);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 12px rgba(192, 132, 252, 0.2);
+  background: rgba(10, 16, 32, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   cursor: pointer;
@@ -1599,38 +1600,51 @@ h1 {
   font-family: 'Outfit', sans-serif;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
+  flex-shrink: 0;
 }
 
-.gen-dial-btn:hover {
-  background: rgba(30, 20, 50, 0.92);
-  border-color: rgba(192, 132, 252, 0.85);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(192, 132, 252, 0.4);
+.gen-dial-btn:hover,
+.hub-pill-btn:hover {
+  background: rgba(18, 28, 52, 0.92);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.22);
+  color: #ffffff;
   transform: translateY(-1px);
+}
+
+.gen-dial-btn:active,
+.hub-pill-btn:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .gen-dial-btn.is-active,
 .gen-dial-btn[aria-expanded="true"] {
-  border-color: #c084fc;
-  background: rgba(45, 25, 75, 0.95);
-  box-shadow: 0 0 16px rgba(192, 132, 252, 0.45);
+  border-color: rgba(56, 189, 248, 0.7);
+  background: rgba(20, 35, 65, 0.95);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3);
 }
 
-.gen-dial-icon {
-  color: #c084fc;
+.gen-dial-icon,
+.hub-pill-icon {
+  width: 16px;
+  height: 16px;
+  color: #38bdf8;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6));
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.4));
 }
 
-.gen-dial-label {
-  font-size: 11.5px;
-  font-weight: 700;
+.gen-dial-label,
+.hub-pill-label {
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.02em;
-  color: #ffffff;
+  color: #f8fafc;
   white-space: nowrap;
 }
 
 .gen-dial-label strong {
-  color: #c084fc;
+  color: #38bdf8;
+  font-weight: 700;
 }
 
 .gen-dial-chevron {
@@ -1641,7 +1655,7 @@ h1 {
 
 .gen-dial-btn[aria-expanded="true"] .gen-dial-chevron {
   transform: rotate(180deg);
-  color: #c084fc;
+  color: #38bdf8;
 }
 
 /* Gen Dial Popover (Opens UPWARDS from bottom-left) */
@@ -1658,7 +1672,7 @@ h1 {
   border-radius: 16px;
   background: rgba(10, 15, 31, 0.94);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(192, 132, 252, 0.15);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(56, 189, 248, 0.12);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: 40;
@@ -1694,9 +1708,9 @@ h1 {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
-  color: #c084fc;
-  background: rgba(192, 132, 252, 0.15);
-  border: 1px solid rgba(192, 132, 252, 0.35);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.35);
   padding: 1.5px 5px;
   border-radius: 4px;
 }
@@ -1733,10 +1747,10 @@ h1 {
 }
 
 .gen-dial-item.active {
-  background: rgba(192, 132, 252, 0.18);
-  border-color: rgba(192, 132, 252, 0.6);
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.55);
   color: #ffffff;
-  box-shadow: 0 0 12px rgba(192, 132, 252, 0.25);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.20);
 }
 
 .gen-dial-item.is-live {
@@ -1781,15 +1795,15 @@ h1 {
 }
 
 .matrix-grade-badge.grade-apex {
-  background: rgba(192, 132, 252, 0.25);
-  color: #e879f9;
-  border: 1px solid rgba(192, 132, 252, 0.4);
+  background: rgba(56, 189, 248, 0.22);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
 }
 
 .matrix-grade-badge.grade-elite {
-  background: rgba(56, 189, 248, 0.25);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(34, 211, 238, 0.22);
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.4);
 }
 
 .gen-dial-item-live-badge {
@@ -1810,7 +1824,7 @@ h1 {
 }
 
 .gen-dial-item.active .gen-dial-item-tier {
-  color: #c084fc;
+  color: #38bdf8;
 }
 
 .gen-dial-item-metric {
@@ -1831,62 +1845,7 @@ h1 {
 }
 
 .gen-dial-check {
-  color: #c084fc;
-}
-
-/* Training Hub Pill Button */
-.hub-pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 13px 0 10px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.32), rgba(6, 182, 212, 0.25));
-  border: 1px solid rgba(168, 85, 247, 0.65);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 16px rgba(168, 85, 247, 0.35);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  cursor: pointer;
-  color: #ffffff;
-  font-family: 'Outfit', sans-serif;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  user-select: none;
-  flex-shrink: 0;
-}
-
-.hub-pill-btn:hover {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.52), rgba(6, 182, 212, 0.45));
-  border-color: #38bdf8;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 24px rgba(168, 85, 247, 0.6), 0 0 16px rgba(56, 189, 248, 0.45);
-  transform: translateY(-2px) scale(1.03);
-}
-
-.hub-pill-btn:active {
-  transform: translateY(0) scale(0.98);
-}
-
-.hub-pill-icon {
-  width: 22px;
-  height: 22px;
-  color: #c084fc;
-  filter: drop-shadow(0 0 6px rgba(192, 132, 252, 0.85));
-  flex-shrink: 0;
-  animation: brain-pulse 2.2s ease-in-out infinite;
-}
-
-.hub-pill-label {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-  white-space: nowrap;
-}
-
-@keyframes brain-pulse {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6)); color: #c084fc; }
-  50% { transform: scale(1.15); filter: drop-shadow(0 0 10px rgba(232, 121, 249, 0.95)); color: #e879f9; }
+  color: #38bdf8;
 }
 
 /* ===== Consolidated Settings Widget & Popover ===== */
