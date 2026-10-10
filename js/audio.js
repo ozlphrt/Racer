@@ -354,15 +354,24 @@ export class SpatialAudioEngine {
     const unlockHandler = () => {
       this.resume();
       if (this.ctx && this.ctx.state === 'running') {
-        const events = ['click', 'pointerdown', 'mousedown', 'mouseup', 'keydown', 'touchstart', 'touchend', 'mousemove', 'wheel', 'focus'];
-        events.forEach((evt) => window.removeEventListener(evt, unlockHandler, { capture: true }));
+        const events = ['click', 'pointerdown', 'mousedown', 'mouseup', 'keydown', 'touchstart', 'touchend', 'mousemove', 'pointermove', 'wheel', 'scroll', 'focus', 'mouseover', 'pointerenter', 'visibilitychange'];
+        events.forEach((evt) => {
+          window.removeEventListener(evt, unlockHandler, { capture: true });
+          document.removeEventListener(evt, unlockHandler, { capture: true });
+        });
       }
     };
 
-    const events = ['click', 'pointerdown', 'mousedown', 'mouseup', 'keydown', 'touchstart', 'touchend', 'mousemove', 'wheel', 'focus'];
+    const events = ['click', 'pointerdown', 'mousedown', 'mouseup', 'keydown', 'touchstart', 'touchend', 'mousemove', 'pointermove', 'wheel', 'scroll', 'focus', 'mouseover', 'pointerenter', 'visibilitychange'];
     events.forEach((evt) => {
       window.addEventListener(evt, unlockHandler, { capture: true, passive: true });
+      document.addEventListener(evt, unlockHandler, { capture: true, passive: true });
     });
+
+    // Attempt direct early resume if environment allows
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
   }
 
   createCrashBuffer() {

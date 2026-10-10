@@ -309,10 +309,13 @@ function setPaused(p) {
   updateStatus();
 }
 
-function setAudio(on) {
+function setAudio(on, showToast = true) {
   state.audio = on;
-  if (audio.enabled !== on) {
-    audio.toggle();
+  audio.enabled = on;
+  if (on) {
+    audio.resume();
+  } else {
+    audio.silenceAll();
   }
   const toggleAudio = $('toggle-audio');
   if (toggleAudio) toggleAudio.checked = on;
@@ -324,7 +327,14 @@ function setAudio(on) {
     if (soundIcon) soundIcon.textContent = on ? '🔊' : '🔇';
     if (soundText) soundText.textContent = on ? 'Audio' : 'Muted';
   }
-  toast(on ? '🔊 Spatial Audio Enabled' : '🔇 Audio Muted');
+  const audioBadge = $('settings-audio-badge');
+  if (audioBadge) {
+    audioBadge.textContent = on ? 'ON' : 'OFF';
+    audioBadge.style.color = on ? '#22c55e' : '#94a3b8';
+  }
+  if (showToast) {
+    toast(on ? '🔊 Spatial Audio Enabled' : '🔇 Audio Muted');
+  }
 }
 
 function setTurbo(on) {
@@ -635,6 +645,7 @@ const btnSettingsMenu = $('btn-settings-menu');
 const settingsPopover = $('settings-popover');
 const btnSettingsClose = $('btn-settings-close');
 const btnSettingsShortcuts = $('btn-settings-shortcuts');
+const btnSettingsAudio = $('btn-settings-audio');
 const btnSettingsPanel = $('btn-settings-panel');
 const btnSettingsGuide = $('btn-settings-guide');
 
@@ -664,6 +675,11 @@ btnSettingsShortcuts?.addEventListener('click', (e) => {
   e.stopPropagation();
   setSettingsPopoverOpen(false);
   setControlsPopoverOpen(true);
+});
+
+btnSettingsAudio?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setAudio(!state.audio);
 });
 
 btnSettingsPanel?.addEventListener('click', (e) => {
@@ -2961,6 +2977,8 @@ setSliderFill(speedSlider);
 setSliderFill(mutSlider);
 refreshSavedInfo();
 updateStatus();
+setAudio(true, false);
+audio.resume();
 setCameraPreset(state.cameraPreset, false);
 renderGenPresetsRibbon();
 updateHud(sim.leader);
