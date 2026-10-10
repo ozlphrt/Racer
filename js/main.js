@@ -810,6 +810,60 @@ if (btnToggleTelemetry) {
   });
 }
 
+const CAMERA_PRESETS_CYCLE = ['auto', 'chase', 'action', 'action_rear', 'onboard', 'follow', 'heli', 'broadcast', 'orbit'];
+
+function cycleCameraPreset(direction) {
+  const current = state.cameraPreset || 'auto';
+  let idx = CAMERA_PRESETS_CYCLE.indexOf(current);
+  if (idx < 0) idx = 0;
+  let nextIdx = idx + direction;
+  if (nextIdx < 0) nextIdx = CAMERA_PRESETS_CYCLE.length - 1;
+  if (nextIdx >= CAMERA_PRESETS_CYCLE.length) nextIdx = 0;
+  setCameraPreset(CAMERA_PRESETS_CYCLE[nextIdx], true);
+}
+
+function switchTargetCar(direction) {
+  if (!sim || !sim.cars || sim.cars.length === 0) return;
+
+  const activeCars = sim.cars.filter((c) => c && (c.alive || c.finished) && !c.crashed);
+  if (activeCars.length === 0) return;
+
+  activeCars.sort((a, b) => {
+    if (a.finished !== b.finished) return a.finished ? -1 : 1;
+    if (a.finished && b.finished) {
+      const tA = a.finishTime ?? a.time;
+      const tB = b.finishTime ?? b.time;
+      return tA - tB;
+    }
+    if (a.laps !== b.laps) return b.laps - a.laps;
+    return b.totalIdx - a.totalIdx;
+  });
+
+  const currentFocus = (focusedFollowCar && (focusedFollowCar.alive || focusedFollowCar.finished) && !focusedFollowCar.crashed)
+    ? focusedFollowCar
+    : (renderer3d?.focusedCar || sim.leader || activeCars[0]);
+
+  let curIdx = activeCars.indexOf(currentFocus);
+  if (curIdx < 0) curIdx = 0;
+
+  let nextIdx = curIdx + direction;
+  if (nextIdx < 0) nextIdx = activeCars.length - 1;
+  if (nextIdx >= activeCars.length) nextIdx = 0;
+
+  const targetCar = activeCars[nextIdx];
+  if (targetCar) {
+    focusedFollowCar = targetCar;
+    state.follow = true;
+    const toggleFollow = $('toggle-follow');
+    if (toggleFollow) toggleFollow.checked = true;
+
+    const carIdx = sim.cars.indexOf(targetCar);
+    const carNum = targetCar.carNumber || (typeof targetCar.gridSlot === 'number' ? targetCar.gridSlot + 1 : (carIdx >= 0 ? carIdx + 1 : 1));
+    const rank = nextIdx + 1;
+    toast(`🎥 Camera tracking Car #${carNum} (P.${rank})`, 'info');
+  }
+}
+
 // Initial active state synchronization
 setTelemetryOpen(isTelemetryOpen);
 btnToggleLeaderboard?.classList.toggle('is-active', !leaderboard.isCollapsed);
@@ -835,11 +889,39 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
-  if (e.key in keys) {
-    keys[e.key] = true;
-    if (state.manual) e.preventDefault();
-    return;
+
+  if (state.manual) {
+    if (e.key in keys) {
+      keys[e.key] = true;
+      e.preventDefault();
+      return;
+    }
+  } else {
+    // Non-manual simulation spectator mode:
+    // Arrow Up / Down switches targeted car in race order
+    // Arrow Left / Right cycles 3D camera angles with smooth transition
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!e.repeat) switchTargetCar(-1);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!e.repeat) switchTargetCar(1);
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (!e.repeat) cycleCameraPreset(-1);
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (!e.repeat) cycleCameraPreset(1);
+      return;
+    }
   }
+
   if (e.repeat) return;
   switch (e.key.toLowerCase()) {
     case ' ':
