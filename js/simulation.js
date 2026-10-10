@@ -653,13 +653,13 @@ export class Simulation {
     if (this.cars && this.cars.length > 0) {
       for (let i = 0; i < this.cars.length; i++) {
         const c = this.cars[i];
-        if (c && c.bestLap && Number.isFinite(c.bestLap) && c.bestLap < minLap) {
+        if (c && c.bestLap && Number.isFinite(c.bestLap) && c.bestLap > 0 && c.bestLap < minLap) {
           minLap = c.bestLap;
           best = c;
         }
       }
     }
-    if (this.player && this.player.bestLap && Number.isFinite(this.player.bestLap) && this.player.bestLap < minLap) {
+    if (this.player && this.player.bestLap && Number.isFinite(this.player.bestLap) && this.player.bestLap > 0 && this.player.bestLap < minLap) {
       return this.player;
     }
     return best || (this.cars && this.cars[0]) || null;

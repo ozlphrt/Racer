@@ -353,6 +353,7 @@ function setManual(on) {
 
 function restartCurrentGen() {
   prevCollisionActive = false;
+  focusedFollowCar = null;
   eliminationModals.clear();
   if (sim.cars && sim.cars.length > 0) {
     sim.startGeneration(sim.cars.map((c) => c.brain.genome));
@@ -366,7 +367,8 @@ function restartCurrentGen() {
     renderer.cam = null;
   }
   persistState();
-  updateHud(sim.leader);
+  const bestCar = sim.bestLapCar || (sim.cars && sim.cars[0]);
+  updateHud(bestCar || sim.leader);
   toast(`Restarted cars for Generation ${sim.generation}`);
 }
 
@@ -428,6 +430,7 @@ $('track-select').addEventListener('change', (e) => {
   currentPresetKey = presetKey;
   const preset = TRACK_PRESETS[presetKey];
   if (!preset) return;
+  focusedFollowCar = null;
   eliminationModals.clear();
   currentTrack = new Track(preset.points, CONFIG.track.width, CONFIG.track.samples);
   sim.setTrack(currentTrack, true);
@@ -2874,17 +2877,24 @@ function frame(now) {
     }
   }
 
-  const bestCar = sim.bestLapCar;
-  const activeFocus = (focusedFollowCar && (focusedFollowCar.alive || focusedFollowCar.finished))
+  const bestCar = sim.bestLapCar || (sim.cars && sim.cars[0]);
+  const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
+  const userManualCar = (focusedFollowCar && (focusedFollowCar.alive || focusedFollowCar.finished) && !focusedFollowCar.crashed)
     ? focusedFollowCar
-    : ((sim.time < 3.5 && bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed)
+    : null;
+
+  const activeFocus = userManualCar
+    ? userManualCar
+    : ((isStartPhase && bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed)
       ? bestCar
-      : sim.leader);
+      : (sim.leader || bestCar));
+
+  const renderOpts = { ...state, manualFocusCar: userManualCar };
 
   if (state.view3d && renderer3d) {
-    renderer3d.render(sim, state, activeFocus);
+    renderer3d.render(sim, renderOpts, activeFocus);
   } else {
-    renderer.render(sim, state, activeFocus);
+    renderer.render(sim, renderOpts, activeFocus);
   }
 
   // Derive the active car in focus (from 3D director, 2D follower, or manual player)

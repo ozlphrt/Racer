@@ -5410,31 +5410,54 @@ export class Renderer3D {
     const prevA = prevPair?.carA;
     const prevAValid = prevA && (prevA.alive || prevA.finished) && !prevA.crashed;
 
-    // If explicit focusCar is provided and valid (e.g. user selected car via Arrow keys/leaderboard or follow mode)
-    if (focusCar && (focusCar.alive || focusCar.finished) && !focusCar.crashed) {
-      if (focusCar !== prevA || (opts && opts.follow) || (opts && opts.cameraPreset && opts.cameraPreset !== 'auto')) {
-        let closestOpponent = null;
-        let closestDist = Infinity;
+    // 1. Explicit user-selected car (Arrow keys or Leaderboard click)
+    const userCar = opts && opts.manualFocusCar;
+    if (userCar && (userCar.alive || userCar.finished) && !userCar.crashed) {
+      let closestOpponent = null;
+      let closestDist = Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        const c = pool[i];
+        if (c !== userCar && (c.alive || c.finished) && !c.crashed) {
+          const d = Math.hypot(userCar.x - c.x, -userCar.y - (-c.y));
+          if (d < closestDist) {
+            closestDist = d;
+            closestOpponent = c;
+          }
+        }
+      }
+      const pair = { carA: userCar, carB: closestOpponent };
+      if (prevA !== userCar) {
+        this._lastActionPairTime = now;
+      }
+      this._currentActionPair = pair;
+      return pair;
+    }
+
+    // 2. Start of Game / Race Launch Phase: Focus on the car with the best qualification lap time, or fallback to first car
+    const isStartPhase = !sim || (sim.time !== undefined && sim.time < 8.5) || (this.lastSimTime || 0) < 0.20;
+    if (isStartPhase && !isManual) {
+      const bestCar = (sim && sim.bestLapCar) || (sim?.cars && sim.cars[0]) || pool[0];
+      if (bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed) {
+        let nearestOpponent = null;
+        let minD = Infinity;
         for (let i = 0; i < pool.length; i++) {
           const c = pool[i];
-          if (c !== focusCar && (c.alive || c.finished) && !c.crashed) {
-            const d = Math.hypot(focusCar.x - c.x, -focusCar.y - (-c.y));
-            if (d < closestDist) {
-              closestDist = d;
-              closestOpponent = c;
+          if (c !== bestCar && (c.alive || c.finished) && !c.crashed) {
+            const d = Math.hypot(bestCar.x - c.x, -bestCar.y - (-c.y));
+            if (d < minD) {
+              minD = d;
+              nearestOpponent = c;
             }
           }
         }
-        const pair = { carA: focusCar, carB: closestOpponent };
-        if (prevA !== focusCar) {
-          this._lastActionPairTime = now;
-        }
-        this._currentActionPair = pair;
-        return pair;
+        const startPair = { carA: bestCar, carB: nearestOpponent };
+        this._currentActionPair = startPair;
+        this._lastActionPairTime = now;
+        return startPair;
       }
     }
 
-    // ROCK-SOLID CAR FOCUS LOCK: Stay calmly locked onto the active car/battle for 45-60 seconds without hopping
+    // 3. ROCK-SOLID CAR FOCUS LOCK: Stay calmly locked onto the active car/battle for 45-60 seconds without hopping
     const rankPrevA = (prevA && this._carRankMap) ? (this._carRankMap.get(prevA) || 99) : 99;
     const holdDuration = rankPrevA <= 3 ? 60000 : 45000;
 
@@ -5455,30 +5478,6 @@ export class Renderer3D {
         }
       }
       return { carA: prevA, carB: partnerB || null };
-    }
-
-    // At the start of the game / start of generation, directly anchor focus on the car with the best lap time
-    const isStartPhase = !sim || sim.time < 3.5 || (this.lastSimTime || 0) < 0.15;
-    if (isStartPhase && !isManual) {
-      const bestCar = (sim && sim.bestLapCar) || focusCar || (sim?.cars && sim.cars[0]) || pool[0];
-      if (bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed) {
-        let nearestOpponent = null;
-        let minD = Infinity;
-        for (let i = 0; i < pool.length; i++) {
-          const c = pool[i];
-          if (c !== bestCar && (c.alive || c.finished) && !c.crashed) {
-            const d = Math.hypot(bestCar.x - c.x, -bestCar.y - (-c.y));
-            if (d < minD) {
-              minD = d;
-              nearestOpponent = c;
-            }
-          }
-        }
-        const startPair = { carA: bestCar, carB: nearestOpponent };
-        this._currentActionPair = startPair;
-        this._lastActionPairTime = now;
-        return startPair;
-      }
     }
 
     // Reference position of current camera view / previous focus car
@@ -5622,8 +5621,11 @@ export class Renderer3D {
       this._lastGantryCutLap = 0;
       this._gantryEntryLap = 0;
       this._gantryCrossedLineTime = null;
-      this._autoNextSwitch = performance.now() + 7000;
+      this._autoNextSwitch = performance.now() + 18000;
       this._lastActionPairTime = performance.now();
+      const bestCar = (sim && sim.bestLapCar) || (sim?.cars && sim.cars[0]) || null;
+      this._currentActionPair = bestCar ? { carA: bestCar, carB: null } : null;
+      this.focusedCar = bestCar;
     }
     if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
