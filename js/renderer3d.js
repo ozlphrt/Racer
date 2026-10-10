@@ -5409,6 +5409,30 @@ export class Renderer3D {
     const prevA = prevPair?.carA;
     const prevAValid = prevA && (prevA.alive || prevA.finished) && !prevA.crashed;
 
+    // If explicit focusCar is provided and valid (e.g. user selected car via Arrow keys/leaderboard or follow mode)
+    if (focusCar && (focusCar.alive || focusCar.finished) && !focusCar.crashed) {
+      if (focusCar !== prevA || (opts && opts.follow) || (opts && opts.cameraPreset && opts.cameraPreset !== 'auto')) {
+        let closestOpponent = null;
+        let closestDist = Infinity;
+        for (let i = 0; i < pool.length; i++) {
+          const c = pool[i];
+          if (c !== focusCar && (c.alive || c.finished) && !c.crashed) {
+            const d = Math.hypot(focusCar.x - c.x, -focusCar.y - (-c.y));
+            if (d < closestDist) {
+              closestDist = d;
+              closestOpponent = c;
+            }
+          }
+        }
+        const pair = { carA: focusCar, carB: closestOpponent };
+        if (prevA !== focusCar) {
+          this._lastActionPairTime = now;
+        }
+        this._currentActionPair = pair;
+        return pair;
+      }
+    }
+
     // ROCK-SOLID CAR FOCUS LOCK: Stay calmly locked onto the active car/battle for 45-60 seconds without hopping
     const rankPrevA = (prevA && this._carRankMap) ? (this._carRankMap.get(prevA) || 99) : 99;
     const holdDuration = rankPrevA <= 3 ? 60000 : 45000;

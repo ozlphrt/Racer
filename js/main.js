@@ -263,6 +263,11 @@ let prevCollisionActive = false;
 sim.onGeneration = () => {
   prevCollisionActive = false;
   focusedFollowCar = null;
+  if (renderer3d) {
+    renderer3d._currentActionPair = null;
+    renderer3d._lastActionPairTime = null;
+    renderer3d.focusedCar = null;
+  }
   leaderboard.reset();
   eliminationModals.clear();
 
@@ -857,6 +862,19 @@ function switchTargetCar(direction) {
     const toggleFollow = $('toggle-follow');
     if (toggleFollow) toggleFollow.checked = true;
 
+    if (renderer3d) {
+      renderer3d.focusedCar = targetCar;
+      renderer3d._currentActionPair = { carA: targetCar, carB: null };
+      renderer3d._lastActionPairTime = performance.now();
+    }
+    if (renderer) {
+      renderer.focusedCar = targetCar;
+    }
+
+    // Immediately trigger cockpit telemetry & HUD updates
+    updateCockpitAnimation(targetCar);
+    updateHud(targetCar);
+
     const carIdx = sim.cars.indexOf(targetCar);
     const carNum = targetCar.carNumber || (typeof targetCar.gridSlot === 'number' ? targetCar.gridSlot + 1 : (carIdx >= 0 ? carIdx + 1 : 1));
     const rank = nextIdx + 1;
@@ -888,35 +906,39 @@ window.addEventListener('keydown', (e) => {
     setPanelOpen(false);
     return;
   }
-  if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
 
-  if (state.manual) {
-    if (e.key in keys) {
-      keys[e.key] = true;
-      e.preventDefault();
+  const isTextTarget = e.target instanceof HTMLInputElement && e.target.type !== 'checkbox' && e.target.type !== 'range';
+  if (isTextTarget || e.target instanceof HTMLTextAreaElement) return;
+
+  const isArrow = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+                  e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight';
+
+  if (isArrow) {
+    e.preventDefault();
+    if (document.activeElement && document.activeElement !== document.body && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+
+    if (state.manual) {
+      if (e.key in keys) {
+        keys[e.key] = true;
+      }
       return;
     }
-  } else {
-    // Non-manual simulation spectator mode:
-    // Arrow Up / Down switches targeted car in race order
-    // Arrow Left / Right cycles 3D camera angles with smooth transition
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
+
+    if (e.key === 'ArrowUp' || e.code === 'ArrowUp') {
       if (!e.repeat) switchTargetCar(-1);
       return;
     }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
+    if (e.key === 'ArrowDown' || e.code === 'ArrowDown') {
       if (!e.repeat) switchTargetCar(1);
       return;
     }
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
+    if (e.key === 'ArrowLeft' || e.code === 'ArrowLeft') {
       if (!e.repeat) cycleCameraPreset(-1);
       return;
     }
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
+    if (e.key === 'ArrowRight' || e.code === 'ArrowRight') {
       if (!e.repeat) cycleCameraPreset(1);
       return;
     }
