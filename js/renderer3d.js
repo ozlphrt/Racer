@@ -5457,6 +5457,26 @@ export class Renderer3D {
       }
     }
 
+    // Lock strictly onto current car during TV Gantry shot until finish line is crossed
+    const isBroadcastActive = (this.activeCameraPreset === 'broadcast' || this._autoPreset === 'broadcast');
+    if (isBroadcastActive && prevAValid) {
+      let partnerB = prevPair.carB;
+      if (!partnerB || (!partnerB.alive && !partnerB.finished) || partnerB.crashed) {
+        let closestD = Infinity;
+        for (let i = 0; i < pool.length; i++) {
+          const c = pool[i];
+          if (c !== prevA && (c.alive || c.finished) && !c.crashed) {
+            const d = Math.hypot(prevA.x - c.x, -prevA.y - (-c.y));
+            if (d < closestD) {
+              closestD = d;
+              partnerB = c;
+            }
+          }
+        }
+      }
+      return { carA: prevA, carB: partnerB || null };
+    }
+
     // 3. ROCK-SOLID CAR FOCUS LOCK: Stay calmly locked onto the active car/battle for 45-60 seconds without hopping
     const rankPrevA = (prevA && this._carRankMap) ? (this._carRankMap.get(prevA) || 99) : 99;
     const holdDuration = rankPrevA <= 3 ? 60000 : 45000;
@@ -5620,6 +5640,8 @@ export class Renderer3D {
       this._lastGantryCutTime = null;
       this._lastGantryCutLap = null;
       this._gantryEntryLap = null;
+      this._gantryEntryIdx = null;
+      this._gantryTargetCar = null;
       this._gantryCrossedLineTime = null;
       this._autoNextSwitch = performance.now() + 24000;
       this._lastActionPairTime = performance.now();
@@ -5700,12 +5722,14 @@ export class Renderer3D {
         const distToLine = samplesToLine * t.spacing;
         const p1Speed = p1.speed || 0;
 
-        // Approaching line at speed: trigger window 0.1s to 2.8s prior to crossing line
-        if (p1Speed > 15) {
+        // Approaching line at speed: trigger window when car is within the final straight sector
+        if (p1Speed > 8) {
           const timeToLine = distToLine / p1Speed;
-          if (timeToLine >= 0.1 && timeToLine <= 2.8) {
+          if (timeToLine >= 0.1 && timeToLine <= 3.8 && samplesToLine <= t.N * 0.35) {
             p1ApproachingGantry = true;
           }
+        } else if (samplesToLine < 15 && distToLine < 50) {
+          p1ApproachingGantry = true;
         }
       }
 
@@ -5719,31 +5743,44 @@ export class Renderer3D {
         this._lastGantryCutTime = now;
         this._lastGantryCutLap = p1Lap;
         this._gantryEntryLap = p1Lap;
+        this._gantryEntryIdx = (p1 && t && t.N) ? (((p1.idx % t.N) + t.N) % t.N) : 0;
+        this._gantryTargetCar = p1;
         this._gantryCrossedLineTime = null;
-        this._autoNextSwitch = now + 9000; // Safety guard timeout
+        this._autoNextSwitch = now + 45000; // Generous guard timeout
       }
 
-      // When TV Gantry camera is active: WAIT until P1 actually passes by the start line / completes launch!
+      // When TV Gantry camera is active: WAIT until the target car passes the finish line before switching to another cam!
       if (this._autoPreset === 'broadcast') {
-        const p1Lap = p1 ? (p1.laps || 0) : 0;
-        const p1Idx = p1 && t && t.N ? (((p1.idx % t.N) + t.N) % t.N) : 0;
-        const crossedLap = typeof this._gantryEntryLap === 'number' && p1Lap > this._gantryEntryLap;
-        const pastStartLine = p1Idx >= 12 && p1Idx <= 65 && (sim && sim.time >= 3.0);
-        const p1Finished = p1 ? p1.finished : false;
+        const targetCar = (this._gantryTargetCar && (this._gantryTargetCar.alive || this._gantryTargetCar.finished))
+          ? this._gantryTargetCar
+          : p1;
 
-        // Detect the moment P1 crosses start/finish line or launches past the gantry
-        if ((crossedLap || pastStartLine || p1Finished) && !this._gantryCrossedLineTime) {
+        if (this._gantryEntryLap === null || this._gantryEntryLap === undefined) {
+          this._gantryEntryLap = targetCar ? (targetCar.laps || 0) : 0;
+          this._gantryEntryIdx = (targetCar && t && t.N) ? (((targetCar.idx % t.N) + t.N) % t.N) : 0;
+          this._gantryTargetCar = targetCar;
+          this._lastGantryCutTime = now;
+          this._gantryCrossedLineTime = null;
+        }
+
+        const carLap = targetCar ? (targetCar.laps || 0) : 0;
+        const carIdx = (targetCar && t && t.N) ? (((targetCar.idx % t.N) + t.N) % t.N) : 0;
+        const crossedLap = typeof this._gantryEntryLap === 'number' && carLap > this._gantryEntryLap;
+        const pastStartLine = (typeof this._gantryEntryIdx === 'number' && this._gantryEntryIdx > (t ? t.N * 0.4 : 50) && carIdx >= 4 && carIdx <= 90);
+        const carFinished = Boolean(targetCar && targetCar.finished);
+
+        // Detect the exact moment the target car crosses the start/finish line
+        if ((crossedLap || pastStartLine || carFinished) && !this._gantryCrossedLineTime) {
           this._gantryCrossedLineTime = now;
         }
 
-        // Hold TV Gantry until cars have launched past Turn 1 (sim.time >= 8.5) or after crossing line
-        const launchComplete = (sim && sim.time >= 8.5);
-        const postCrossElapsed = !isStartLaunchPhase && this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 2200);
-        const safetyTimeout = !isStartLaunchPhase && now >= (this._lastGantryCutTime || 0) + 8500;
-        const minHoldPassed = (now - (this._lastGantryCutTime || 0)) >= (isStartLaunchPhase ? 8500 : 3500);
+        // Must hold until target car has crossed the finish line AND a celebration follow-through (2.2s) has passed
+        const hasCrossedLineAndHeld = Boolean(this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 2200));
+        const carCrashed = Boolean(targetCar && targetCar.crashed);
+        const emergencyFallback = (now - (this._lastGantryCutTime || now)) >= 35000 || (carCrashed && (now - (this._lastGantryCutTime || now)) >= 4000);
 
-        if ((launchComplete || postCrossElapsed || safetyTimeout) && minHoldPassed) {
-          // Transition from start gantry to pursuit helicopter / action rear
+        if (hasCrossedLineAndHeld || emergencyFallback) {
+          // Transition from start/finish gantry to pursuit helicopter / action rear / chase
           const postGantryPool = [
             { preset: 'heli', weight: 45 },
             { preset: 'action_rear', weight: 35 },
@@ -5763,14 +5800,16 @@ export class Renderer3D {
           this._autoNextSwitch = now + 26000 + Math.random() * 10000;
           this._gantryCrossedLineTime = null;
           this._gantryEntryLap = null;
+          this._gantryEntryIdx = null;
+          this._gantryTargetCar = null;
         }
       } else if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
         if (!canSwitchPreset) {
           // Retain current camera preset until shot duration has passed
         } else if (!this._autoPreset || isStartLaunchPhase) {
-          this._autoPreset = 'broadcast';
+          this._autoPreset = 'follow';
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 6000;
+          this._autoNextSwitch = now + 24000;
         } else {
           // Dynamic cinematic preset sequencing (picks natural, comfortable transitions)
           let weightedPool;
@@ -6043,7 +6082,9 @@ export class Renderer3D {
       destCamY = cy + ty * 80 + ny * 28;
       destCamZ = 10.5;
 
-      const incoming = (focusCar && focusCar.alive) ? focusCar : (leader && leader.alive ? leader : null);
+      const incoming = (this._gantryTargetCar && (this._gantryTargetCar.alive || this._gantryTargetCar.finished))
+        ? this._gantryTargetCar
+        : ((p1 && (p1.alive || p1.finished)) ? p1 : (focusCar && focusCar.alive ? focusCar : (leader && leader.alive ? leader : null)));
       destTargetX = incoming ? incoming.x : cx - tx * 35;
       destTargetY = incoming ? -incoming.y : cy - ty * 35;
       destTargetZ = 3.2;
