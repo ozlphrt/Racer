@@ -6123,7 +6123,8 @@ export class Renderer3D {
     const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
 
     if (this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
-      // Capture departing target and offset relative to target
+      // Capture departing target and camera position
+      const startCamPos = this.camera.position.clone();
       const startTarget = this.controls.target.clone();
       const startOffset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
       const startFov = this.camera.fov;
@@ -6134,38 +6135,55 @@ export class Renderer3D {
         destCamZ - destTargetZ
       );
 
-      // Polar / cylindrical coordinate parameters for a smooth circular orbital sweep around cars
       const r0 = Math.hypot(startOffset.x, startOffset.y);
       const r1 = Math.hypot(liveDestOffset.x, liveDestOffset.y);
-      let phi0 = r0 > 0.5 ? Math.atan2(startOffset.y, startOffset.x) : 0;
-      let phi1 = r1 > 0.5 ? Math.atan2(liveDestOffset.y, liveDestOffset.x) : phi0;
-      if (r0 <= 0.5) phi0 = phi1;
 
-      let diffPhi = phi1 - phi0;
-      while (diffPhi > Math.PI) diffPhi -= Math.PI * 2;
-      while (diffPhi < -Math.PI) diffPhi += Math.PI * 2;
+      // When switching to/from fixed TV Gantry or across large spatial offsets,
+      // use direct Cartesian linear glide to prevent the camera from flying far outside the track.
+      const isDirectMode = cameraPreset === 'broadcast' || this._lastActivePreset === 'broadcast' ||
+                           cameraPreset === 'orbit' || this._lastActivePreset === 'orbit' ||
+                           r0 > 75 || r1 > 75;
 
-      const z0 = startOffset.z;
-      const z1 = liveDestOffset.z;
+      if (isDirectMode) {
+        this._camTransition = {
+          active: true,
+          type: 'direct',
+          startTime: now,
+          duration: (cameraPreset === 'broadcast') ? 700 : 1100,
+          startCamPos,
+          startTarget,
+          startFov,
+        };
+      } else {
+        let phi0 = r0 > 0.5 ? Math.atan2(startOffset.y, startOffset.x) : 0;
+        let phi1 = r1 > 0.5 ? Math.atan2(liveDestOffset.y, liveDestOffset.x) : phi0;
+        if (r0 <= 0.5) phi0 = phi1;
 
-      // Generous, majestic 2.8s cinematic sweep
-      const duration = 2800;
-      const peakArcHeight = Math.min(14.0, Math.max(4.0, Math.abs(diffPhi) * 3.5));
+        let diffPhi = phi1 - phi0;
+        while (diffPhi > Math.PI) diffPhi -= Math.PI * 2;
+        while (diffPhi < -Math.PI) diffPhi += Math.PI * 2;
 
-      this._camTransition = {
-        active: true,
-        startTime: now,
-        duration,
-        startTarget,
-        r0,
-        r1,
-        phi0,
-        diffPhi,
-        z0,
-        z1,
-        startFov,
-        peakArcHeight,
-      };
+        const z0 = startOffset.z;
+        const z1 = liveDestOffset.z;
+        const duration = 1600;
+        const peakArcHeight = Math.min(8.0, Math.max(2.5, Math.abs(diffPhi) * 2.0));
+
+        this._camTransition = {
+          active: true,
+          type: 'orbital',
+          startTime: now,
+          duration,
+          startTarget,
+          r0,
+          r1,
+          phi0,
+          diffPhi,
+          z0,
+          z1,
+          startFov,
+          peakArcHeight,
+        };
+      }
     }
     this._lastActivePreset = cameraPreset;
 
@@ -6177,29 +6195,40 @@ export class Renderer3D {
       // s(t) = t^3 * (t * (6t - 15) + 10)
       const s = progress * progress * progress * (progress * (progress * 6 - 15) + 10);
 
-      // 1. Look target: smoothly glides from startTarget to destTarget
-      const curTargetX = this._camTransition.startTarget.x + (destTargetX - this._camTransition.startTarget.x) * s;
-      const curTargetY = this._camTransition.startTarget.y + (destTargetY - this._camTransition.startTarget.y) * s;
-      const curTargetZ = this._camTransition.startTarget.z + (destTargetZ - this._camTransition.startTarget.z) * s;
+      let curX, curY, curZ, curTargetX, curTargetY, curTargetZ;
 
-      // 2. Circular / cylindrical orbital sweep around target (constant radius arc, NEVER cuts through car!)
-      const curPhi = this._camTransition.phi0 + this._camTransition.diffPhi * s;
-      const curRadius = this._camTransition.r0 + (this._camTransition.r1 - this._camTransition.r0) * s;
-      const arcZ = Math.sin(Math.PI * s) * this._camTransition.peakArcHeight;
-      const curZOffset = this._camTransition.z0 + (this._camTransition.z1 - this._camTransition.z0) * s + arcZ;
+      if (this._camTransition.type === 'direct') {
+        // Direct world-space Cartesian glide straight to the destination
+        curX = this._camTransition.startCamPos.x + (destCamX - this._camTransition.startCamPos.x) * s;
+        curY = this._camTransition.startCamPos.y + (destCamY - this._camTransition.startCamPos.y) * s;
+        curZ = this._camTransition.startCamPos.z + (destCamZ - this._camTransition.startCamPos.z) * s;
 
-      const curOffsetX = Math.cos(curPhi) * curRadius;
-      const curOffsetY = Math.sin(curPhi) * curRadius;
+        curTargetX = this._camTransition.startTarget.x + (destTargetX - this._camTransition.startTarget.x) * s;
+        curTargetY = this._camTransition.startTarget.y + (destTargetY - this._camTransition.startTarget.y) * s;
+        curTargetZ = this._camTransition.startTarget.z + (destTargetZ - this._camTransition.startTarget.z) * s;
+      } else {
+        // Orbital cylindrical sweep around the target
+        curTargetX = this._camTransition.startTarget.x + (destTargetX - this._camTransition.startTarget.x) * s;
+        curTargetY = this._camTransition.startTarget.y + (destTargetY - this._camTransition.startTarget.y) * s;
+        curTargetZ = this._camTransition.startTarget.z + (destTargetZ - this._camTransition.startTarget.z) * s;
 
-      // 3. Final camera world coordinates
-      const curX = curTargetX + curOffsetX;
-      const curY = curTargetY + curOffsetY;
-      let curZ = curTargetZ + curZOffset;
+        const curPhi = this._camTransition.phi0 + this._camTransition.diffPhi * s;
+        const curRadius = this._camTransition.r0 + (this._camTransition.r1 - this._camTransition.r0) * s;
+        const arcZ = Math.sin(Math.PI * s) * this._camTransition.peakArcHeight;
+        const curZOffset = this._camTransition.z0 + (this._camTransition.z1 - this._camTransition.z0) * s + arcZ;
+
+        const curOffsetX = Math.cos(curPhi) * curRadius;
+        const curOffsetY = Math.sin(curPhi) * curRadius;
+
+        curX = curTargetX + curOffsetX;
+        curY = curTargetY + curOffsetY;
+        curZ = curTargetZ + curZOffset;
+      }
 
       // Strict terrain elevation guard: camera never clips through hills or mounds
       const groundElev = this.getTerrainHeight(curX, curY);
-      if (curZ < groundElev + 3.0) {
-        curZ = groundElev + 3.0;
+      if (curZ < groundElev + 2.5) {
+        curZ = groundElev + 2.5;
       }
 
       const curFov = this._camTransition.startFov + (targetFov - this._camTransition.startFov) * s;
