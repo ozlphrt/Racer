@@ -452,7 +452,12 @@ export class Car {
   }
 
   get bestLap() {
-    return this.lapTimes.length ? Math.min(...this.lapTimes) : Infinity;
+    if (this.lapTimes.length) return Math.min(...this.lapTimes);
+    return Number.isFinite(this._initialBestLap) ? this._initialBestLap : Infinity;
+  }
+
+  set bestLap(val) {
+    this._initialBestLap = val;
   }
 
   /** 0..1 progress within the current lap. */
