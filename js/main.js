@@ -747,6 +747,24 @@ const CAMERA_SHORT_NAMES = {
   orbit: 'Free Orbit',
 };
 
+let lastCameraFlashPreset = null;
+let cameraNameBadgeTimer = null;
+
+export function flashCameraNameBadge(shotName, isAuto = false) {
+  const badge = $('cam-temp-badge');
+  if (!badge) return;
+  badge.textContent = shotName;
+  badge.classList.remove('is-hidden');
+  badge.classList.add('is-visible');
+  badge.classList.toggle('is-auto', isAuto);
+
+  if (cameraNameBadgeTimer) clearTimeout(cameraNameBadgeTimer);
+  cameraNameBadgeTimer = setTimeout(() => {
+    badge.classList.remove('is-visible');
+    badge.classList.add('is-hidden');
+  }, 2400);
+}
+
 function updateCameraPill() {
   const btn = $('btn-camera-menu');
   const dot = $('cam-active-dot');
@@ -763,6 +781,19 @@ function updateCameraPill() {
     } else {
       dot.style.background = '#38bdf8';
       dot.style.boxShadow = '0 0 6px #38bdf8';
+    }
+  }
+
+  const effectivePreset = (isAuto && renderer3d?.activeCameraPreset)
+    ? renderer3d.activeCameraPreset
+    : (state.cameraPreset || 'auto');
+
+  if (effectivePreset !== lastCameraFlashPreset) {
+    const isFirstRun = lastCameraFlashPreset === null;
+    lastCameraFlashPreset = effectivePreset;
+    if (!isFirstRun) {
+      const displayName = CAMERA_SHORT_NAMES[effectivePreset] || effectivePreset;
+      flashCameraNameBadge(displayName, isAuto);
     }
   }
 }
@@ -790,6 +821,9 @@ function setCameraPreset(preset, showToast = true) {
   document.querySelectorAll('.btn-cam-preset').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-preset') === preset);
   });
+
+  const displayName = CAMERA_SHORT_NAMES[preset] || preset;
+  flashCameraNameBadge(displayName, preset === 'auto');
 
   updateCameraPill();
 
