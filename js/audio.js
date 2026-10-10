@@ -86,7 +86,7 @@ class RealtimeEngineVoice {
     this.oscSub.type = 'triangle';
     this.oscSub.frequency.setValueAtTime(45, ctx.currentTime);
     this.gainSub = ctx.createGain();
-    this.gainSub.gain.setValueAtTime(0.28, ctx.currentTime);
+    this.gainSub.gain.setValueAtTime(0.48, ctx.currentTime);
     this.oscSub.connect(this.gainSub);
 
     // 2. Main Cylinder Combustion Stroke (70 Hz – 180 Hz, Triangle + Sine mix)
@@ -94,7 +94,7 @@ class RealtimeEngineVoice {
     this.oscPulse.type = 'triangle';
     this.oscPulse.frequency.setValueAtTime(80, ctx.currentTime);
     this.gainPulse = ctx.createGain();
-    this.gainPulse.gain.setValueAtTime(0.25, ctx.currentTime);
+    this.gainPulse.gain.setValueAtTime(0.45, ctx.currentTime);
     this.oscPulse.connect(this.gainPulse);
 
     // 3. Exhaust Manifold Harmonic (140 Hz – 360 Hz, Sine with warm undertone)
@@ -102,7 +102,7 @@ class RealtimeEngineVoice {
     this.oscHarmonic.type = 'sine';
     this.oscHarmonic.frequency.setValueAtTime(160, ctx.currentTime);
     this.gainHarmonic = ctx.createGain();
-    this.gainHarmonic.gain.setValueAtTime(0.18, ctx.currentTime);
+    this.gainHarmonic.gain.setValueAtTime(0.35, ctx.currentTime);
     this.oscHarmonic.connect(this.gainHarmonic);
 
     // 4. Organic Exhaust Air Turbulence (Modulated Brown Noise)
@@ -114,14 +114,14 @@ class RealtimeEngineVoice {
     this.airFilterNoise.frequency.setValueAtTime(280, ctx.currentTime);
     this.airFilterNoise.Q.setValueAtTime(1.8, ctx.currentTime);
     this.airNoiseGain = ctx.createGain();
-    this.airNoiseGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    this.airNoiseGain.gain.setValueAtTime(0.20, ctx.currentTime);
 
     this.airSource.connect(this.airFilterNoise);
     this.airFilterNoise.connect(this.airNoiseGain);
 
     // Mix Oscillators into Shaper & Resonators
     const engineMix = ctx.createGain();
-    engineMix.gain.setValueAtTime(0.45, ctx.currentTime);
+    engineMix.gain.setValueAtTime(0.85, ctx.currentTime);
 
     this.gainSub.connect(engineMix);
     this.gainPulse.connect(engineMix);
@@ -186,18 +186,18 @@ class RealtimeEngineVoice {
 
     let distGain = 0;
     let airCutoff = 2200;
-    let baseMixGain = 0.035; // Subtle, gentle for surrounding cars
+    let baseMixGain = 0.18; // Competitor cars ambient level
 
     if (isFocused) {
-      // Primary follow car: deep, warm, pleasant volume
+      // Primary follow car: deep, warm, powerful volume
       distGain = 1.0;
       airCutoff = 2400;
-      baseMixGain = 0.22;
+      baseMixGain = 0.75;
     } else {
-      // Competitor cars: warm, distant trackside rumble
+      // Competitor cars: warm, trackside roar
       distGain = Math.max(0, Math.pow(1 - normDist, 1.9));
       airCutoff = 350 + (1400 - 350) * Math.pow(1 - normDist, 1.8);
-      baseMixGain = 0.035;
+      baseMixGain = 0.18;
     }
 
     this.airFilter.frequency.setTargetAtTime(airCutoff, now, ramp);
@@ -266,7 +266,7 @@ class RealtimeEngineVoice {
     this.airFilterNoise.frequency.setTargetAtTime(resonatorFreq * 1.2, now, ramp);
 
     // 5. Dynamic Organic Volume Modulation
-    const throttleBoost = isFocused ? (0.75 + throttle * 0.35) : (0.70 + throttle * 0.25);
+    const throttleBoost = isFocused ? (0.85 + throttle * 0.35) : (0.75 + throttle * 0.25);
     const voiceVol = distGain * baseMixGain * throttleBoost;
     this.gainNode.gain.setTargetAtTime(voiceVol, now, ramp);
 
@@ -275,7 +275,7 @@ class RealtimeEngineVoice {
     const isDrifting = slipSpeed > 22 || (car.crashed && speed > 20);
     if (isDrifting) {
       const scrubFactor = Math.min(1, (slipSpeed - 20) / 60);
-      const scrubVol = scrubFactor * (isFocused ? 0.08 : distGain * 0.025);
+      const scrubVol = scrubFactor * (isFocused ? 0.32 : distGain * 0.10);
       this.tireGain.gain.setTargetAtTime(scrubVol, now, 0.03);
       this.tireFilter.frequency.setTargetAtTime(450 + scrubFactor * 400, now, 0.04);
     } else {
@@ -314,17 +314,17 @@ export class SpatialAudioEngine {
     try {
       this.ctx = new AudioCtx();
 
-      // Master Studio Dynamics Compressor for warm, gentle control
+      // Master Studio Dynamics Compressor for warm, punchy transparent limiting
       this.compressor = this.ctx.createDynamicsCompressor();
-      this.compressor.threshold.setValueAtTime(-18, this.ctx.currentTime);
-      this.compressor.knee.setValueAtTime(16, this.ctx.currentTime);
-      this.compressor.ratio.setValueAtTime(4.0, this.ctx.currentTime);
-      this.compressor.attack.setValueAtTime(0.008, this.ctx.currentTime);
-      this.compressor.release.setValueAtTime(0.15, this.ctx.currentTime);
+      this.compressor.threshold.setValueAtTime(-8.0, this.ctx.currentTime);
+      this.compressor.knee.setValueAtTime(10, this.ctx.currentTime);
+      this.compressor.ratio.setValueAtTime(3.0, this.ctx.currentTime);
+      this.compressor.attack.setValueAtTime(0.005, this.ctx.currentTime);
+      this.compressor.release.setValueAtTime(0.12, this.ctx.currentTime);
 
-      // Warm, balanced master gain
+      // Warm, balanced master gain calibrated for clear audibility at standard system volume
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.38, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
 
       this.compressor.connect(this.masterGain);
       this.masterGain.connect(this.ctx.destination);
@@ -378,7 +378,7 @@ export class SpatialAudioEngine {
       const decay = Math.exp(-t * 12);
       const noise = (Math.random() * 2 - 1) * 0.35;
       const thud = Math.sin(2 * Math.PI * (85 * Math.exp(-t * 9)) * t) * 0.45;
-      data[i] = (noise + thud) * decay * 0.22;
+      data[i] = (noise + thud) * decay * 0.35;
     }
     this.crashBuffer = buffer;
   }
@@ -395,7 +395,7 @@ export class SpatialAudioEngine {
     if (dist > this.maxAudibleDist) return;
 
     const normDist = Math.min(1, Math.max(0, dist / this.maxAudibleDist));
-    const volume = Math.max(0, (1 - normDist) * Math.min(1, Math.max(0.3, speed / 180)) * 0.18);
+    const volume = Math.max(0, (1 - normDist) * Math.min(1, Math.max(0.3, speed / 180)) * 0.50);
 
     if (volume <= 0.01) return;
 
@@ -428,7 +428,7 @@ export class SpatialAudioEngine {
     this.resume();
     this.enabled = !this.enabled;
     if (this.masterGain && this.ctx) {
-      const targetGain = this.enabled ? 0.38 : 0;
+      const targetGain = this.enabled ? 0.85 : 0;
       this.masterGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.04);
     }
     return this.enabled;
@@ -579,7 +579,7 @@ export class SpatialAudioEngine {
         osc1.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.012);
 
         gain1.gain.setValueAtTime(0.0001, now);
-        gain1.gain.linearRampToValueAtTime(0.24, now + 0.004);
+        gain1.gain.linearRampToValueAtTime(0.42, now + 0.004);
         gain1.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
         osc1.connect(gain1);
@@ -594,7 +594,7 @@ export class SpatialAudioEngine {
         osc2.frequency.setValueAtTime(baseFreq * 2, now); // 1760 Hz
 
         gain2.gain.setValueAtTime(0.0001, now);
-        gain2.gain.linearRampToValueAtTime(0.08, now + 0.004);
+        gain2.gain.linearRampToValueAtTime(0.18, now + 0.004);
         gain2.gain.exponentialRampToValueAtTime(0.0001, now + dur * 0.7);
 
         osc2.connect(gain2);
@@ -613,7 +613,7 @@ export class SpatialAudioEngine {
         oscHigh.frequency.setValueAtTime(1760, now);
 
         gainHigh.gain.setValueAtTime(0.0001, now);
-        gainHigh.gain.linearRampToValueAtTime(0.32, now + 0.005);
+        gainHigh.gain.linearRampToValueAtTime(0.50, now + 0.005);
         gainHigh.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
         oscHigh.connect(gainHigh);
@@ -628,7 +628,7 @@ export class SpatialAudioEngine {
         oscFifth.frequency.setValueAtTime(2640, now);
 
         gainFifth.gain.setValueAtTime(0.0001, now);
-        gainFifth.gain.linearRampToValueAtTime(0.14, now + 0.005);
+        gainFifth.gain.linearRampToValueAtTime(0.24, now + 0.005);
         gainFifth.gain.exponentialRampToValueAtTime(0.0001, now + dur * 0.85);
 
         oscFifth.connect(gainFifth);
@@ -644,7 +644,7 @@ export class SpatialAudioEngine {
         oscSub.frequency.exponentialRampToValueAtTime(48, now + 0.22);
 
         gainSub.gain.setValueAtTime(0.0001, now);
-        gainSub.gain.linearRampToValueAtTime(0.35, now + 0.008);
+        gainSub.gain.linearRampToValueAtTime(0.55, now + 0.008);
         gainSub.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
 
         oscSub.connect(gainSub);
@@ -668,7 +668,7 @@ export class SpatialAudioEngine {
       osc.frequency.setValueAtTime(120, now);
       osc.frequency.exponentialRampToValueAtTime(32, now + 0.16);
 
-      const vol = Math.min(0.42, 0.18 * (intensity / 30));
+      const vol = Math.min(0.65, 0.32 * (intensity / 30));
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.linearRampToValueAtTime(vol, now + 0.005);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
