@@ -1845,6 +1845,10 @@ const GEN_BENCHMARK_META = {
   1000: { tier: 'Grand Prix Champion · Precision slipstream', lap: 27.4, speed: 236, completion: 100, rating: 'S', gradeClass: 's' },
   2000: { tier: 'Hyper Evolved · Millimeter kerb clipping', lap: 25.2, speed: 246, completion: 100, rating: 'S+', gradeClass: 's' },
   5000: { tier: 'Apex Predator · Theoretical physics limit', lap: 23.8, speed: 254, completion: 100, rating: 'SS', gradeClass: 'ss' },
+  10000: { tier: 'Grandmaster Elite · Pixel-perfect apex clip', lap: 22.9, speed: 258, completion: 100, rating: 'SSS', gradeClass: 'sss' },
+  20000: { tier: 'Neural Singularity · Micro-slip vector mastery', lap: 22.1, speed: 262, completion: 100, rating: 'EX', gradeClass: 'ex' },
+  50000: { tier: 'Quantum Instinct · Telemetric aerodynamic lock', lap: 21.4, speed: 266, completion: 100, rating: 'EX+', gradeClass: 'ex' },
+  100000: { tier: 'Absolute Pinnacle · Zero-entropy racing god', lap: 20.8, speed: 270, completion: 100, rating: 'GOD', gradeClass: 'god' },
 };
 
 function getGenMeta(g) {
@@ -2100,15 +2104,15 @@ $('btn-matchup-all')?.addEventListener('click', () => {
   renderCompareMatrixTable();
 });
 $('btn-matchup-rookie')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([1, 5000]);
+  compareSelectedGens = new Set([1, 100000]);
   renderCompareMatrixTable();
 });
 $('btn-matchup-champs')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([250, 500, 1000, 2000, 5000]);
+  compareSelectedGens = new Set([1000, 5000, 10000, 50000, 100000]);
   renderCompareMatrixTable();
 });
 $('btn-matchup-live')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([userHighestGen, 1000, 5000]);
+  compareSelectedGens = new Set([userHighestGen, 10000, 100000]);
   renderCompareMatrixTable();
 });
 
@@ -2121,6 +2125,10 @@ function formatGenLabel(g) {
 }
 
 function getPresetTier(gen) {
+  if (gen >= 100000) return 'Absolute Pinnacle';
+  if (gen >= 50000) return 'Quantum Instinct';
+  if (gen >= 20000) return 'Neural Singularity';
+  if (gen >= 10000) return 'Grandmaster Elite';
   if (gen >= 5000) return 'Ultimate Apex';
   if (gen >= 2000) return 'Grand Master';
   if (gen >= 1000) return 'Titan Master';
