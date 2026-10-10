@@ -57,15 +57,15 @@
             </svg>
           </button>
 
-          <!-- Compare button stays OUT of dial menu as dedicated action button -->
-          <button class="btn-compare-gens glass" id="btn-compare-gens" type="button" title="Compare AI generations in a head-to-head showdown race">
-            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 3h5v5"></path>
-              <path d="M8 21H3v-5"></path>
-              <path d="M21 3l-7.5 7.5"></path>
-              <path d="M3 21l7.5-7.5"></path>
+          <!-- Compare / Showdown button -->
+          <button class="btn-compare-gens glass" id="btn-compare-gens" type="button" aria-label="Compare AI Presets in Showdown" title="Compare AI generations in a head-to-head showdown race">
+            <svg class="btn-compare-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 17.5L3 6V3h3l11.5 11.5"></path>
+              <path d="M13 19l6 2 2-6-4.5-4.5"></path>
+              <path d="M19 5l-4 4"></path>
             </svg>
-            <span>COMPARE</span>
+            <span class="btn-compare-tag">VS</span>
+            <span class="btn-compare-label">Showdown</span>
           </button>
         </div>
 
