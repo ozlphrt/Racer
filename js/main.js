@@ -2376,10 +2376,10 @@ export function renderGenPresetsRibbon() {
       activeLabelEl.innerHTML = `<span style="color:#f59e0b">⚔️ Showdown</span>`;
     } else if (activePresetGen !== null) {
       const meta = getGenMeta(activePresetGen);
-      activeLabelEl.innerHTML = `<span>${formatGenLabel(activePresetGen)}</span> <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>`;
+      activeLabelEl.innerHTML = `<span>Pre-trained ${formatGenLabel(activePresetGen)}</span> <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>`;
     } else {
       const liveNum = highestGen >= 1000 ? `${(highestGen / 1000) % 1 === 0 ? highestGen / 1000 : (highestGen / 1000).toFixed(1)}k` : `${highestGen}`;
-      activeLabelEl.innerHTML = `<span class="chip-dot"></span><span>Live ${liveNum}</span> <span class="chip-badge">ACTIVE</span>`;
+      activeLabelEl.innerHTML = `<span class="chip-dot"></span><span>Live Gen ${liveNum}</span> <span class="chip-badge">ACTIVE</span>`;
     }
   }
 
