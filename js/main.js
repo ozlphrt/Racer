@@ -2350,7 +2350,7 @@ export function loadGenerationPreset(g) {
 
 export function renderGenPresetsRibbon() {
   const container = $('gen-presets-track');
-  const activeLabelEl = $('gen-dial-active-label');
+  const activeLabelEl = $('gen-dial-label') || $('gen-dial-active-label');
 
   const highestGen = Math.max(userHighestGen, 1);
   const isPresetMatch = PRESET_MILESTONES.includes(highestGen);
@@ -2375,11 +2375,9 @@ export function renderGenPresetsRibbon() {
     if (isMultiGenBattle) {
       activeLabelEl.innerHTML = `<span style="color:#f59e0b">⚔️ Showdown</span>`;
     } else if (activePresetGen !== null) {
-      const meta = getGenMeta(activePresetGen);
-      activeLabelEl.innerHTML = `<span>Pre-trained ${formatGenLabel(activePresetGen)}</span> <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>`;
+      activeLabelEl.innerHTML = `Pre-trained AI &middot; <strong>${formatGenLabel(activePresetGen)}</strong>`;
     } else {
-      const liveNum = highestGen >= 1000 ? `${(highestGen / 1000) % 1 === 0 ? highestGen / 1000 : (highestGen / 1000).toFixed(1)}k` : `${highestGen}`;
-      activeLabelEl.innerHTML = `<span class="chip-dot"></span><span>Live Gen ${liveNum}</span> <span class="chip-badge">ACTIVE</span>`;
+      activeLabelEl.textContent = 'Pre-trained AI';
     }
   }
 

@@ -3853,43 +3853,21 @@ input[type='range']:disabled {
   flex-shrink: 0;
 }
 
-.gen-dial-tag {
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.9px;
-  color: #c084fc;
-  text-transform: uppercase;
-  padding-right: 2px;
-  border-right: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.gen-dial-active-label {
-  font-family: var(--mono);
-  font-size: 11.5px;
+.gen-dial-label {
+  font-family: var(--font);
+  font-size: 12px;
   font-weight: 700;
-  color: #ffffff;
+  letter-spacing: 0.2px;
+  color: #f1f5f9;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  white-space: nowrap;
 }
 
-.gen-dial-active-label .chip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 8px #22c55e;
-  animation: pulse-dot 1.8s infinite ease-in-out;
-}
-
-.gen-dial-active-label .chip-badge {
-  font-size: 7.5px;
+.gen-dial-label strong {
+  color: #c084fc;
   font-weight: 800;
-  letter-spacing: 0.5px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(34, 197, 94, 0.25);
-  color: #86efac;
 }
 
 .gen-dial-chevron {
