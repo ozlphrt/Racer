@@ -35,45 +35,19 @@
         <div class="hud-sep"></div>
         <div class="hud-item"><span class="hud-label">Lap</span><span class="hud-value" id="hud-lap">1/5</span></div>
         <div class="hud-sep"></div>
-        <div class="hud-item"><span class="hud-label">Best Lap</span><span class="hud-value small" id="hud-best-lap">–</span></div>
+        <div class="hud-item hud-lap-box">
+          <span class="hud-label" id="hud-lap-label">Lap Time</span>
+          <div class="hud-lap-val-row">
+            <span class="hud-value small" id="hud-best-lap">–</span>
+            <span class="hud-lap-gap" id="hud-lap-gap"></span>
+          </div>
+        </div>
         <div class="hud-sep"></div>
         <div class="hud-item"><span class="hud-label">FPS</span><span class="hud-value small" id="hud-fps">60</span></div>
         <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
       </div>
 
-      <!-- AI Generation Presets Widget (Top-Left under HUD) -->
-      <div class="gen-dial-widget" id="gen-dial-widget">
-        <div class="gen-dial-bar">
-          <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="Pre-trained AI Models" title="Select Pre-trained AI Model (1G - 130kG)">
-            <svg class="gen-dial-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
-              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
-              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
-            </svg>
-            <span class="gen-dial-label" id="gen-dial-label">Pre-trained AI</span>
-            <svg class="gen-dial-chevron" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Dial Menu Popover Dropdown -->
-        <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="Pre-trained AI Models" hidden>
-          <div class="gen-dial-popover-header">
-            <div class="gen-dial-header-title">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
-                <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
-              </svg>
-              <span>PRE-TRAINED AI MODELS</span>
-            </div>
-            <span class="gen-dial-header-badge">13 PRESETS</span>
-          </div>
-          <div class="gen-dial-preset-list" id="gen-presets-track"></div>
-        </div>
-      </div>
-
-      <!-- Ghost Mode 30s Countdown Timer Pill (Top Center) -->
+      <!-- Ghost Mode 30s Countdown Timer Pill (Top Right) -->
       <div class="ghost-timer-pill glass" id="ghost-timer-pill" aria-label="Ghost Mode Countdown Timer">
         <span class="ghost-timer-title" id="ghost-timer-title">GHOST MODE</span>
         <div class="ghost-timer-divider"></div>
@@ -139,19 +113,16 @@
           </div>
         </div>
 
-        <!-- Circular Action Buttons -->
+        <!-- Circular Action Buttons (Bottom Right Cluster) -->
         <div class="dock-buttons">
-          <!-- Camera Presets Menu Button (Pill Shape with Active Camera Label) & Popover -->
+          <!-- Camera Presets Menu (Circular Button) & Popover -->
           <div class="camera-widget" id="camera-widget">
-            <button class="cam-pill-btn glass" id="btn-camera-menu" type="button" aria-expanded="false" aria-controls="camera-popover" aria-label="Camera Presets" title="Camera Angles (V)">
-              <svg class="cam-pill-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <button class="circle-btn glass" id="btn-camera-menu" type="button" aria-expanded="false" aria-controls="camera-popover" aria-label="Camera Presets" title="Camera Angles (V)">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                 <circle cx="12" cy="13" r="4"></circle>
               </svg>
-              <span class="cam-pill-label" id="cam-pill-label">Auto Director</span>
-              <svg class="cam-pill-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
+              <span class="circle-btn-dot" id="cam-active-dot" style="background:#22c55e;"></span>
             </button>
             <div class="camera-popover glass" id="camera-popover" role="region" aria-label="Camera Presets" hidden>
               <div class="camera-popover-header">
@@ -296,90 +267,138 @@
         </div>
       </div>
 
+      <!-- Bottom Left Action Bar (Stacked AI Presets + Training Hub + Settings) -->
       <div class="bottom-action-bar" id="bottom-action-bar">
-        <button class="hub-pill-btn btn-hyper-launch glass" id="btn-fast-forward" type="button" aria-label="Open AI Training Hub" title="Training Hub">
-          <svg class="hub-pill-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
-            <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
-            <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
-            <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"></path>
-            <path d="M6.002 5.125A3 3 0 0 0 6.401 6.5"></path>
-            <path d="M3.477 10.896a4 4 0 0 1 .585-.396"></path>
-            <path d="M19.938 10.5a4 4 0 0 1 .585.396"></path>
-            <path d="M6 18a4 4 0 0 1-1.967-.516"></path>
-            <path d="M19.967 17.484A4 4 0 0 1 18 18"></path>
-          </svg>
-          <span class="hub-pill-label">Training Hub</span>
-        </button>
-
-        <div class="controls-widget" id="controls-widget">
-          <button class="circle-btn glass" id="btn-controls-menu" type="button" aria-expanded="false" aria-controls="controls-popover" aria-label="Keyboard Controls" title="Controls & Shortcuts">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="20" height="14" x="2" y="5" rx="3"></rect>
-              <line x1="6" x2="6.01" y1="9" y2="9"></line>
-              <line x1="10" x2="10.01" y1="9" y2="9"></line>
-              <line x1="14" x2="14.01" y1="9" y2="9"></line>
-              <line x1="18" x2="18.01" y1="9" y2="9"></line>
-              <line x1="8" x2="8.01" y1="13" y2="13"></line>
-              <line x1="12" x2="12.01" y1="13" y2="13"></line>
-              <line x1="16" x2="16.01" y1="13" y2="13"></line>
-            </svg>
-          </button>
-          <div class="shortcuts-popover glass" id="controls-popover" role="region" aria-label="Keyboard &amp; mouse controls" hidden>
-            <div class="shortcuts-header">
-              <span class="shortcuts-title">Controls &amp; Shortcuts</span>
-              <button class="shortcuts-close" id="btn-shortcuts-close" type="button" aria-label="Close">✕</button>
+        <div class="bottom-left-stack">
+          <!-- AI Generation Presets Widget (Stacked directly above Training Hub) -->
+          <div class="gen-dial-widget" id="gen-dial-widget">
+            <div class="gen-dial-bar">
+              <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="Pre-trained AI Models" title="Select Pre-trained AI Model (1G - 130kG)">
+                <svg class="gen-dial-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+                  <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
+                  <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
+                </svg>
+                <span class="gen-dial-label" id="gen-dial-label">Pre-trained AI</span>
+                <svg class="gen-dial-chevron" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
             </div>
-            <div class="shortcuts-list">
-              <div class="shortcut-item"><span>Switch target car</span> <span><kbd>▲</kbd> <kbd>▼</kbd></span></div>
-              <div class="shortcut-item"><span>Cycle camera view</span> <span><kbd>◄</kbd> <kbd>►</kbd></span></div>
-              <div class="shortcut-item"><span>Camera presets</span> <span><kbd>V</kbd> <kbd>1-7</kbd></span></div>
-              <div class="shortcut-item"><span>Hyper training</span> <kbd>H</kbd></div>
-              <div class="shortcut-item"><span>Leaderboard</span> <kbd>L</kbd></div>
-              <div class="shortcut-item"><span>Cockpit telemetry</span> <kbd>C</kbd></div>
-              <div class="shortcut-item"><span>Pause / Resume</span> <kbd>Space</kbd></div>
-              <div class="shortcut-item"><span>Toggle 3D / 2D</span> <kbd>O</kbd></div>
-              <div class="shortcut-item"><span>Orbit / Pan camera</span> <kbd>Drag</kbd></div>
-              <div class="shortcut-item"><span>Follow leader</span> <kbd>F</kbd></div>
-              <div class="shortcut-item"><span>Show sensors</span> <kbd>X</kbd></div>
-              <div class="shortcut-item"><span>Turbo 8× mode</span> <kbd>T</kbd></div>
-              <div class="shortcut-item"><span>Drive yourself</span> <kbd>M</kbd></div>
-              <div class="shortcut-item"><span>Restart generation</span> <kbd>R</kbd></div>
-              <div class="shortcut-item"><span>Toggle Audio</span> <kbd>S</kbd></div>
-              <div class="shortcut-item"><span>Insights panel</span> <kbd>P</kbd></div>
-              <div class="shortcut-item" style="border-top: 1px solid rgba(255,255,255,0.12); margin-top: 8px; padding-top: 8px;">
-                <button type="button" id="btn-reopen-guide" style="background: none; border: none; padding: 0; color: #c084fc; font-weight: 600; display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
-                  <span>📖 Welcome &amp; Experience Guide</span>
-                  <span style="font-size: 11px; opacity: 0.85;">Open</span>
-                </button>
+
+            <!-- Dial Menu Popover Dropdown (Opens Upwards) -->
+            <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="Pre-trained AI Models" hidden>
+              <div class="gen-dial-popover-header">
+                <div class="gen-dial-header-title">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+                    <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
+                  </svg>
+                  <span>PRE-TRAINED AI MODELS</span>
+                </div>
+                <span class="gen-dial-header-badge">13 PRESETS</span>
               </div>
-              <div class="shortcut-item">
-                <a href="decal-studio.html" target="_blank" style="color: #38bdf8; text-decoration: none; display: flex; align-items: center; justify-content: space-between; width: 100%; font-weight: 600;">
-                  <span>🎨 3D Decal Studio</span>
-                  <span style="font-size: 11px; opacity: 0.85;">Open ↗</span>
-                </a>
+              <div class="gen-dial-preset-list" id="gen-presets-track"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Row: Training Hub & Consolidated Settings Menu -->
+          <div class="bottom-left-row">
+            <button class="hub-pill-btn btn-hyper-launch glass" id="btn-fast-forward" type="button" aria-label="Open AI Training Hub" title="Training Hub">
+              <svg class="hub-pill-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+                <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
+                <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
+              </svg>
+              <span class="hub-pill-label">Training Hub</span>
+            </button>
+
+            <!-- Consolidated Settings Widget & Popover -->
+            <div class="settings-widget" id="settings-widget">
+              <button class="circle-btn glass" id="btn-settings-menu" type="button" aria-expanded="false" aria-controls="settings-popover" aria-label="Settings, Shortcuts &amp; Tools" title="Settings &amp; Tools">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+              </button>
+
+              <div class="settings-popover glass" id="settings-popover" role="region" aria-label="Settings, Shortcuts &amp; Tools" hidden>
+                <div class="settings-popover-header">
+                  <span class="settings-popover-title">SETTINGS &amp; TOOLS</span>
+                  <button class="settings-popover-close" id="btn-settings-close" type="button" aria-label="Close settings">✕</button>
+                </div>
+                <div class="settings-menu-list">
+                  <button class="settings-menu-item" id="btn-settings-shortcuts" type="button">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect width="20" height="14" x="2" y="5" rx="3"></rect>
+                      <line x1="6" x2="6.01" y1="9" y2="9"></line>
+                      <line x1="10" x2="10.01" y1="9" y2="9"></line>
+                      <line x1="14" x2="14.01" y1="9" y2="9"></line>
+                      <line x1="18" x2="18.01" y1="9" y2="9"></line>
+                    </svg>
+                    <span>Keyboard Shortcuts</span>
+                  </button>
+
+                  <a class="settings-menu-item" href="decal-studio.html" target="_blank">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+                      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+                      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+                      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+                      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+                    </svg>
+                    <span>3D Decal Studio</span>
+                    <span class="settings-item-badge">Open ↗</span>
+                  </a>
+
+                  <button class="settings-menu-item" id="btn-settings-panel" type="button">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" x2="18" y1="20" y2="10"></line>
+                      <line x1="12" x2="12" y1="20" y2="4"></line>
+                      <line x1="6" x2="6" y1="20" y2="14"></line>
+                    </svg>
+                    <span>Stats &amp; Insights Panel</span>
+                  </button>
+
+                  <button class="settings-menu-item" id="btn-settings-guide" type="button">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                    </svg>
+                    <span>Welcome &amp; Experience Guide</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <a class="circle-btn glass" href="decal-studio.html" target="_blank" aria-label="3D Decal Studio" title="3D Decal Studio (Car Numbers & Livery)" style="display: flex; align-items: center; justify-content: center; text-decoration: none; color: inherit;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
-            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
-            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
-            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
-            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
-          </svg>
-        </a>
-
-        <button class="circle-btn glass" id="btn-toggle-panel" type="button" aria-label="Toggle Insights Panel" title="Insights Panel (P)">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" x2="18" y1="20" y2="10"></line>
-            <line x1="12" x2="12" y1="20" y2="4"></line>
-            <line x1="6" x2="6" y1="20" y2="14"></line>
-          </svg>
-        </button>
+        <!-- Shortcuts Popover (Triggered from Settings or Hotkey) -->
+        <div class="shortcuts-popover glass" id="controls-popover" role="region" aria-label="Keyboard &amp; mouse controls" hidden>
+          <div class="shortcuts-header">
+            <span class="shortcuts-title">Controls &amp; Shortcuts</span>
+            <button class="shortcuts-close" id="btn-shortcuts-close" type="button" aria-label="Close">✕</button>
+          </div>
+          <div class="shortcuts-list">
+            <div class="shortcut-item"><span>Switch target car</span> <span><kbd>▲</kbd> <kbd>▼</kbd></span></div>
+            <div class="shortcut-item"><span>Cycle camera view</span> <span><kbd>◄</kbd> <kbd>►</kbd></span></div>
+            <div class="shortcut-item"><span>Camera presets</span> <span><kbd>V</kbd> <kbd>1-7</kbd></span></div>
+            <div class="shortcut-item"><span>Hyper training</span> <kbd>H</kbd></div>
+            <div class="shortcut-item"><span>Leaderboard</span> <kbd>L</kbd></div>
+            <div class="shortcut-item"><span>Cockpit telemetry</span> <kbd>C</kbd></div>
+            <div class="shortcut-item"><span>Pause / Resume</span> <kbd>Space</kbd></div>
+            <div class="shortcut-item"><span>Toggle 3D / 2D</span> <kbd>O</kbd></div>
+            <div class="shortcut-item"><span>Orbit / Pan camera</span> <kbd>Drag</kbd></div>
+            <div class="shortcut-item"><span>Follow leader</span> <kbd>F</kbd></div>
+            <div class="shortcut-item"><span>Show sensors</span> <kbd>X</kbd></div>
+            <div class="shortcut-item"><span>Turbo 8× mode</span> <kbd>T</kbd></div>
+            <div class="shortcut-item"><span>Drive yourself</span> <kbd>M</kbd></div>
+            <div class="shortcut-item"><span>Restart generation</span> <kbd>R</kbd></div>
+            <div class="shortcut-item"><span>Toggle Audio</span> <kbd>S</kbd></div>
+            <div class="shortcut-item"><span>Insights panel</span> <kbd>P</kbd></div>
+            <div class="shortcut-item"><span>Welcome Guide</span> <kbd>?</kbd></div>
+          </div>
+        </div>
       </div>
 
       <div class="paused-overlay" id="paused-overlay" hidden>

@@ -6247,6 +6247,46 @@ export class Renderer3D {
       this.skyMesh.position.copy(this.camera.position);
     }
 
+    // Smart Viewport Frustum Visibility & Auto-Recovery Guard
+    // When the tracked car leaves the screen viewport for >350ms,
+    // automatically recover camera angle / switch to Helicopter or Chase perspective
+    const checkCar = (this.focusedCar && (this.focusedCar.alive || this.focusedCar.finished))
+      ? this.focusedCar
+      : (focusCar && (focusCar.alive || focusCar.finished) ? focusCar : (leader || (rankedCars && rankedCars[0])));
+
+    if (checkCar && !isOrbitActive) {
+      if (!this._tempNdcVec) this._tempNdcVec = new THREE.Vector3();
+      const carZ = (checkCar.crashed && checkCar.alive) ? this.getTerrainHeight(checkCar.x, -checkCar.y) : 0.8;
+      this._tempNdcVec.set(checkCar.x, -checkCar.y, carZ).project(this.camera);
+
+      const isBehindCam = this._tempNdcVec.z > 1.0 || this._tempNdcVec.z < -1.0;
+      const isOffScreenX = Math.abs(this._tempNdcVec.x) > 0.94;
+      const isOffScreenY = Math.abs(this._tempNdcVec.y) > 0.92;
+      const isOutViewport = isBehindCam || isOffScreenX || isOffScreenY;
+
+      if (isOutViewport) {
+        if (!this._outOfViewportStart) {
+          this._outOfViewportStart = now;
+        } else if (now - this._outOfViewportStart > 350) {
+          const recoveryPreset = (this.activeCameraPreset === 'heli') ? 'chase' : 'heli';
+          this._autoPreset = recoveryPreset;
+          this.activeCameraPreset = recoveryPreset;
+          this._lastPresetSwitchTime = now;
+          this._autoNextSwitch = now + 24000;
+          this._outOfViewportStart = null;
+
+          if (typeof this._heliAngle === 'number') this._heliAngle = refAngle;
+          if (typeof this._chaseAngle === 'number') this._chaseAngle = refAngle;
+          if (typeof this._actionRearAngle === 'number') this._actionRearAngle = refAngle;
+          if (typeof this._actionAngle === 'number') this._actionAngle = refAngle;
+        }
+      } else {
+        this._outOfViewportStart = null;
+      }
+    } else {
+      this._outOfViewportStart = null;
+    }
+
     // Identify Top 10 positions on track for selective billboard position badges
     const top10 = rankedCars.slice(0, 10);
     const visibleSet = new Set(top10);

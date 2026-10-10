@@ -329,12 +329,50 @@ h1 {
   gap: 10px;
   padding: 6px 12px 10px;
   border-radius: 9px;
+  z-index: 20;
 }
 
 .hud-item {
   display: flex;
   flex-direction: column;
   min-width: auto;
+}
+
+.hud-item.hud-lap-box {
+  min-width: 66px;
+}
+
+.hud-lap-val-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.hud-lap-gap {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0.5px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.hud-lap-gap.record {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.22);
+  border: 1px solid rgba(192, 132, 252, 0.45);
+}
+
+.hud-lap-gap.positive {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.2);
+  border: 1px solid rgba(251, 146, 60, 0.4);
+}
+
+.hud-lap-gap.negative {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.2);
+  border: 1px solid rgba(74, 222, 128, 0.4);
 }
 
 .hud-label {
@@ -379,6 +417,77 @@ h1 {
   width: 0;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--cyan), var(--violet), var(--magenta));
+}
+
+/* ===== Compact Top-Right Ghost Mode Pill ===== */
+.ghost-timer-pill {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 14px));
+  right: max(16px, env(safe-area-inset-right, 16px));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: rgba(10, 15, 31, 0.76);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 12px rgba(34, 211, 238, 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 25;
+  pointer-events: none;
+  user-select: none;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ghost-timer-pill.hidden {
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.ghost-timer-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+  text-transform: uppercase;
+}
+
+.ghost-timer-divider {
+  width: 1px;
+  height: 12px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.ghost-timer-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.ghost-timer-pill.urgent {
+  border-color: rgba(251, 191, 36, 0.75);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 16px rgba(251, 191, 36, 0.4);
+}
+
+.ghost-timer-pill.urgent .ghost-timer-title {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.7);
+}
+
+.ghost-timer-pill.active-contact {
+  border-color: rgba(239, 68, 68, 0.75);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 16px rgba(239, 68, 68, 0.4);
+}
+
+.ghost-timer-pill.active-contact .ghost-timer-title {
+  color: #f87171;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
 }
 
 /* ===== Main Screen Collision Overlay ===== */
@@ -1391,21 +1500,293 @@ h1 {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* ===== Bottom Action Bar (Controls & Insights Buttons) ===== */
+/* ===== Bottom Action Bar (Stacked Pre-trained AI + Training Hub + Settings) ===== */
 .bottom-action-bar {
   position: absolute;
   left: max(16px, env(safe-area-inset-left, 16px));
   bottom: max(16px, calc(12px + env(safe-area-inset-bottom, 0px)));
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   z-index: 25;
 }
 
-.controls-widget {
+.bottom-left-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.bottom-left-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ===== Pre-trained AI Generation Dial Widget ===== */
+.gen-dial-widget {
   position: relative;
 }
 
+.gen-dial-bar {
+  display: flex;
+  align-items: center;
+}
+
+.gen-dial-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px 0 9px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(192, 132, 252, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 12px rgba(192, 132, 252, 0.2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  color: #f1f5f9;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.gen-dial-btn:hover {
+  background: rgba(30, 20, 50, 0.92);
+  border-color: rgba(192, 132, 252, 0.85);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(192, 132, 252, 0.4);
+  transform: translateY(-1px);
+}
+
+.gen-dial-btn.is-active,
+.gen-dial-btn[aria-expanded="true"] {
+  border-color: #c084fc;
+  background: rgba(45, 25, 75, 0.95);
+  box-shadow: 0 0 16px rgba(192, 132, 252, 0.45);
+}
+
+.gen-dial-icon {
+  color: #c084fc;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6));
+}
+
+.gen-dial-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.gen-dial-label strong {
+  color: #c084fc;
+}
+
+.gen-dial-chevron {
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.gen-dial-btn[aria-expanded="true"] .gen-dial-chevron {
+  transform: rotate(180deg);
+  color: #c084fc;
+}
+
+/* Gen Dial Popover (Opens UPWARDS from bottom-left) */
+.gen-dial-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  top: auto;
+  width: 290px;
+  max-height: min(440px, calc(100dvh - 120px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(10, 15, 31, 0.94);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(192, 132, 252, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 40;
+  animation: popover-rise 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.gen-dial-popover[hidden] {
+  display: none;
+}
+
+.gen-dial-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 7px;
+  margin-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gen-dial-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.gen-dial-header-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.15);
+  border: 1px solid rgba(192, 132, 252, 0.35);
+  padding: 1.5px 5px;
+  border-radius: 4px;
+}
+
+.gen-dial-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3.5px;
+}
+
+.gen-dial-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6.5px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid transparent;
+  color: #94a3b8;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+}
+
+.gen-dial-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateX(2px);
+}
+
+.gen-dial-item.active {
+  background: rgba(192, 132, 252, 0.18);
+  border-color: rgba(192, 132, 252, 0.6);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(192, 132, 252, 0.25);
+}
+
+.gen-dial-item.is-live {
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.gen-dial-item-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.gen-dial-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
+
+.gen-dial-item-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.matrix-grade-badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.matrix-grade-badge.grade-apex {
+  background: rgba(192, 132, 252, 0.25);
+  color: #e879f9;
+  border: 1px solid rgba(192, 132, 252, 0.4);
+}
+
+.matrix-grade-badge.grade-elite {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.gen-dial-item-live-badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.15);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.gen-dial-item-tier {
+  font-size: 9px;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.gen-dial-item.active .gen-dial-item-tier {
+  color: #c084fc;
+}
+
+.gen-dial-item-metric {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.gen-dial-item-lap {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.gen-dial-check {
+  color: #c084fc;
+}
+
+/* Training Hub Pill Button */
 .hub-pill-btn {
   display: inline-flex;
   align-items: center;
@@ -1455,30 +1836,120 @@ h1 {
   white-space: nowrap;
 }
 
-.hub-pill-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 2px;
-}
-
-.hub-pill-badge kbd {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  color: #c084fc;
-  background: rgba(192, 132, 252, 0.16);
-  border: 1px solid rgba(192, 132, 252, 0.35);
-  border-radius: 4px;
-  padding: 1px 5px;
-  line-height: 1.2;
-}
-
 @keyframes brain-pulse {
   0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6)); color: #c084fc; }
   50% { transform: scale(1.15); filter: drop-shadow(0 0 10px rgba(232, 121, 249, 0.95)); color: #e879f9; }
 }
 
+/* ===== Consolidated Settings Widget & Popover ===== */
+.settings-widget {
+  position: relative;
+}
+
+.settings-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  top: auto;
+  width: 250px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(10, 15, 31, 0.94);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(34, 211, 238, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 40;
+  animation: popover-rise 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.settings-popover[hidden] {
+  display: none;
+}
+
+.settings-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 7px;
+  margin-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-popover-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+
+.settings-popover-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.settings-popover-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.settings-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.18s ease;
+}
+
+.settings-menu-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(34, 211, 238, 0.35);
+  color: #ffffff;
+  transform: translateX(2px);
+}
+
+.settings-menu-item svg {
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+.settings-item-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.16);
+  border: 1px solid rgba(192, 132, 252, 0.35);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Shortcuts Popover */
 .shortcuts-popover {
   position: absolute;
   left: 0;
@@ -1486,9 +1957,12 @@ h1 {
   width: 290px;
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(10, 15, 31, 0.88);
+  background: rgba(10, 15, 31, 0.94);
   border: 1px solid var(--border-strong);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(34, 211, 238, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 40;
   animation: popover-rise 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

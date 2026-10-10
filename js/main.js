@@ -627,7 +627,62 @@ if (btnPanelClose) {
   });
 }
 
-// ---------- Controls Menu Popover ----------
+// ---------- Consolidated Settings Menu & Popover ----------
+const btnSettingsMenu = $('btn-settings-menu');
+const settingsPopover = $('settings-popover');
+const btnSettingsClose = $('btn-settings-close');
+const btnSettingsShortcuts = $('btn-settings-shortcuts');
+const btnSettingsPanel = $('btn-settings-panel');
+const btnSettingsGuide = $('btn-settings-guide');
+
+function setSettingsPopoverOpen(open) {
+  if (!settingsPopover) return;
+  settingsPopover.hidden = !open;
+  btnSettingsMenu?.setAttribute('aria-expanded', String(open));
+  btnSettingsMenu?.classList.toggle('is-active', open);
+}
+
+if (btnSettingsMenu) {
+  btnSettingsMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = settingsPopover?.hidden ?? true;
+    setSettingsPopoverOpen(isHidden);
+  });
+}
+
+if (btnSettingsClose) {
+  btnSettingsClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setSettingsPopoverOpen(false);
+  });
+}
+
+btnSettingsShortcuts?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setSettingsPopoverOpen(false);
+  setControlsPopoverOpen(true);
+});
+
+btnSettingsPanel?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setSettingsPopoverOpen(false);
+  setPanelOpen(!panelEl?.classList.contains('is-open'));
+});
+
+btnSettingsGuide?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setSettingsPopoverOpen(false);
+  openWelcomeGuide();
+});
+
+document.addEventListener('click', (e) => {
+  const widget = $('settings-widget');
+  if (widget && !widget.contains(e.target)) {
+    setSettingsPopoverOpen(false);
+  }
+});
+
+// ---------- Controls & Keyboard Shortcuts Popover ----------
 const btnControlsMenu = $('btn-controls-menu');
 const controlsPopover = $('controls-popover');
 const btnShortcutsClose = $('btn-shortcuts-close');
@@ -659,8 +714,9 @@ if (btnShortcutsClose) {
 }
 
 document.addEventListener('click', (e) => {
-  const widget = $('controls-widget');
-  if (widget && !widget.contains(e.target)) {
+  const popover = $('controls-popover');
+  const btn = $('btn-settings-shortcuts');
+  if (popover && !popover.hidden && !popover.contains(e.target) && (!btn || !btn.contains(e.target))) {
     setControlsPopoverOpen(false);
   }
 });
@@ -692,25 +748,21 @@ const CAMERA_SHORT_NAMES = {
 };
 
 function updateCameraPill() {
-  const labelEl = $('cam-pill-label');
   const btn = $('btn-camera-menu');
+  const dot = $('cam-active-dot');
   const isAuto = (state.cameraPreset || 'auto') === 'auto';
 
   if (btn) {
     btn.classList.toggle('is-auto-director', isAuto);
   }
 
-  if (labelEl) {
-    if (isAuto && renderer3d && renderer3d.activeCameraPreset) {
-      const activeShotName = CAMERA_SHORT_NAMES[renderer3d.activeCameraPreset] || renderer3d.activeCameraPreset;
-      if (labelEl.textContent !== activeShotName) {
-        labelEl.textContent = activeShotName;
-      }
+  if (dot) {
+    if (isAuto) {
+      dot.style.background = '#22c55e';
+      dot.style.boxShadow = '0 0 6px #22c55e';
     } else {
-      const targetName = CAMERA_SHORT_NAMES[state.cameraPreset] || 'Auto Director';
-      if (labelEl.textContent !== targetName) {
-        labelEl.textContent = targetName;
-      }
+      dot.style.background = '#38bdf8';
+      dot.style.boxShadow = '0 0 6px #38bdf8';
     }
   }
 }
@@ -2529,8 +2581,52 @@ function updateHud(leader) {
   const currentLap = sim.leader ? Math.min(sim.leader.laps + 1, maxLaps) : 1;
   setTxt('hud-lap', `${currentLap}/${maxLaps}`);
   setTxt('hud-alive', sim.aliveCount);
-  const curGenLap = sim.currentGenBestLap;
-  setTxt('hud-best-lap', Number.isFinite(curGenLap) ? fmtTime(curGenLap) : fmtTime(sim.time));
+
+  // Focus car lap timing & delta gap
+  const focusTarget = (state.view3d && renderer3d?.focusedCar) ? renderer3d.focusedCar : (leader || sim.leader || (sim.cars && sim.cars[0]));
+  const lapLabel = $('hud-lap-label');
+  const lapVal = $('hud-best-lap');
+  const lapGap = $('hud-lap-gap');
+
+  if (focusTarget) {
+    const lapTimes = focusTarget.lapTimes || [];
+    const bestEver = sim.bestLapEver;
+
+    if (lapTimes.length > 0) {
+      const lastLap = lapTimes[lapTimes.length - 1];
+      if (lapVal) lapVal.textContent = `${lastLap.toFixed(2)}s`;
+      if (lapLabel) lapLabel.textContent = 'Last Lap';
+
+      if (lapGap) {
+        if (Number.isFinite(bestEver) && bestEver < 100) {
+          const gap = lastLap - bestEver;
+          if (gap <= 0.005) {
+            lapGap.textContent = 'RECORD';
+            lapGap.className = 'hud-lap-gap record';
+          } else {
+            lapGap.textContent = `+${gap.toFixed(2)}s`;
+            lapGap.className = 'hud-lap-gap positive';
+          }
+          lapGap.hidden = false;
+        } else {
+          lapGap.textContent = '';
+          lapGap.hidden = true;
+        }
+      }
+    } else {
+      const runningLapTime = Math.max(0, focusTarget.time - (focusTarget.lapStart || 0));
+      if (lapVal) lapVal.textContent = `${runningLapTime.toFixed(1)}s`;
+      if (lapLabel) lapLabel.textContent = 'Lap Time';
+      if (lapGap) {
+        lapGap.textContent = '';
+        lapGap.hidden = true;
+      }
+    }
+  } else {
+    if (lapVal) lapVal.textContent = '–';
+    if (lapGap) lapGap.hidden = true;
+  }
+
   setTxt('hud-fps', currentFps);
   const tf = $('hud-timer-fill');
   if (tf) tf.style.width = `${(sim.time / CONFIG.generation.timeLimit) * 100}%`;
