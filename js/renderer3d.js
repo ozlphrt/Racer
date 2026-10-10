@@ -3139,6 +3139,7 @@ export class Renderer3D {
 
   setupCars() {
     this.initPositionTextures();
+    this.f1Loaded = false;
 
     this.playerCar = this.createCarMesh(C.player, true, 0, 7);
     const playerBadge = this.createBadgeSprite();
@@ -3153,6 +3154,7 @@ export class Renderer3D {
     for (let i = 0; i < pop; i++) {
       const carNumber = i + 1;
       const carMesh = this.createCarMesh(null, false, i, carNumber);
+      carMesh.visible = false;
       const badge = this.createBadgeSprite();
       carMesh.userData.badgeSprite = badge;
       carMesh.add(badge);
@@ -3177,11 +3179,13 @@ export class Renderer3D {
         });
         this.initF1DecalGeometries(gltf.scene);
         this.applyF1ModelToFleet(gltf.scene);
+        this.f1Loaded = true;
         carSideviewRenderer.init(gltf.scene, this.f1DecalGeometries, this.f1Texture);
       },
       undefined,
       (err) => {
         console.warn('Could not load full 2022 F1 3D model, using procedural race car mesh:', err);
+        this.f1Loaded = true;
       }
     );
   }
@@ -6205,7 +6209,7 @@ export class Renderer3D {
     for (let i = 0; i < this.carPool.length; i++) {
       const mesh = this.carPool[i];
       const car = sim.cars[i];
-      const shouldShow = car && (car.alive || car.finished) && (opts.ghosts || car === leader || car.crashed || car.finished);
+      const shouldShow = this.f1Loaded && car && (car.alive || car.finished) && (opts.ghosts || car === leader || car.crashed || car.finished);
       if (shouldShow) {
         mesh.visible = true;
 
@@ -6313,7 +6317,7 @@ export class Renderer3D {
     }
 
     // Update Player Car (Manual drive mode)
-    if (sim.player && sim.player.alive) {
+    if (this.f1Loaded && sim.player && sim.player.alive) {
       this.playerCar.visible = true;
       const targetX = sim.player.x;
       const targetY = -sim.player.y;
