@@ -1982,6 +1982,7 @@ const GEN_BENCHMARK_META = {
   20000: { tier: 'Neural Singularity · Micro-slip vector mastery', lap: 22.1, speed: 262, completion: 100, rating: 'EX', gradeClass: 'ex' },
   50000: { tier: 'Quantum Instinct · Telemetric aerodynamic lock', lap: 21.4, speed: 266, completion: 100, rating: 'EX+', gradeClass: 'ex' },
   100000: { tier: 'Absolute Pinnacle · Zero-entropy racing god', lap: 20.8, speed: 270, completion: 100, rating: 'GOD', gradeClass: 'god' },
+  130000: { tier: 'Apex Singularity · Flawless racing perfection', lap: 20.2, speed: 275, completion: 100, rating: 'GOD+', gradeClass: 'god' },
 };
 
 function getGenMeta(g) {
