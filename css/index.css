@@ -1848,14 +1848,17 @@ h1 {
   color: #38bdf8;
 }
 
-/* ===== Consolidated Settings Widget & Popover ===== */
+/* ===== Consolidated Settings Widget & Popover (Bottom Right Dock) ===== */
 .settings-widget {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .settings-popover {
   position: absolute;
-  left: 0;
+  right: 0;
+  left: auto;
   bottom: calc(100% + 10px);
   top: auto;
   width: 250px;
@@ -1949,9 +1952,9 @@ h1 {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
-  color: #c084fc;
-  background: rgba(192, 132, 252, 0.16);
-  border: 1px solid rgba(192, 132, 252, 0.35);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.35);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -1959,7 +1962,8 @@ h1 {
 /* Shortcuts Popover */
 .shortcuts-popover {
   position: absolute;
-  left: 0;
+  right: 0;
+  left: auto;
   bottom: calc(100% + 10px);
   width: 290px;
   padding: 14px 16px;
