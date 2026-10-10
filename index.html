@@ -47,10 +47,11 @@
         <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
       </div>
 
-      <!-- Ghost Mode 30s Countdown Timer Pill (Top Right) -->
-      <div class="ghost-timer-pill glass" id="ghost-timer-pill" aria-label="Ghost Mode Countdown Timer">
-        <span class="ghost-timer-title" id="ghost-timer-title">GHOST MODE</span>
-        <div class="ghost-timer-divider"></div>
+      <!-- Ghost Mode 30s Countdown Timer Circle Badge (Top Right) -->
+      <div class="ghost-timer-pill glass" id="ghost-timer-pill" aria-label="Ghost Mode Countdown Timer" title="Ghost Mode Active (30s Warmup)">
+        <svg class="ghost-circle-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"></path>
+        </svg>
         <span class="ghost-timer-value" id="ghost-timer-value">30s</span>
       </div>
 
