@@ -1,6 +1,6 @@
 // Pre-trained Neural Network Brain Presets for Instant Loading
 // Captured across evolutionary milestones on Grand Prix Circuit
-export const PRESET_MILESTONES = [1,2,5,10,50,100,250,500,1000,2000,5000,10000,20000,50000,100000];
+export const PRESET_MILESTONES = [1, 5, 10, 50, 100, 250, 500, 1000, 5000, 10000, 50000, 100000];
 
 export const PRESET_BRAINS = {
   "1": {
