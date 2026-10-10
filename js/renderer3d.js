@@ -5670,15 +5670,13 @@ export class Renderer3D {
     if (cameraPreset === 'auto') {
       const now = performance.now();
       if (!this._lastPresetSwitchTime) this._lastPresetSwitchTime = now;
-      const canSwitchPreset = (now - this._lastPresetSwitchTime) >= 24000;
+      const canSwitchPreset = (now - this._lastPresetSwitchTime) >= 18000;
       const p1 = (opts.manual && sim.player && (sim.player.alive || sim.player.finished)) ? sim.player : (rankedCars[0] || leader || focusCar);
 
-      // Check if P1 is approaching the Start/Finish line (2-3 seconds prior to crossing index 0)
+      // Check if P1 (or tracked car) is approaching the Start/Finish line to complete a lap
       const t = this.track;
       let p1ApproachingGantry = false;
-
-      // Don't trigger gantry during race start launch phase (when sim.time < 5.0s) so helicopter cam keeps priority
-      const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 5.0);
+      const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 3.5);
 
       if (p1 && t && t.N && t.spacing && (p1.alive || p1.finished) && !isStartPhase) {
         const p1Idx = ((p1.idx % t.N) + t.N) % t.N;
@@ -5687,41 +5685,27 @@ export class Renderer3D {
         const distToLine = samplesToLine * t.spacing;
         const p1Speed = p1.speed || 0;
 
-        // Approaching line at speed (avoid stationary triggers at spawn or on cooldown)
+        // Approaching line at speed: trigger window 0.1s to 2.8s prior to crossing line
         if (p1Speed > 15) {
-          const timeToLine = distToLine / p1Speed; // seconds until crossing start/finish line
-          // Trigger window: 2 to 3 seconds prior to crossing line (0.1s - 2.8s)
+          const timeToLine = distToLine / p1Speed;
           if (timeToLine >= 0.1 && timeToLine <= 2.8) {
             p1ApproachingGantry = true;
           }
         }
       }
 
-      // Check if this lap should trigger TV Gantry (avoid selecting on every lap end)
-      // STRICT RULE: Cannot switch earlier than 24.0 seconds from last camera change!
       const p1Lap = p1 ? (p1.laps || 0) : 0;
-      const maxLaps = CONFIG.generation?.maxLaps || 5;
-      const isRaceFinish = p1 && (p1Lap >= maxLaps - 1 || p1.finished || hasFinisher);
-      const lapDiff = typeof this._lastGantryCutLap === 'number' ? (p1Lap - this._lastGantryCutLap) : 99;
-      const gantryCooldownPassed = !this._lastGantryCutTime || (now - this._lastGantryCutTime > 60000);
+      const isNewLapToGantry = this._lastGantryCutLap !== p1Lap;
 
-      // On race finish: high chance (85%) for dramatic checkered flag shot
-      // On regular laps: only 20% chance AND requires at least 3 laps gap since last gantry cut
-      if (p1ApproachingGantry && gantryCooldownPassed && this._autoPreset !== 'broadcast' && canSwitchPreset) {
-        if (this._gantryRollLap !== p1Lap) {
-          this._gantryRollLap = p1Lap;
-          this._gantryRollPassed = isRaceFinish ? (Math.random() < 0.85) : (lapDiff >= 3 && Math.random() < 0.20);
-        }
-
-        if (this._gantryRollPassed) {
-          this._autoPreset = 'broadcast';
-          this._lastPresetSwitchTime = now;
-          this._lastGantryCutTime = now;
-          this._lastGantryCutLap = p1Lap;
-          this._gantryEntryLap = p1Lap;
-          this._gantryCrossedLineTime = null;
-          this._autoNextSwitch = now + 12000; // Safety guard timeout
-        }
+      // STRICT PRIORITY: Cut to TV Gantry whenever cars are finishing a lap
+      if (p1ApproachingGantry && isNewLapToGantry && this._autoPreset !== 'broadcast') {
+        this._autoPreset = 'broadcast';
+        this._lastPresetSwitchTime = now;
+        this._lastGantryCutTime = now;
+        this._lastGantryCutLap = p1Lap;
+        this._gantryEntryLap = p1Lap;
+        this._gantryCrossedLineTime = null;
+        this._autoNextSwitch = now + 9000; // Safety guard timeout
       }
 
       // When TV Gantry camera is active: WAIT until P1 actually passes by the start line!
@@ -5729,7 +5713,7 @@ export class Renderer3D {
         const p1Lap = p1 ? (p1.laps || 0) : 0;
         const p1Idx = p1 && t && t.N ? (((p1.idx % t.N) + t.N) % t.N) : 0;
         const crossedLap = typeof this._gantryEntryLap === 'number' && p1Lap > this._gantryEntryLap;
-        const pastStartLine = p1Idx >= 0 && p1Idx <= 45 && (now - (this._lastGantryCutTime || 0) > 600);
+        const pastStartLine = p1Idx >= 0 && p1Idx <= 45 && (now - (this._lastGantryCutTime || 0) > 400);
         const p1Finished = p1 ? p1.finished : false;
 
         // Detect the exact moment P1 crosses start/finish line
@@ -5737,18 +5721,17 @@ export class Renderer3D {
           this._gantryCrossedLineTime = now;
         }
 
-        // Wait until P1 has passed the line and ~1.5s has elapsed so we see the car flash under the gantry
-        const postCrossElapsed = this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 1500);
-        const safetyTimeout = now >= (this._lastGantryCutTime || 0) + 10000;
-        const minHoldGantryPassed = (now - (this._lastGantryCutTime || 0)) >= 6000;
+        // Hold TV Gantry for ~1.8s after crossing line to see the cars blast through the gantry
+        const postCrossElapsed = this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 1800);
+        const safetyTimeout = now >= (this._lastGantryCutTime || 0) + 7500;
+        const minHoldPassed = (now - (this._lastGantryCutTime || 0)) >= 2800;
 
-        if ((postCrossElapsed || safetyTimeout) && minHoldGantryPassed) {
-          // Switch to pursuit/action camera
+        if ((postCrossElapsed || safetyTimeout) && minHoldPassed) {
+          // Switch to pursuit/action camera for the new lap
           const postGantryPool = [
-            { preset: 'heli', weight: 45 },
-            { preset: 'action_rear', weight: 30 },
-            { preset: 'orbit', weight: 15 },
-            { preset: 'chase', weight: 10 },
+            { preset: 'action_rear', weight: 40 },
+            { preset: 'heli', weight: 35 },
+            { preset: 'chase', weight: 25 },
           ];
           let rnd = Math.random() * 100;
           let chosen = postGantryPool[0].preset;
@@ -5761,17 +5744,17 @@ export class Renderer3D {
           }
           this._autoPreset = chosen;
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 35000 + Math.random() * 15000;
+          this._autoNextSwitch = now + 26000 + Math.random() * 10000;
           this._gantryCrossedLineTime = null;
           this._gantryEntryLap = null;
         }
       } else if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
         if (!canSwitchPreset) {
-          // Strictly lock current camera preset: cannot change earlier than 24.0 seconds
+          // Retain current camera preset until shot duration has passed
         } else if (!this._autoPreset || isStartPhase) {
           this._autoPreset = 'heli';
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 35000;
+          this._autoNextSwitch = now + 30000;
         } else {
           // Dynamic cinematic preset sequencing (picks natural, comfortable transitions)
           let weightedPool;
