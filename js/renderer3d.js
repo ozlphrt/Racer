@@ -5304,13 +5304,14 @@ export class Renderer3D {
     this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
-    this._autoPreset = 'heli';
-    this._autoNextSwitch = performance.now() + 22000;
-    this._lastGantryCutTime = null;
-    this._lastGantryCutLap = null;
-    this._gantryRollLap = null;
+    this._autoPreset = 'broadcast';
+    this._lastPresetSwitchTime = performance.now();
+    this._autoNextSwitch = performance.now() + 18000;
+    this._lastGantryCutTime = performance.now();
+    this._lastGantryCutLap = 0;
+    this._gantryEntryLap = 0;
     this._gantryCrossedLineTime = null;
-    this._lastActivePreset = null;
+    this._lastActivePreset = 'broadcast';
     this._camTransition = null;
     this._currentActionPair = null;
     const t = this.track;
@@ -5322,12 +5323,12 @@ export class Renderer3D {
     const ny = tx;
 
     if (followMode) {
-      this.controls.target.set(startX, startY, 3.5);
-      // Canonical broadcast follow perspective placed behind the start grid looking down straight
-      const camX = startX - tx * 190 + nx * 75;
-      const camY = startY - ty * 190 + ny * 75;
-      const camZ = 95;
+      // Canonical broadcast TV Gantry perspective placed down the straight looking at the start grid
+      const camX = startX + tx * 80 + nx * 28;
+      const camY = startY + ty * 80 + ny * 28;
+      const camZ = 10.5;
       this.camera.position.set(camX, camY, camZ);
+      this.controls.target.set(startX - tx * 35, startY - ty * 35, 3.2);
       this.controls.update();
       return;
     }
@@ -5675,12 +5676,25 @@ export class Renderer3D {
       const canSwitchPreset = (now - this._lastPresetSwitchTime) >= 18000;
       const p1 = (opts.manual && sim.player && (sim.player.alive || sim.player.finished)) ? sim.player : (rankedCars[0] || leader || focusCar);
 
+      const isStartLaunchPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
+
+      // STRICT LOCK AT START OF GAME / RACE LAUNCH: Use Broadcast TV Gantry camera exclusively
+      if (isStartLaunchPhase) {
+        if (this._autoPreset !== 'broadcast') {
+          this._autoPreset = 'broadcast';
+          this._lastPresetSwitchTime = now;
+          this._lastGantryCutTime = now;
+          this._lastGantryCutLap = 0;
+          this._gantryEntryLap = 0;
+          this._gantryCrossedLineTime = null;
+        }
+      }
+
       // Check if P1 (or tracked car) is approaching the Start/Finish line to complete a lap
       const t = this.track;
       let p1ApproachingGantry = false;
-      const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 3.5);
 
-      if (p1 && t && t.N && t.spacing && (p1.alive || p1.finished) && !isStartPhase) {
+      if (p1 && t && t.N && t.spacing && (p1.alive || p1.finished) && !isStartLaunchPhase) {
         const p1Idx = ((p1.idx % t.N) + t.N) % t.N;
         // Distance remaining along track forward direction to index 0 (Start/Finish Line)
         const samplesToLine = (t.N - p1Idx) % t.N;
@@ -5700,7 +5714,7 @@ export class Renderer3D {
       const isNewLapToGantry = this._lastGantryCutLap !== p1Lap;
 
       // STRICT PRIORITY: Cut to TV Gantry whenever cars are finishing a lap
-      if (p1ApproachingGantry && isNewLapToGantry && this._autoPreset !== 'broadcast') {
+      if (!isStartLaunchPhase && p1ApproachingGantry && isNewLapToGantry && this._autoPreset !== 'broadcast') {
         this._autoPreset = 'broadcast';
         this._lastPresetSwitchTime = now;
         this._lastGantryCutTime = now;
@@ -5710,30 +5724,31 @@ export class Renderer3D {
         this._autoNextSwitch = now + 9000; // Safety guard timeout
       }
 
-      // When TV Gantry camera is active: WAIT until P1 actually passes by the start line!
+      // When TV Gantry camera is active: WAIT until P1 actually passes by the start line / completes launch!
       if (this._autoPreset === 'broadcast') {
         const p1Lap = p1 ? (p1.laps || 0) : 0;
         const p1Idx = p1 && t && t.N ? (((p1.idx % t.N) + t.N) % t.N) : 0;
         const crossedLap = typeof this._gantryEntryLap === 'number' && p1Lap > this._gantryEntryLap;
-        const pastStartLine = p1Idx >= 0 && p1Idx <= 45 && (now - (this._lastGantryCutTime || 0) > 400);
+        const pastStartLine = p1Idx >= 12 && p1Idx <= 65 && (sim && sim.time >= 3.0);
         const p1Finished = p1 ? p1.finished : false;
 
-        // Detect the exact moment P1 crosses start/finish line
+        // Detect the moment P1 crosses start/finish line or launches past the gantry
         if ((crossedLap || pastStartLine || p1Finished) && !this._gantryCrossedLineTime) {
           this._gantryCrossedLineTime = now;
         }
 
-        // Hold TV Gantry for ~1.8s after crossing line to see the cars blast through the gantry
-        const postCrossElapsed = this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 1800);
-        const safetyTimeout = now >= (this._lastGantryCutTime || 0) + 7500;
-        const minHoldPassed = (now - (this._lastGantryCutTime || 0)) >= 2800;
+        // Hold TV Gantry until cars have launched past Turn 1 (sim.time >= 8.5) or after crossing line
+        const launchComplete = (sim && sim.time >= 8.5);
+        const postCrossElapsed = !isStartLaunchPhase && this._gantryCrossedLineTime && (now >= this._gantryCrossedLineTime + 2200);
+        const safetyTimeout = !isStartLaunchPhase && now >= (this._lastGantryCutTime || 0) + 8500;
+        const minHoldPassed = (now - (this._lastGantryCutTime || 0)) >= (isStartLaunchPhase ? 8500 : 3500);
 
-        if ((postCrossElapsed || safetyTimeout) && minHoldPassed) {
-          // Switch to pursuit/action camera for the new lap
+        if ((launchComplete || postCrossElapsed || safetyTimeout) && minHoldPassed) {
+          // Transition from start gantry to pursuit helicopter / action rear
           const postGantryPool = [
-            { preset: 'action_rear', weight: 40 },
-            { preset: 'heli', weight: 35 },
-            { preset: 'chase', weight: 25 },
+            { preset: 'heli', weight: 45 },
+            { preset: 'action_rear', weight: 35 },
+            { preset: 'chase', weight: 20 },
           ];
           let rnd = Math.random() * 100;
           let chosen = postGantryPool[0].preset;
@@ -5753,10 +5768,10 @@ export class Renderer3D {
       } else if (!this._autoPreset || !this._autoNextSwitch || now >= this._autoNextSwitch) {
         if (!canSwitchPreset) {
           // Retain current camera preset until shot duration has passed
-        } else if (!this._autoPreset || isStartPhase) {
-          this._autoPreset = 'heli';
+        } else if (!this._autoPreset || isStartLaunchPhase) {
+          this._autoPreset = 'broadcast';
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 30000;
+          this._autoNextSwitch = now + 6000;
         } else {
           // Dynamic cinematic preset sequencing (picks natural, comfortable transitions)
           let weightedPool;
@@ -6230,26 +6245,31 @@ export class Renderer3D {
     }
 
     // Smart Viewport Frustum Visibility & Auto-Recovery Guard
-    // When the tracked car leaves the screen viewport for >350ms,
-    // automatically recover camera angle / switch to Helicopter or Chase perspective
+    // When the tracked car leaves the screen viewport for >1400ms during dynamic pursuit,
+    // automatically recover camera angle / switch to Helicopter or Chase perspective.
+    // Ignored during start launch phase, fixed broadcast gantry views, or right after preset switch.
     const checkCar = (this.focusedCar && (this.focusedCar.alive || this.focusedCar.finished))
       ? this.focusedCar
       : (focusCar && (focusCar.alive || focusCar.finished) ? focusCar : (leader || (rankedCars && rankedCars[0])));
 
-    if (checkCar && !isOrbitActive) {
+    const isBroadcastPreset = this.activeCameraPreset === 'broadcast';
+    const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
+    const inSwitchGrace = (now - (this._lastPresetSwitchTime || 0)) < 7000;
+
+    if (this.isAutoDirector && checkCar && !isOrbitActive && !isBroadcastPreset && !isStartPhase && !inSwitchGrace) {
       if (!this._tempNdcVec) this._tempNdcVec = new THREE.Vector3();
       const carZ = (checkCar.crashed && checkCar.alive) ? this.getTerrainHeight(checkCar.x, -checkCar.y) : 0.8;
       this._tempNdcVec.set(checkCar.x, -checkCar.y, carZ).project(this.camera);
 
       const isBehindCam = this._tempNdcVec.z > 1.0 || this._tempNdcVec.z < -1.0;
-      const isOffScreenX = Math.abs(this._tempNdcVec.x) > 0.94;
-      const isOffScreenY = Math.abs(this._tempNdcVec.y) > 0.92;
+      const isOffScreenX = Math.abs(this._tempNdcVec.x) > 0.95;
+      const isOffScreenY = Math.abs(this._tempNdcVec.y) > 0.93;
       const isOutViewport = isBehindCam || isOffScreenX || isOffScreenY;
 
       if (isOutViewport) {
         if (!this._outOfViewportStart) {
           this._outOfViewportStart = now;
-        } else if (now - this._outOfViewportStart > 350) {
+        } else if (now - this._outOfViewportStart > 1400) {
           const recoveryPreset = (this.activeCameraPreset === 'heli') ? 'chase' : 'heli';
           this._autoPreset = recoveryPreset;
           this.activeCameraPreset = recoveryPreset;
