@@ -5615,12 +5615,14 @@ export class Renderer3D {
     const isNewStart = (sim && (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)));
     if (isNewStart && sim) {
       this.lastGen = sim.generation;
-      if (!this._autoPreset) {
-        this._autoPreset = 'heli';
-        this._lastPresetSwitchTime = performance.now();
-        this._autoNextSwitch = performance.now() + 35000;
-        this._lastActionPairTime = performance.now();
-      }
+      this._autoPreset = 'broadcast';
+      this._lastPresetSwitchTime = performance.now();
+      this._lastGantryCutTime = performance.now();
+      this._lastGantryCutLap = 0;
+      this._gantryEntryLap = 0;
+      this._gantryCrossedLineTime = null;
+      this._autoNextSwitch = performance.now() + 7000;
+      this._lastActionPairTime = performance.now();
     }
     if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
