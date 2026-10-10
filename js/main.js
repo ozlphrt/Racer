@@ -816,6 +816,24 @@ btnToggleLeaderboard?.classList.toggle('is-active', !leaderboard.isCollapsed);
 
 // Keyboard
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    const hm = hyperModal || $('hyper-modal');
+    if (hm && !hm.hidden) {
+      closeHyperModal();
+      e.preventDefault();
+      return;
+    }
+    const genDialPopover = $('gen-dial-popover');
+    if (genDialPopover && !genDialPopover.hidden) {
+      genDialPopover.hidden = true;
+      e.preventDefault();
+      return;
+    }
+    setCameraPopoverOpen(false);
+    setControlsPopoverOpen(false);
+    setPanelOpen(false);
+    return;
+  }
   if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
   if (e.key in keys) {
     keys[e.key] = true;
@@ -903,6 +921,10 @@ window.addEventListener('keydown', (e) => {
       openHyperModal();
       break;
     case 'escape':
+      const modalEl = hyperModal || $('hyper-modal');
+      if (modalEl && !modalEl.hidden) {
+        closeHyperModal();
+      }
       setCameraPopoverOpen(false);
       setControlsPopoverOpen(false);
       setPanelOpen(false);
