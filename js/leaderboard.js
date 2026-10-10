@@ -1,4 +1,5 @@
 import { TEAM_PALETTE } from './renderer3d.js';
+import { carSideviewRenderer } from './carSideviewRenderer.js';
 
 function toHexColor(hexNum, defaultHex = '#38bdf8') {
   if (typeof hexNum === 'number') {
@@ -8,6 +9,12 @@ function toHexColor(hexNum, defaultHex = '#38bdf8') {
 }
 
 export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false, carNumber = null) {
+  const numVal = carNumber != null ? Number(carNumber) : (isPlayer ? 7 : 1);
+  const dataUrl = carSideviewRenderer.getCarSideviewDataUrl(teamIdx, isPlayer, numVal);
+  if (dataUrl) {
+    return `<img class="car-sideview-img" src="${dataUrl}" alt="F1 3D Car #${numVal}" />`;
+  }
+
   let priColor, secColor, accColor, quadColor;
 
   if (isPlayer) {

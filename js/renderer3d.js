@@ -6,6 +6,7 @@ import { CONFIG } from './config.js';
 import { RAY_ANGLES } from './car.js';
 import { audio } from './audio.js';
 import { TireBarrierSystem } from './tireBarriers.js';
+import { carSideviewRenderer } from './carSideviewRenderer.js';
 
 // F1 Number Decals Configuration (Calibrated in 3D Decal Studio)
 export const F1_DECAL_CONFIG = {
@@ -3176,6 +3177,7 @@ export class Renderer3D {
         });
         this.initF1DecalGeometries(gltf.scene);
         this.applyF1ModelToFleet(gltf.scene);
+        carSideviewRenderer.init(gltf.scene, this.f1DecalGeometries, this.f1Texture);
       },
       undefined,
       (err) => {

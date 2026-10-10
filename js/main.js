@@ -9,6 +9,7 @@ import { drawSparkline, analyzeTrainingProgress, renderAllTileGraphics } from '.
 import { LeaderboardTower, generateCarSideviewSvg } from './leaderboard.js';
 import { EliminationModalManager } from './eliminationModal.js';
 import { audio } from './audio.js';
+import { carSideviewRenderer } from './carSideviewRenderer.js';
 import * as storage from './storage.js';
 import { NeuralNetwork } from './neuralNetwork.js';
 import { PRESET_BRAINS, PRESET_MILESTONES } from './presetBrains.js';
@@ -81,6 +82,12 @@ const eliminationModals = new EliminationModalManager($('elimination-stack'), {
       restartCurrentGen();
     }
   },
+});
+
+carSideviewRenderer.onReady(() => {
+  const previewEl = $('cockpit-car-preview');
+  if (previewEl) previewEl.dataset.key = '';
+  if (leaderboard) leaderboard.reset();
 });
 
 sim.onCarEliminated = (car, reason) => {
