@@ -886,9 +886,68 @@ function switchTargetCar(direction) {
 setTelemetryOpen(isTelemetryOpen);
 btnToggleLeaderboard?.classList.toggle('is-active', !leaderboard.isCollapsed);
 
+// ---------- First-Time User Experience & Onboarding Guide ----------
+const welcomeGuide = $('welcome-guide-backdrop');
+const btnWelcomeClose = $('btn-welcome-close');
+const btnWelcomeDismiss = $('btn-welcome-dismiss');
+const btnGuideLoadAi = $('btn-guide-load-ai');
+const btnGuideOpenHub = $('btn-guide-open-hub');
+
+export function openWelcomeGuide() {
+  if (!welcomeGuide) return;
+  welcomeGuide.hidden = false;
+  $('btn-gen-dial')?.classList.add('guide-beacon-pulse');
+  $('btn-fast-forward')?.classList.add('guide-beacon-pulse');
+}
+
+export function closeWelcomeGuide(dismissForever = true) {
+  if (!welcomeGuide) return;
+  welcomeGuide.hidden = true;
+  $('btn-gen-dial')?.classList.remove('guide-beacon-pulse');
+  $('btn-fast-forward')?.classList.remove('guide-beacon-pulse');
+  if (dismissForever) {
+    try {
+      localStorage.setItem('ai-racer:welcome-guide-seen', 'true');
+    } catch (_) {}
+  }
+}
+
+btnWelcomeClose?.addEventListener('click', () => closeWelcomeGuide(true));
+btnWelcomeDismiss?.addEventListener('click', () => closeWelcomeGuide(true));
+$('btn-reopen-guide')?.addEventListener('click', () => {
+  setControlsPopoverOpen(false);
+  openWelcomeGuide();
+});
+welcomeGuide?.addEventListener('click', (e) => {
+  if (e.target === welcomeGuide) closeWelcomeGuide(true);
+});
+
+btnGuideLoadAi?.addEventListener('click', () => {
+  closeWelcomeGuide(true);
+  const genDialPopover = $('gen-dial-popover');
+  const btnGenDial = $('btn-gen-dial');
+  if (genDialPopover && btnGenDial) {
+    genDialPopover.hidden = false;
+    btnGenDial.setAttribute('aria-expanded', 'true');
+    btnGenDial.classList.add('is-active');
+  }
+  toast('🧠 Select a Pre-trained AI model (e.g. 100k or 130k) to race!', 'info');
+});
+
+btnGuideOpenHub?.addEventListener('click', () => {
+  closeWelcomeGuide(true);
+  openHyperModal();
+  toast('⚡ AI Training Hub: Evolve or run fast-forward bursts!', 'info');
+});
+
 // Keyboard
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key === 'Esc') {
+    if (welcomeGuide && !welcomeGuide.hidden) {
+      closeWelcomeGuide(true);
+      e.preventDefault();
+      return;
+    }
     const hm = hyperModal || $('hyper-modal');
     if (hm && !hm.hidden) {
       closeHyperModal();
@@ -946,6 +1005,9 @@ window.addEventListener('keydown', (e) => {
 
   if (e.repeat) return;
   switch (e.key.toLowerCase()) {
+    case '?':
+      openWelcomeGuide();
+      break;
     case ' ':
       e.preventDefault();
       setPaused(!state.paused);
@@ -2764,3 +2826,16 @@ renderGenPresetsRibbon();
 updateHud(sim.leader);
 chart.draw(sim.history, sim.bestLapEver);
 requestAnimationFrame(frame);
+
+// Show gentle welcome onboarding guide for new users
+try {
+  const guideSeen = localStorage.getItem('ai-racer:welcome-guide-seen');
+  const hasHistory = savedState && (sim.generation > 1 || sim.allTimeBest || (sim.history && sim.history.length > 0));
+  if (!guideSeen && !hasHistory) {
+    setTimeout(() => {
+      if (!localStorage.getItem('ai-racer:welcome-guide-seen') && !hyperRunning) {
+        openWelcomeGuide();
+      }
+    }, 1200);
+  }
+} catch (_) {}

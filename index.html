@@ -348,6 +348,12 @@
               <div class="shortcut-item"><span>Toggle Audio</span> <kbd>S</kbd></div>
               <div class="shortcut-item"><span>Insights panel</span> <kbd>P</kbd></div>
               <div class="shortcut-item" style="border-top: 1px solid rgba(255,255,255,0.12); margin-top: 8px; padding-top: 8px;">
+                <button type="button" id="btn-reopen-guide" style="background: none; border: none; padding: 0; color: #c084fc; font-weight: 600; display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
+                  <span>📖 Welcome &amp; Experience Guide</span>
+                  <span style="font-size: 11px; opacity: 0.85;">Open</span>
+                </button>
+              </div>
+              <div class="shortcut-item">
                 <a href="decal-studio.html" target="_blank" style="color: #38bdf8; text-decoration: none; display: flex; align-items: center; justify-content: space-between; width: 100%; font-weight: 600;">
                   <span>🎨 3D Decal Studio</span>
                   <span style="font-size: 11px; opacity: 0.85;">Open ↗</span>
@@ -515,6 +521,79 @@
         </label>
       </section>
     </aside>
+  <!-- First-Time User Onboarding & Interactive Experience Guide -->
+  <div class="welcome-guide-backdrop" id="welcome-guide-backdrop" hidden>
+    <div class="welcome-guide-card glass" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title">
+      <button class="welcome-guide-close" id="btn-welcome-close" type="button" aria-label="Close welcome guide">✕</button>
+      
+      <div class="welcome-guide-header">
+        <span class="welcome-guide-badge">🏎️ WELCOME TO AI FORMULA GP</span>
+        <h2 class="welcome-guide-title" id="welcome-guide-title">Choose Your Experience</h2>
+        <p class="welcome-guide-subtitle">Explore 80 evolving neural networks on a Grand Prix circuit. Choose how you want to start:</p>
+      </div>
+
+      <div class="welcome-guide-grid">
+        <!-- Path A: Pre-trained AI -->
+        <div class="welcome-card-option option-pretrained" id="welcome-card-pretrained">
+          <div class="welcome-card-icon">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
+              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
+            </svg>
+          </div>
+          <div class="welcome-card-badge">INSTANT ACTION</div>
+          <h3 class="welcome-card-h3">Pick Pre-trained AI</h3>
+          <p class="welcome-card-desc">Jump straight to master-level driving (e.g. <strong>Gen 100k or 130k</strong>) to watch cars carve apexes, draft, and hit top speeds of 275 km/h.</p>
+          <button class="welcome-card-btn btn-action-pretrained" id="btn-guide-load-ai" type="button">
+            <span>🧠 Pick Pre-trained Model</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <!-- Path B: Training Hub -->
+        <div class="welcome-card-option option-hub" id="welcome-card-hub">
+          <div class="welcome-card-icon">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </div>
+          <div class="welcome-card-badge badge-cyan">EVOLUTION &amp; BURSTS</div>
+          <h3 class="welcome-card-h3">Use Training Hub</h3>
+          <p class="welcome-card-desc">Watch 80 neural networks evolve in real-time or launch high-speed headless bursts to evolve <strong>1,000 to 50,000 generations</strong> in seconds.</p>
+          <button class="welcome-card-btn btn-action-hub" id="btn-guide-open-hub" type="button">
+            <span>⚡ Open Training Hub</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Controls Reference Bar -->
+      <div class="welcome-guide-footer">
+        <div class="welcome-shortcuts-row">
+          <div class="welcome-shortcut-item">
+            <kbd>▲</kbd><kbd>▼</kbd>
+            <span>Switch Car</span>
+          </div>
+          <div class="welcome-shortcut-item">
+            <kbd>◄</kbd><kbd>►</kbd>
+            <span>Camera Angles</span>
+          </div>
+          <div class="welcome-shortcut-item">
+            <kbd>M</kbd>
+            <span>Drive Yourself</span>
+          </div>
+          <div class="welcome-shortcut-item">
+            <kbd>Space</kbd>
+            <span>Pause / Run</span>
+          </div>
+        </div>
+
+        <button class="welcome-dismiss-btn" id="btn-welcome-dismiss" type="button">
+          Got it, Start Spectating →
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Hyper-Speed Headless Training & Neural Hub Modal -->
