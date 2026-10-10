@@ -4578,37 +4578,92 @@ export class Renderer3D {
 
   createSmokeTexture() {
     if (typeof document === 'undefined') return null;
+    const size = 512;
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 256, 256);
+    ctx.clearRect(0, 0, size, size);
 
-    // Multi-lobed organic soft cloud vapor puffs (all lobes safely contained inside r < 92px)
-    const lobes = [
-      { x: 128, y: 128, r: 85, a: 0.85 },
-      { x: 110, y: 115, r: 65, a: 0.65 },
-      { x: 146, y: 114, r: 62, a: 0.65 },
-      { x: 114, y: 142, r: 60, a: 0.60 },
-      { x: 142, y: 140, r: 64, a: 0.60 },
-      { x: 128, y: 96,  r: 52, a: 0.50 },
-      { x: 96,  y: 128, r: 50, a: 0.45 },
-      { x: 160, y: 128, r: 50, a: 0.45 },
-      { x: 128, y: 156, r: 48, a: 0.45 },
-    ];
+    const half = size / 2; // 256
 
-    for (const lobe of lobes) {
-      const grad = ctx.createRadialGradient(lobe.x, lobe.y, 0, lobe.x, lobe.y, lobe.r);
-      grad.addColorStop(0.0, `rgba(255, 255, 255, ${lobe.a})`);
-      grad.addColorStop(0.35, `rgba(255, 255, 255, ${lobe.a * 0.65})`);
-      grad.addColorStop(0.70, `rgba(255, 255, 255, ${lobe.a * 0.18})`);
-      grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
-
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(lobe.x, lobe.y, lobe.r, 0, Math.PI * 2);
-      ctx.fill();
+    // Multi-octave fractal noise generator
+    function fbm(x, y, seed = 0) {
+      let val = 0;
+      let amp = 0.5;
+      let freq = 1.0;
+      for (let o = 0; o < 4; o++) {
+        const nx = x * freq + seed * 17.13 + o * 5.71;
+        const ny = y * freq + seed * 31.41 + o * 9.17;
+        const s0 = Math.sin(nx * 1.8 + Math.cos(ny * 2.3));
+        const s1 = Math.cos(ny * 1.7 + Math.sin(nx * 2.1));
+        val += ((s0 + s1) * 0.5 + 0.5) * amp;
+        amp *= 0.5;
+        freq *= 2.1;
+      }
+      return val;
     }
+
+    // 2x2 Atlas: 4 completely unique organic fractal smoke patterns
+    const imgData = ctx.createImageData(size, size);
+    const data = imgData.data;
+
+    for (let qy = 0; qy < 2; qy++) {
+      for (let qx = 0; qx < 2; qx++) {
+        const qIdx = qy * 2 + qx;
+        const ox = qx * half;
+        const oy = qy * half;
+
+        for (let py = 0; py < half; py++) {
+          for (let px = 0; px < half; px++) {
+            const nx = (px / half) * 2 - 1; // -1 to 1
+            const ny = (py / half) * 2 - 1; // -1 to 1
+            const r = Math.hypot(nx, ny);
+
+            if (r >= 0.96) continue;
+
+            const angle = Math.atan2(ny, nx);
+            let noiseVal = 0;
+
+            if (qIdx === 0) {
+              // 1. Shredded wispy filament with turbulent curl
+              const swirl = angle + r * 3.8;
+              const n = fbm(Math.cos(swirl) * r * 3.4, Math.sin(swirl) * r * 3.4, 2.3);
+              noiseVal = Math.pow(n, 1.2) * Math.pow(Math.max(0, 0.95 - r), 1.1);
+            } else if (qIdx === 1) {
+              // 2. Asymmetric swirling vortex with ragged voids
+              const swirl = angle - r * 4.5;
+              const n = fbm(nx * 3.6 + Math.sin(swirl) * 0.9, ny * 3.6 + Math.cos(swirl) * 0.9, 5.7);
+              noiseVal = Math.pow(n, 1.35) * Math.pow(Math.max(0, 0.95 - r), 1.2);
+            } else if (qIdx === 2) {
+              // 3. Dense billowing plume with multi-frequency fractal clusters
+              const nR = r + (fbm(nx * 4.0, ny * 4.0, 8.1) - 0.5) * 0.40;
+              const n = fbm(nx * 2.8, ny * 2.8, 11.4);
+              noiseVal = Math.pow(n, 1.1) * Math.pow(Math.max(0, 0.95 - nR), 1.0);
+            } else {
+              // 4. Soft elongated dynamic dissipation mist
+              const n1 = fbm(nx * 2.2, ny * 2.2, 14.8);
+              const n2 = fbm(nx * 4.8, ny * 4.8, 17.2);
+              noiseVal = (n1 * 0.65 + n2 * 0.35) * Math.pow(Math.max(0, 0.95 - r), 1.5);
+            }
+
+            const alpha = Math.min(1.0, Math.max(0, noiseVal * 1.75));
+            if (alpha <= 0.005) continue;
+
+            const globalX = ox + px;
+            const globalY = oy + py;
+            const pIdx = (globalY * size + globalX) * 4;
+
+            data[pIdx] = 255;
+            data[pIdx + 1] = 255;
+            data[pIdx + 2] = 255;
+            data[pIdx + 3] = Math.round(alpha * 255);
+          }
+        }
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.generateMipmaps = true;
@@ -4618,18 +4673,20 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeParticles = 800;
+    this.maxSmokeParticles = 900;
     this.smokeParticles = [];
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
     this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
     this.smokeCosSinArr = new Float32Array(this.maxSmokeParticles * 2);
+    this.smokeAtlasIdxArr = new Float32Array(this.maxSmokeParticles);
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
     geo.setAttribute('cosSin', new THREE.BufferAttribute(this.smokeCosSinArr, 2));
+    geo.setAttribute('atlasIdx', new THREE.BufferAttribute(this.smokeAtlasIdxArr, 1));
     geo.setDrawRange(0, 0);
 
     const smokeTex = this.createSmokeTexture();
@@ -4638,14 +4695,17 @@ export class Renderer3D {
       attribute float size;
       attribute float alpha;
       attribute vec2 cosSin;
+      attribute float atlasIdx;
       varying float vAlpha;
       varying vec2 vCosSin;
+      varying float vAtlasIdx;
+
       void main() {
         vAlpha = alpha;
         vCosSin = cosSin;
+        vAtlasIdx = atlasIdx;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        // Generous perspective sprite scaling with clamp preventing GPU fill-rate chokes
-        gl_PointSize = clamp(size * (950.0 / -mvPosition.z), 3.0, 140.0);
+        gl_PointSize = clamp(size * (950.0 / -mvPosition.z), 2.0, 160.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -4654,27 +4714,42 @@ export class Renderer3D {
       uniform sampler2D uSmokeTexture;
       varying float vAlpha;
       varying vec2 vCosSin;
+      varying float vAtlasIdx;
+
       void main() {
         vec2 p = gl_PointCoord - vec2(0.5);
         float dist = length(p);
-        if (dist > 0.5) discard;
+        if (dist > 0.49) discard;
 
-        // Circular edge feathering guarantees ZERO square or shingle clipping
-        float feather = smoothstep(0.5, 0.16, dist);
+        // Smooth circular boundary feathering
+        float feather = smoothstep(0.49, 0.18, dist);
 
-        // Safe UV rotation scaled so rotated coords never reach texture boundary
+        // Individual particle random rotation
         vec2 pRot = vec2(
           p.x * vCosSin.x - p.y * vCosSin.y,
           p.x * vCosSin.y + p.y * vCosSin.x
         );
-        vec2 rotUv = (pRot * 0.80) + vec2(0.5);
-        
-        vec4 texColor = texture2D(uSmokeTexture, rotUv);
-        float alpha = texColor.a * feather * vAlpha * 0.26;
+
+        // Map into 2x2 atlas quadrant (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)
+        vec2 quadOffset = vec2(0.0);
+        if (vAtlasIdx > 2.5) {
+          quadOffset = vec2(0.5, 0.5);
+        } else if (vAtlasIdx > 1.5) {
+          quadOffset = vec2(0.0, 0.5);
+        } else if (vAtlasIdx > 0.5) {
+          quadOffset = vec2(0.5, 0.0);
+        }
+
+        vec2 quadUv = (pRot * 0.94) + vec2(0.25, 0.25);
+        quadUv = clamp(quadUv, vec2(0.01), vec2(0.49));
+        vec2 finalUv = quadOffset + quadUv;
+
+        vec4 texColor = texture2D(uSmokeTexture, finalUv);
+        float alpha = texColor.a * feather * vAlpha * 0.38;
         if (alpha < 0.003) discard;
 
-        // Authentic subtle white-grey tire friction vapor
-        vec3 smokeColor = vec3(0.93, 0.94, 0.96);
+        // Subtle realistic color gradation (warm vapor core to cool atmospheric haze)
+        vec3 smokeColor = mix(vec3(0.96, 0.95, 0.93), vec3(0.88, 0.90, 0.93), dist * 1.4);
         gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
@@ -4701,26 +4776,51 @@ export class Renderer3D {
     if (this.smokeMesh) this.smokeMesh.geometry.setDrawRange(0, 0);
   }
 
-  addTireSmokePuff(x, y, z, carVx, carVy, intensity, extraSpread = 0) {
+  addTireSmokePuff(x, y, z, carVx, carVy, intensity, extraSpread = 0, puffType = 'auto') {
     if (this.smokeParticles.length >= this.maxSmokeParticles) {
       this.smokeParticles.shift();
     }
     const angle = Math.random() * Math.PI * 2;
-    const spread = 0.6 + extraSpread;
+    const spread = (0.35 + extraSpread) * (0.8 + Math.random() * 0.5);
+
+    // Highly varied particle scales for realistic multi-frequency smoke
+    let baseSize, growth, decayRate;
+    const typeRoll = puffType === 'auto' ? Math.random() : (puffType === 'wisp' ? 0.1 : (puffType === 'billow' ? 0.9 : 0.5));
+
+    if (typeRoll < 0.35) {
+      // 1. Fine wisps & filaments (rapid expansion, quick dissipation)
+      baseSize = 1.8 + Math.random() * 1.6;
+      growth = 2.8 + Math.random() * 3.2;
+      decayRate = 0.75 + Math.random() * 0.45; // ~0.8s to 1.2s
+    } else if (typeRoll < 0.80) {
+      // 2. Medium turbulent eddies
+      baseSize = 3.8 + Math.random() * 2.8;
+      growth = 4.5 + Math.random() * 4.0;
+      decayRate = 0.50 + Math.random() * 0.25; // ~1.3s to 1.8s
+    } else {
+      // 3. Dense billowing plume core
+      baseSize = 6.5 + Math.random() * 4.0;
+      growth = 7.0 + Math.random() * 5.5;
+      decayRate = 0.40 + Math.random() * 0.18; // ~1.8s to 2.4s
+    }
+
+    const atlasVariant = Math.floor(Math.random() * 4);
+
     this.smokeParticles.push({
       x: x + (Math.random() - 0.5) * spread,
       y: y + (Math.random() - 0.5) * spread,
-      z: z + Math.random() * 0.04,
-      vx: (carVx * 0.08) + (Math.random() - 0.5) * 1.6,
-      vy: (carVy * 0.08) + (Math.random() - 0.5) * 1.6,
-      vz: 0.9 + Math.random() * 1.2, // Gentle upward thermal plume rise
-      size: 4.2 + Math.random() * 1.8, // Subtle wisp footprint
-      growthRate: 5.5 + Math.random() * 2.5, // Natural gradual plume expansion
+      z: z + Math.random() * 0.06,
+      vx: (carVx * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4,
+      vy: (carVy * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4,
+      vz: 0.4 + Math.random() * 1.4, // Natural thermal updraft
+      size: baseSize,
+      growthRate: growth,
       rot: angle,
-      vRot: (Math.random() - 0.5) * 1.2,
-      alpha: Math.min(0.20, 0.06 + intensity * 0.16), // Light translucent vapor
+      vRot: (Math.random() - 0.5) * 2.2,
+      atlasIdx: atlasVariant,
+      alpha: Math.min(0.24, 0.05 + intensity * 0.18),
       life: 1.0,
-      decay: 0.58 + Math.random() * 0.16, // Lingers ~1.4 to 1.8 seconds
+      decay: decayRate,
     });
   }
 
@@ -4741,13 +4841,13 @@ export class Renderer3D {
         continue;
       }
 
-      // Physics: drift, rise into the air, expand, rotate and drag deceleration
+      // Physics: chaotic drag deceleration, aerodynamic draft, and thermal rise
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vx *= 0.94;
-      p.vy *= 0.94;
-      p.vz *= 0.95;
+      p.vx *= 0.93;
+      p.vy *= 0.93;
+      p.vz *= 0.94;
       p.size += p.growthRate * dt;
       p.rot += p.vRot * dt;
 
@@ -4757,12 +4857,14 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      // Exponential tail fade creates a natural feathered tail behind the car
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.8);
+      // Exponential fade tail creates an organic wisp dissipation
+      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.6);
 
       const rIdx = writeIdx * 2;
       this.smokeCosSinArr[rIdx] = Math.cos(p.rot);
       this.smokeCosSinArr[rIdx + 1] = Math.sin(p.rot);
+
+      this.smokeAtlasIdxArr[writeIdx] = p.atlasIdx;
 
       writeIdx++;
     }
@@ -4771,6 +4873,7 @@ export class Renderer3D {
     this.smokeMesh.geometry.attributes.size.needsUpdate = true;
     this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
     this.smokeMesh.geometry.attributes.cosSin.needsUpdate = true;
+    this.smokeMesh.geometry.attributes.atlasIdx.needsUpdate = true;
     this.smokeMesh.geometry.setDrawRange(0, writeIdx);
   }
 
@@ -5053,18 +5156,25 @@ export class Renderer3D {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
               if (camDist < 500) {
                 track.oversteerSmokeDist = (track.oversteerSmokeDist || 0) + dLR;
-                if (track.oversteerSmokeDist >= 1.20) {
+                const smokeThresh = track.oversteerNextPuff || 0.90;
+                if (track.oversteerSmokeDist >= smokeThresh) {
                   track.oversteerSmokeDist = 0;
+                  track.oversteerNextPuff = 0.70 + Math.random() * 0.80;
                   const carVx = car.vx || 0;
                   const carVy = -(car.vy || 0);
-                  // Left tire contact patch
-                  this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, oversteerInt, 0.5);
-                  // Right tire contact patch
-                  this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, oversteerInt, 0.5);
-                  // Central diffuser wake plume
-                  const rcx = (rlx + rrx) * 0.5;
-                  const rcy = (rly + rry) * 0.5;
-                  this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, oversteerInt, 1.2);
+
+                  // Staggered asymmetrical emission:
+                  if (Math.random() < 0.85) {
+                    this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, oversteerInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
+                  }
+                  if (Math.random() < 0.85) {
+                    this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, oversteerInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
+                  }
+                  if (oversteerInt > 0.45 && Math.random() < 0.70) {
+                    const rcx = (rlx + rrx) * 0.5 + (Math.random() - 0.5) * 1.2;
+                    const rcy = (rly + rry) * 0.5 + (Math.random() - 0.5) * 1.2;
+                    this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, oversteerInt, 0.9, 'billow');
+                  }
                 }
               }
             } else {
@@ -5106,18 +5216,23 @@ export class Renderer3D {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
               if (camDist < 500) {
                 track.understeerSmokeDist = (track.understeerSmokeDist || 0) + dLF;
-                if (track.understeerSmokeDist >= 1.20) {
+                const smokeThresh = track.understeerNextPuff || 0.90;
+                if (track.understeerSmokeDist >= smokeThresh) {
                   track.understeerSmokeDist = 0;
+                  track.understeerNextPuff = 0.70 + Math.random() * 0.80;
                   const carVx = car.vx || 0;
                   const carVy = -(car.vy || 0);
-                  // Left front contact patch
-                  this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, understeerInt, 0.4);
-                  // Right front contact patch
-                  this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, understeerInt, 0.4);
-                  // Front center airflow wake
-                  const fcx = (flx + frx) * 0.5;
-                  const fcy = (fly + fry) * 0.5;
-                  this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, understeerInt, 1.0);
+                  if (Math.random() < 0.85) {
+                    this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, understeerInt, 0.3, 'auto');
+                  }
+                  if (Math.random() < 0.85) {
+                    this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, understeerInt, 0.3, 'auto');
+                  }
+                  if (understeerInt > 0.45 && Math.random() < 0.60) {
+                    const fcx = (flx + frx) * 0.5 + (Math.random() - 0.5) * 1.0;
+                    const fcy = (fly + fry) * 0.5 + (Math.random() - 0.5) * 1.0;
+                    this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, understeerInt, 0.8, 'wisp');
+                  }
                 }
               }
             } else {
