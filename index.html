@@ -41,16 +41,17 @@
         <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
       </div>
 
-      <!-- AI Generation Dial Menu Widget (Top-Left under HUD) -->
+      <!-- AI Generation Presets Widget (Top-Left under HUD) -->
       <div class="gen-dial-widget" id="gen-dial-widget">
         <div class="gen-dial-bar">
-          <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="AI Generation Presets" title="Select AI Generation">
-            <svg class="gen-dial-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
-              <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
+          <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="Pretrained AI Brain Presets" title="Select Pretrained AI Model">
+            <svg class="gen-dial-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
+              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
             </svg>
-            <span class="gen-dial-tag">AI GEN</span>
-            <span class="gen-dial-active-label" id="gen-dial-active-label">Gen 500</span>
+            <span class="gen-dial-tag">AI PRESETS</span>
+            <span class="gen-dial-active-label" id="gen-dial-active-label">Gen 100k</span>
             <svg class="gen-dial-chevron" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
@@ -69,16 +70,16 @@
         </div>
 
         <!-- Dial Menu Popover Dropdown -->
-        <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="AI Generation Presets" hidden>
+        <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="Pretrained AI Brain Presets" hidden>
           <div class="gen-dial-popover-header">
             <div class="gen-dial-header-title">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 3 3 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 12 19.5V4.5Z"></path>
-                <path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 3 3 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 12 19.5V4.5Z"></path>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+                <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
               </svg>
-              <span>AI GENERATIONS</span>
+              <span>PRETRAINED AI PRESETS</span>
             </div>
-            <span class="gen-dial-header-badge">SCALE</span>
+            <span class="gen-dial-header-badge">15 MODELS</span>
           </div>
           <div class="gen-dial-preset-list" id="gen-presets-track"></div>
         </div>

@@ -2264,10 +2264,11 @@ export function renderGenPresetsRibbon() {
     if (isMultiGenBattle) {
       activeLabelEl.innerHTML = `<span style="color:#f59e0b">⚔️ Showdown</span>`;
     } else if (activePresetGen !== null) {
-      activeLabelEl.textContent = formatGenLabel(activePresetGen);
+      const meta = getGenMeta(activePresetGen);
+      activeLabelEl.innerHTML = `<span>${formatGenLabel(activePresetGen)}</span> <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>`;
     } else {
       const liveNum = highestGen >= 1000 ? `${(highestGen / 1000) % 1 === 0 ? highestGen / 1000 : (highestGen / 1000).toFixed(1)}k` : `${highestGen}`;
-      activeLabelEl.innerHTML = `<span class="chip-dot"></span>${liveNum} <span class="chip-badge">LIVE</span>`;
+      activeLabelEl.innerHTML = `<span class="chip-dot"></span><span>Live ${liveNum}</span> <span class="chip-badge">ACTIVE</span>`;
     }
   }
 
@@ -2279,15 +2280,17 @@ export function renderGenPresetsRibbon() {
     const isSelected = !isMultiGenBattle && (activePresetGen === chip.gen || (activePresetGen === null && isHighest));
     const label = formatGenLabel(chip.gen);
     const preset = PRESET_BRAINS[chip.gen];
-    const bestLap = (isHighest && sim?.bestLapEver) ? `${sim.bestLapEver.toFixed(1)}s` : (preset?.bestLap ? `${preset.bestLap}s` : null);
-    const tier = isHighest ? 'Highest Tested Model' : getPresetTier(chip.gen);
+    const meta = getGenMeta(chip.gen);
+    const bestLap = (isHighest && sim?.bestLapEver) ? `${sim.bestLapEver.toFixed(1)}s` : (preset?.bestLap ? `${preset.bestLap}s` : (meta.lap ? `${meta.lap}s` : null));
+    const tier = isHighest ? 'Highest Real-time Trained' : (meta.tier || getPresetTier(chip.gen));
 
     html += `
-      <button class="gen-dial-item ${isSelected ? 'active' : ''} ${isHighest ? 'is-live' : ''}" data-gen="${chip.gen}" type="button" title="${isHighest ? `Your highest tested generation (${chip.gen})` : `Load Gen ${chip.gen} preset`}">
+      <button class="gen-dial-item ${isSelected ? 'active' : ''} ${isHighest ? 'is-live' : ''}" data-gen="${chip.gen}" type="button" title="${isHighest ? `Your live highest trained model (${chip.gen})` : `Load Pretrained Gen ${chip.gen} (${meta.rating})`}">
         <div class="gen-dial-item-main">
           <div class="gen-dial-item-head">
             ${isHighest ? '<span class="chip-dot"></span>' : ''}
             <span class="gen-dial-item-title">${label}</span>
+            <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>
             ${isHighest ? '<span class="gen-dial-item-live-badge">LIVE</span>' : ''}
           </div>
           <span class="gen-dial-item-tier">${tier}</span>
