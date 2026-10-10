@@ -5304,14 +5304,14 @@ export class Renderer3D {
     this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
-    this._autoPreset = 'broadcast';
+    this._autoPreset = 'follow';
     this._lastPresetSwitchTime = performance.now();
-    this._autoNextSwitch = performance.now() + 18000;
-    this._lastGantryCutTime = performance.now();
-    this._lastGantryCutLap = 0;
-    this._gantryEntryLap = 0;
+    this._autoNextSwitch = performance.now() + 24000;
+    this._lastGantryCutTime = null;
+    this._lastGantryCutLap = null;
+    this._gantryEntryLap = null;
     this._gantryCrossedLineTime = null;
-    this._lastActivePreset = 'broadcast';
+    this._lastActivePreset = 'follow';
     this._camTransition = null;
     this._currentActionPair = null;
     const t = this.track;
@@ -5323,12 +5323,12 @@ export class Renderer3D {
     const ny = tx;
 
     if (followMode) {
-      // Canonical broadcast TV Gantry perspective placed down the straight looking at the start grid
-      const camX = startX + tx * 80 + nx * 28;
-      const camY = startY + ty * 80 + ny * 28;
-      const camZ = 10.5;
+      // Canonical broadcast follow perspective placed behind the start grid looking down straight
+      this.controls.target.set(startX, startY, 3.5);
+      const camX = startX - tx * 190 + nx * 75;
+      const camY = startY - ty * 190 + ny * 75;
+      const camZ = 95;
       this.camera.position.set(camX, camY, camZ);
-      this.controls.target.set(startX - tx * 35, startY - ty * 35, 3.2);
       this.controls.update();
       return;
     }
@@ -5615,13 +5615,13 @@ export class Renderer3D {
     const isNewStart = (sim && (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)));
     if (isNewStart && sim) {
       this.lastGen = sim.generation;
-      this._autoPreset = 'broadcast';
+      this._autoPreset = 'follow';
       this._lastPresetSwitchTime = performance.now();
-      this._lastGantryCutTime = performance.now();
-      this._lastGantryCutLap = 0;
-      this._gantryEntryLap = 0;
+      this._lastGantryCutTime = null;
+      this._lastGantryCutLap = null;
+      this._gantryEntryLap = null;
       this._gantryCrossedLineTime = null;
-      this._autoNextSwitch = performance.now() + 18000;
+      this._autoNextSwitch = performance.now() + 24000;
       this._lastActionPairTime = performance.now();
       const bestCar = (sim && sim.bestLapCar) || (sim?.cars && sim.cars[0]) || null;
       this._currentActionPair = bestCar ? { carA: bestCar, carB: null } : null;
@@ -5680,15 +5680,12 @@ export class Renderer3D {
 
       const isStartLaunchPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
 
-      // STRICT LOCK AT START OF GAME / RACE LAUNCH: Use Broadcast TV Gantry camera exclusively
+      // STRICT LOCK AT START OF GAME / RACE LAUNCH: Use Broadcast Follow camera
       if (isStartLaunchPhase) {
-        if (this._autoPreset !== 'broadcast') {
-          this._autoPreset = 'broadcast';
+        if (this._autoPreset !== 'follow') {
+          this._autoPreset = 'follow';
           this._lastPresetSwitchTime = now;
-          this._lastGantryCutTime = now;
-          this._lastGantryCutLap = 0;
-          this._gantryEntryLap = 0;
-          this._gantryCrossedLineTime = null;
+          this._autoNextSwitch = now + 24000;
         }
       }
 
