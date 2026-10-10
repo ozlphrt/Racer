@@ -857,6 +857,7 @@ h1 {
   transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
 }
 
+.leaderboard-tower:empty,
 .leaderboard-tower.is-collapsed {
   display: none !important;
 }
