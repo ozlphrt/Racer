@@ -2579,9 +2579,12 @@ function frame(now) {
     }
   }
 
+  const bestCar = sim.bestLapCar;
   const activeFocus = (focusedFollowCar && (focusedFollowCar.alive || focusedFollowCar.finished))
     ? focusedFollowCar
-    : sim.leader;
+    : ((sim.time < 3.5 && bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed)
+      ? bestCar
+      : sim.leader);
 
   if (state.view3d && renderer3d) {
     renderer3d.render(sim, state, activeFocus);

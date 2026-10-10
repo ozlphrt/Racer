@@ -5432,6 +5432,30 @@ export class Renderer3D {
       return { carA: prevA, carB: partnerB || null };
     }
 
+    // At the start of the game / start of generation, directly anchor focus on the car with the best lap time
+    const isStartPhase = !sim || sim.time < 3.5 || (this.lastSimTime || 0) < 0.15;
+    if (isStartPhase && !isManual) {
+      const bestCar = (sim && sim.bestLapCar) || focusCar || (sim?.cars && sim.cars[0]) || pool[0];
+      if (bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed) {
+        let nearestOpponent = null;
+        let minD = Infinity;
+        for (let i = 0; i < pool.length; i++) {
+          const c = pool[i];
+          if (c !== bestCar && (c.alive || c.finished) && !c.crashed) {
+            const d = Math.hypot(bestCar.x - c.x, -bestCar.y - (-c.y));
+            if (d < minD) {
+              minD = d;
+              nearestOpponent = c;
+            }
+          }
+        }
+        const startPair = { carA: bestCar, carB: nearestOpponent };
+        this._currentActionPair = startPair;
+        this._lastActionPairTime = now;
+        return startPair;
+      }
+    }
+
     // Reference position of current camera view / previous focus car
     const curRefX = prevA ? prevA.x : (this.controls?.target ? this.controls.target.x : 0);
     const curRefY = prevA ? -prevA.y : (this.controls?.target ? this.controls.target.y : 0);

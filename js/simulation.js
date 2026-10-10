@@ -196,11 +196,15 @@ export class Simulation {
       c.collisionAlwaysOn = false;
       c.launchDelay = 0;
       c.driverBias = 0;
+      if (idx === 0 && Number.isFinite(this.bestLapEver) && this.bestLapEver > 0) {
+        c.bestLap = this.bestLapEver;
+      }
       if (metaList && metaList[idx]) {
         const m = metaList[idx];
         if (m.genTag !== undefined) c.genTag = m.genTag;
         if (m.genLabel !== undefined) c.genLabel = m.genLabel;
         if (m.teamIdx !== undefined) c.teamIdx = m.teamIdx;
+        if (m.bestLap !== undefined) c.bestLap = m.bestLap;
       }
       return c;
     });
@@ -640,6 +644,25 @@ export class Simulation {
     let bf = 0;
     for (const c of this.cars) bf = Math.max(bf, c.fitness);
     return bf;
+  }
+
+  /** Returns the car holding the best recorded lap time across the active grid (or the top seeded champion). */
+  get bestLapCar() {
+    let best = null;
+    let minLap = Infinity;
+    if (this.cars && this.cars.length > 0) {
+      for (let i = 0; i < this.cars.length; i++) {
+        const c = this.cars[i];
+        if (c && c.bestLap && Number.isFinite(c.bestLap) && c.bestLap < minLap) {
+          minLap = c.bestLap;
+          best = c;
+        }
+      }
+    }
+    if (this.player && this.player.bestLap && Number.isFinite(this.player.bestLap) && this.player.bestLap < minLap) {
+      return this.player;
+    }
+    return best || (this.cars && this.cars[0]) || null;
   }
 
   /** Fastest lap time completed by any car in the current race/generation. */
