@@ -5895,7 +5895,7 @@ export class Renderer3D {
       camGlide = 0.030;
       targetGlide = 0.035;
     } else if (cameraPreset === 'action' && focusCar) {
-      // ACTION FRONT CAM: Smooth reverse camera floating ahead, looking back at P1 and P2
+      // ACTION FRONT CAM: Smooth reverse camera floating AHEAD of the car, looking back at P1 & P2
       if (typeof this._actionAngle !== 'number' || typeof this._actionTargetX !== 'number') {
         this._actionAngle = refAngle;
         this._actionTargetX = midX;
@@ -5904,36 +5904,34 @@ export class Renderer3D {
         let diffAngle = refAngle - this._actionAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        // Ultra-smooth low-pass filter: does not jerk on individual steering wiggles
-        this._actionAngle += diffAngle * 0.014;
+        this._actionAngle += diffAngle * 0.018;
 
-        this._actionTargetX += (midX - this._actionTargetX) * 0.035;
-        this._actionTargetY += (midY - this._actionTargetY) * 0.035;
+        this._actionTargetX += (midX - this._actionTargetX) * 0.040;
+        this._actionTargetY += (midY - this._actionTargetY) * 0.040;
       }
       this._lastActionFocus = p1;
 
       const cosA = Math.cos(this._actionAngle);
       const sinA = Math.sin(this._actionAngle);
       const nx = -sinA;
-      const ny = -cosA;
+      const ny = cosA;
 
-      // Distance ahead & altitude dynamically adapt so both P1 and chasing P2 stay safely in viewport
-      const leadDist = 38.0 + Math.min(35.0, effectiveSpan * 0.35);
+      // Position camera AHEAD of the cars (+cosA, +sinA) looking back at the cars
+      const leadDist = 36.0 + Math.min(30.0, effectiveSpan * 0.30);
       destCamX = this._actionTargetX + cosA * leadDist + nx * 2.5;
-      destCamY = this._actionTargetY - sinA * leadDist + ny * 2.5;
-      destCamZ = 6.2 + Math.min(16.0, effectiveSpan * 0.18) + battleElev;
+      destCamY = this._actionTargetY + sinA * leadDist + ny * 2.5;
+      destCamZ = 5.2 + Math.min(14.0, effectiveSpan * 0.16) + battleElev;
 
-      // Look target is anchored on the battle midpoint: both cars are framed symmetrically
+      // Look target is anchored on the battle midpoint: cars charge toward camera
       destTargetX = midX;
       destTargetY = midY;
       destTargetZ = 1.8 + battleElev;
 
-      // Adaptive wide FOV keeps both cars comfortably in frame
       targetFov = Math.max(44, Math.min(62, 44 + (effectiveSpan / 75) * 14));
       camGlide = 0.035;
       targetGlide = 0.045;
     } else if (cameraPreset === 'action_rear' && focusCar) {
-      // ACTION REAR CAM: Smooth pursuit angle behind the battle, looking forward at P1 & P2
+      // ACTION REAR CAM: Low-angle battle pursuit behind the pack (-cosA, -sinA), framing P2 & P1
       if (typeof this._actionRearAngle !== 'number' || typeof this._actionRearTargetX !== 'number') {
         this._actionRearAngle = refAngle;
         this._actionRearTargetX = midX;
@@ -5942,27 +5940,26 @@ export class Renderer3D {
         let diffAngle = refAngle - this._actionRearAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionRearAngle += diffAngle * 0.014;
+        this._actionRearAngle += diffAngle * 0.016;
 
-        this._actionRearTargetX += (midX - this._actionRearTargetX) * 0.035;
-        this._actionRearTargetY += (midY - this._actionRearTargetY) * 0.035;
+        this._actionRearTargetX += (midX - this._actionRearTargetX) * 0.038;
+        this._actionRearTargetY += (midY - this._actionRearTargetY) * 0.038;
       }
       this._lastActionRearFocus = p1;
 
       const cosA = Math.cos(this._actionRearAngle);
       const sinA = Math.sin(this._actionRearAngle);
       const nx = -sinA;
-      const ny = -cosA;
+      const ny = cosA;
 
-      // Position camera BEHIND trailing car looking forward along the battle line
-      const trailDist = 30.0 + Math.min(38.0, effectiveSpan * 0.35);
-      destCamX = this._actionRearTargetX - cosA * trailDist + nx * 3.5;
-      destCamY = this._actionRearTargetY + sinA * trailDist + ny * 3.5;
-      destCamZ = 5.6 + Math.min(18.0, effectiveSpan * 0.20) + battleElev;
+      // Position camera BEHIND the battle looking forward along the battle line
+      const trailDist = 32.0 + Math.min(32.0, effectiveSpan * 0.30);
+      destCamX = this._actionRearTargetX - cosA * trailDist + nx * 3.0;
+      destCamY = this._actionRearTargetY - sinA * trailDist + ny * 3.0;
+      destCamZ = 5.4 + Math.min(16.0, effectiveSpan * 0.18) + battleElev;
 
-      // Look target centered on battle midpoint
-      destTargetX = midX;
-      destTargetY = midY;
+      destTargetX = midX + cosA * 14.0;
+      destTargetY = midY + sinA * 14.0;
       destTargetZ = 2.0 + battleElev;
 
       targetFov = Math.max(42, Math.min(62, 42 + (effectiveSpan / 75) * 14));
@@ -6000,7 +5997,7 @@ export class Renderer3D {
       camGlide = 0.18;
       targetGlide = 0.18;
     } else if (cameraPreset === 'heli' && focusCar) {
-      // CINEMATIC AERIAL PURSUIT HELICOPTER: Sweeping sky perspective framing P1 and P2
+      // CINEMATIC AERIAL PURSUIT HELICOPTER: High aerial sky tracker framing P1 and P2
       if (typeof this._heliAngle !== 'number' || typeof this._heliTargetX !== 'number') {
         this._heliAngle = refAngle;
         this._heliTargetX = midX;
@@ -6009,22 +6006,22 @@ export class Renderer3D {
         let diffAngle = refAngle - this._heliAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._heliAngle += diffAngle * 0.009; // Ultra-gentle gyro-stabilized aerial pan
+        this._heliAngle += diffAngle * 0.010;
 
-        this._heliTargetX += (midX - this._heliTargetX) * 0.028;
-        this._heliTargetY += (midY - this._heliTargetY) * 0.028;
+        this._heliTargetX += (midX - this._heliTargetX) * 0.030;
+        this._heliTargetY += (midY - this._heliTargetY) * 0.030;
       }
       this._lastHeliFocus = p1;
 
       const cosA = Math.cos(this._heliAngle);
       const sinA = Math.sin(this._heliAngle);
       const nx = -sinA;
-      const ny = -cosA;
+      const ny = cosA;
 
       const trailDist = 65.0 + Math.min(50.0, effectiveSpan * 0.35);
-      const lateralDist = 38.0 + Math.min(20.0, effectiveSpan * 0.15);
+      const lateralDist = 35.0 + Math.min(20.0, effectiveSpan * 0.15);
       destCamX = this._heliTargetX - cosA * trailDist + nx * lateralDist;
-      destCamY = this._heliTargetY + sinA * trailDist + ny * lateralDist;
+      destCamY = this._heliTargetY - sinA * trailDist + ny * lateralDist;
       destCamZ = 68.0 + Math.min(45.0, effectiveSpan * 0.35) + battleElev;
 
       destTargetX = this._heliTargetX;
@@ -6035,7 +6032,7 @@ export class Renderer3D {
       camGlide = 0.030;
       targetGlide = 0.040;
     } else if (cameraPreset === 'broadcast') {
-      // TV GANTRY CAMERA (Start / Finish Gantry view)
+      // TV GANTRY CAMERA (Fixed Start / Finish Gantry view)
       const cx = t.cx[0];
       const cy = -t.cy[0];
       const tx = t.tx[0];
@@ -6056,7 +6053,7 @@ export class Renderer3D {
       camGlide = 0.040;
       targetGlide = 0.060;
     } else {
-      // DEFAULT: 'chase' preset (Dynamic Decoupled Smooth 3rd-person follow framing P1 & P2)
+      // DEFAULT: 'chase' preset (Dynamic 3rd-person follow)
       if (hasFinisher && !opts.manual) {
         const cx = t.cx[0];
         const cy = -t.cy[0];
@@ -6091,22 +6088,22 @@ export class Renderer3D {
           while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
           while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
 
-          this._chaseAngle += diffAngle * 0.014; // Smooth low-pass: ignores steering twitches
+          this._chaseAngle += diffAngle * 0.016;
         }
         this._lastFocusCar = p1;
 
         const cosA = Math.cos(this._chaseAngle);
         const sinA = Math.sin(this._chaseAngle);
 
-        const distBehind = 38.0 + Math.min(38.0, effectiveSpan * 0.35);
-        const heightAbove = 14.0 + Math.min(18.0, effectiveSpan * 0.20);
+        const distBehind = 38.0 + Math.min(35.0, effectiveSpan * 0.30);
+        const heightAbove = 14.0 + Math.min(16.0, effectiveSpan * 0.18);
         destCamX = this._chaseTargetX - cosA * distBehind;
-        destCamY = this._chaseTargetY + sinA * distBehind;
+        destCamY = this._chaseTargetY - sinA * distBehind;
         destCamZ = heightAbove + battleElev;
 
         const lookAhead = 12.0;
         destTargetX = midX + cosA * lookAhead;
-        destTargetY = midY - sinA * lookAhead;
+        destTargetY = midY + sinA * lookAhead;
         destTargetZ = 2.4 + battleElev;
 
         targetFov = Math.max(42, Math.min(60, 42 + (effectiveSpan / 80) * 14));
