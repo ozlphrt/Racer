@@ -59,7 +59,7 @@ let stagnantGenerationsCount = 0;
 let paceStagnantGenerationsCount = 0;
 let burstGensRemaining = 0;
 
-export function triggerExplorationBurst(gens = 150) {
+export function triggerExplorationBurst(gens = 30) {
   burstGensRemaining = gens;
   stagnantGenerationsCount = 0;
   paceStagnantGenerationsCount = 0;
@@ -200,15 +200,15 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
 
     if (hasRecord) {
       const gapToRecord = currentGenLap - bestLapEver;
-      // If gap to record remains stagnant > 0.35s (e.g. +0.99s plateau)
-      if (gapToRecord > 0.35) {
+      // If gap to record remains stagnant > 0.40s for an extended campaign
+      if (gapToRecord > 0.40) {
         paceStagnantGenerationsCount++;
-        // Automatically fire exploration surge when stuck behind record for 25+ generations
-        if (paceStagnantGenerationsCount >= 25 && burstGensRemaining === 0) {
-          triggerExplorationBurst(80);
+        // Give 100 generations of exploitation before a brief 20-gen catalyst burst
+        if (paceStagnantGenerationsCount >= 100 && burstGensRemaining === 0) {
+          triggerExplorationBurst(20);
         }
       } else {
-        paceStagnantGenerationsCount = Math.max(0, paceStagnantGenerationsCount - 2);
+        paceStagnantGenerationsCount = Math.max(0, paceStagnantGenerationsCount - 3);
       }
     }
   }
@@ -216,11 +216,11 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   const isBurstActive = burstGensRemaining > 0;
   if (burstGensRemaining > 0) burstGensRemaining--;
 
-  // Multi-tier stagnation detection (prolonged plateau, pace deficit, or manual burst)
-  const isPlateauing = stagnantGenerationsCount >= 20 || paceStagnantGenerationsCount >= 20 || isBurstActive;
-  const burstMultiplier = isBurstActive ? 2.3 : (isPlateauing ? 1.75 : 1.0);
+  // Multi-tier stagnation detection (prolonged 80+ gen plateau, sustained deficit, or manual burst)
+  const isPlateauing = stagnantGenerationsCount >= 80 || paceStagnantGenerationsCount >= 80 || isBurstActive;
+  const burstMultiplier = isBurstActive ? 1.4 : (isPlateauing ? 1.2 : 1.0);
   const effectiveSigma = mutationSigma * burstMultiplier;
-  const effectiveRate = Math.min(0.45, mutationRate * burstMultiplier);
+  const effectiveRate = Math.min(0.28, mutationRate * burstMultiplier);
 
   // 1. Keep top elite champions unchanged (guarantees zero regression of best race pace)
   const eliteCount = Math.max(1, elites !== undefined ? elites : 2);
@@ -241,37 +241,32 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
     }
   }
 
-  // 3. Stagnation Breaker: Inject aggressive Wildcard Explorers
+  // 3. Stagnation Breaker: Inject targeted Wildcard Explorers when truly plateauing
   if ((isPlateauing || isBurstActive) && next.length < population) {
     const hotParent = validLapCars[0] || sorted[0];
     if (hotParent) {
       // Wildcard 1: Late Braker (delays braking on entry, earlier on gas)
-      next.push(mutateLateBraker(hotParent.genome, effectiveSigma * 1.8));
+      next.push(mutateLateBraker(hotParent.genome, effectiveSigma * 1.25));
 
       // Wildcard 2: Apex Slicer (tighter kerb clipping & apex entry)
       if (next.length < population) {
-        next.push(mutateApexSlicer(hotParent.genome, effectiveSigma * 2.0));
+        next.push(mutateApexSlicer(hotParent.genome, effectiveSigma * 1.35));
       }
 
       // Wildcard 3: Apex Hunter (high momentum carrier)
       if (next.length < population) {
-        next.push(mutateApexHunter(hotParent.genome, effectiveSigma * 2.2));
-      }
-
-      // Wildcard 4: High-entropy Sensor Novelty explorer
-      if (next.length < population) {
-        next.push(mutate(Float32Array.from(hotParent.genome), 0.40, effectiveSigma * 2.6));
+        next.push(mutateApexHunter(hotParent.genome, effectiveSigma * 1.45));
       }
     }
   }
 
-  // 4. Standard dynamic explorers (15-25% of population)
-  const explorerPct = isBurstActive ? 0.28 : (isPlateauing ? 0.20 : 0.10);
+  // 4. Standard dynamic explorers (8-18% of population)
+  const explorerPct = isBurstActive ? 0.18 : (isPlateauing ? 0.14 : 0.08);
   const explorers = Math.max(1, Math.floor(population * explorerPct));
   for (let i = 0; i < explorers && next.length < population; i++) {
     const parent = sorted[(Math.random() * Math.min(8, sorted.length)) | 0];
-    const expSigma = isBurstActive ? effectiveSigma * 2.2 : (isPlateauing ? effectiveSigma * 1.8 : effectiveSigma * 1.4);
-    const expRate = isBurstActive ? 0.36 : 0.24;
+    const expSigma = isBurstActive ? effectiveSigma * 1.4 : (isPlateauing ? effectiveSigma * 1.25 : effectiveSigma * 1.15);
+    const expRate = isBurstActive ? 0.22 : 0.16;
     next.push(mutate(Float32Array.from(parent.genome), expRate, expSigma));
   }
 

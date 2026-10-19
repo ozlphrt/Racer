@@ -178,31 +178,40 @@ export class FitnessChart {
     const startIdx = Math.max(0, n - windowSize);
     const visibleCount = n - startIdx;
 
-    let allTimeBest = (this.bestLapEver && Number.isFinite(this.bestLapEver) && this.bestLapEver > 0 && this.bestLapEver < 60)
-      ? this.bestLapEver
-      : Infinity;
+    let runningRecord = Infinity;
+    const recordMilestoneIndices = [];
     const lapRecords = [];
-    const breakthroughPoints = [];
     let validLapCount = 0;
 
     for (let i = 0; i < n; i++) {
       const rec = this.history[i];
       const l = rec.bestLap;
       const isValid = l && Number.isFinite(l) && l > 0 && l < 60;
+      let isNewRecord = false;
       if (isValid) {
         validLapCount++;
-        if (l < allTimeBest) {
-          allTimeBest = l;
-          if (i > 0) breakthroughPoints.push(i);
+        // Did this generation establish a new all-time record pace?
+        if (l < runningRecord - 0.005) {
+          runningRecord = l;
+          isNewRecord = true;
+          recordMilestoneIndices.push(i);
         }
       }
       lapRecords.push({
-        bestLap: isValid ? l : (allTimeBest < Infinity ? allTimeBest : null),
+        bestLap: isValid ? l : null,
         avgLap: rec.avgLap && Number.isFinite(rec.avgLap) && rec.avgLap > 0 && rec.avgLap < 60 ? rec.avgLap : null,
-        recordLap: allTimeBest < Infinity ? allTimeBest : null,
+        recordLap: runningRecord < Infinity ? runningRecord : null,
+        isNewRecord,
         isValid
       });
     }
+
+    const allTimeBest = Math.min(
+      runningRecord,
+      (this.bestLapEver && Number.isFinite(this.bestLapEver) && this.bestLapEver > 0 && this.bestLapEver < 60)
+        ? this.bestLapEver
+        : Infinity
+    );
 
     if (validLapCount === 0) {
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
@@ -360,27 +369,6 @@ export class FitnessChart {
       }
     }
 
-    // Smooth record drop transitions (gliding aerodynamic descent instead of 90-degree cliff staircase)
-    const smoothRecordPts = [];
-    if (recordPts.length > 0) {
-      const rawY = recordPts.map(p => p.y);
-      const sy = [...rawY];
-      for (let pass = 0; pass < 3; pass++) {
-        const temp = [...sy];
-        for (let k = 1; k < temp.length - 1; k++) {
-          temp[k] = 0.25 * sy[k - 1] + 0.50 * sy[k] + 0.25 * sy[k + 1];
-        }
-        for (let k = 1; k < temp.length - 1; k++) {
-          sy[k] = temp[k];
-        }
-      }
-      sy[0] = rawY[0];
-      sy[sy.length - 1] = rawY[rawY.length - 1];
-      for (let i = 0; i < recordPts.length; i++) {
-        smoothRecordPts.push({ x: recordPts[i].x, y: sy[i], lap: recordPts[i].lap });
-      }
-    }
-
     // 1. Swarm Consistency Corridor (Pace Ribbon between Lead EMA and Pack Avg)
     if (leadEmaPts.length > 1 && smoothAvgLapPts.length > 1) {
       ctx.beginPath();
@@ -426,7 +414,7 @@ export class FitnessChart {
       ctx.shadowBlur = 0;
     }
 
-    // 4. Lead Pace: Silky Smoothed Trend Line (Sky Blue `#38bdf8`, solid with glow)
+    // 4. Lead Pace P1 Line (Sky Blue `#38bdf8`, solid with ambient glow)
     if (leadEmaPts.length > 1) {
       ctx.beginPath();
       ctx.moveTo(leadEmaPts[0].x, leadEmaPts[0].y);
@@ -441,63 +429,58 @@ export class FitnessChart {
       ctx.shadowBlur = 0;
     }
 
-    // 5. All-Time Record Lap Line (White `#ffffff`, smoothed gliding curve)
-    if (smoothRecordPts.length > 1) {
-      ctx.beginPath();
-      ctx.moveTo(smoothRecordPts[0].x, smoothRecordPts[0].y);
-      traceSmoothSpline(ctx, smoothRecordPts, 0.25);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
-      ctx.shadowBlur = 4;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-
-    // 7. Breakthrough Laser Pins & Beacons
-    const minPixelGap = 16;
-    let lastMarkedX = -999;
-    for (const bIdx of breakthroughPoints) {
+    // 5. Bright Record Achievement Dots on P1 Line (whenever a new record lap is achieved)
+    for (const bIdx of recordMilestoneIndices) {
       if (bIdx >= startIdx && bIdx < n) {
-        const bx = X(bIdx);
-        if (bx - lastMarkedX >= minPixelGap) {
-          lastMarkedX = bx;
-          const by = Y(lapRecords[bIdx].recordLap);
-          
-          // Subtle vertical milestone laser line down to floor (solid hairline gradient)
-          const laserGrad = ctx.createLinearGradient(0, by, 0, pad.t + ph);
-          laserGrad.addColorStop(0, 'rgba(250, 204, 21, 0.35)');
-          laserGrad.addColorStop(1, 'rgba(250, 204, 21, 0.04)');
-          ctx.strokeStyle = laserGrad;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx, pad.t + ph);
-          ctx.stroke();
+        const p1Pt = leadEmaPts.find(p => p.idx === bIdx) || { x: X(bIdx), y: Y(lapRecords[bIdx].bestLap) };
+        const bx = p1Pt.x;
+        const by = p1Pt.y;
 
-          // Glowing gold halo
-          ctx.beginPath();
-          ctx.arc(bx, by, 5, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
-          ctx.fill();
-          
-          // Solid star beacon core
-          ctx.beginPath();
-          ctx.arc(bx, by, 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = '#facc15';
-          ctx.fill();
-        }
+        ctx.save();
+        // Luminous wide halo
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.beginPath();
+        ctx.arc(bx, by, 7.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Brilliant crisp outer ring
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(bx, by, 4.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Intense bright white core
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(bx, by, 3.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Micro-sparkle diamond glint
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.moveTo(bx - 5, by);
+        ctx.lineTo(bx + 5, by);
+        ctx.moveTo(bx, by - 5);
+        ctx.lineTo(bx, by + 5);
+        ctx.stroke();
+
+        ctx.restore();
       }
     }
 
-    // 8. Crosshair & Active Inspector
+    // 6. Crosshair & Active Inspector
     const isHoverActive = this.hoverIdx !== null && this.hoverIdx >= startIdx && this.hoverIdx < n;
     const activeIdx = isHoverActive ? this.hoverIdx : n - 1;
     const r = this.history[activeIdx];
     const lr = lapRecords[activeIdx];
     const hx = X(activeIdx);
+    const isRecordAtActive = recordMilestoneIndices.includes(activeIdx) || lr.isNewRecord;
 
     if (isHoverActive) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
@@ -510,22 +493,33 @@ export class FitnessChart {
       ctx.setLineDash([]);
 
       // Top crosshair indicator pip
-      ctx.fillStyle = '#38bdf8';
+      ctx.fillStyle = isRecordAtActive ? '#ffffff' : '#38bdf8';
       ctx.beginPath();
       ctx.arc(hx, pad.t, 2.5, 0, Math.PI * 2);
       ctx.fill();
 
-      if (lr.recordLap) {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(hx, Y(lr.recordLap), 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // P1 point dot on hover
       if (lr.bestLap) {
-        ctx.fillStyle = lr.bestLap > slowestPace ? '#f43f5e' : '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(hx, Y(lr.bestLap), 3.5, 0, Math.PI * 2);
-        ctx.fill();
+        const py = Y(lr.bestLap);
+        if (isRecordAtActive) {
+          ctx.save();
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.beginPath();
+          ctx.arc(hx, py, 7.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(hx, py, 4.0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = lr.bestLap > slowestPace ? '#f43f5e' : '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(hx, py, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       if (lr.avgLap) {
         ctx.fillStyle = '#34d399';
@@ -533,7 +527,7 @@ export class FitnessChart {
         ctx.arc(hx, Y(lr.avgLap), 3.5, 0, Math.PI * 2);
         ctx.fill();
       }
-      this.drawLapTooltip(ctx, r, lr, hx, w, h, pad, breakthroughPoints.includes(activeIdx), slowestPace);
+      this.drawLapTooltip(ctx, r, lr, hx, w, h, pad, isRecordAtActive, slowestPace);
     } else {
       const lx = X(n - 1);
       const lastLr = lapRecords[n - 1];
@@ -544,16 +538,26 @@ export class FitnessChart {
         ctx.fill();
       }
       if (lastLr.bestLap) {
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(lx, Y(lastLr.bestLap), 3.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if (lastLr.recordLap) {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(lx, Y(lastLr.recordLap), 3.5, 0, Math.PI * 2);
-        ctx.fill();
+        const isLatestRecord = lastLr.isNewRecord || (allTimeBest < Infinity && Math.abs(lastLr.bestLap - allTimeBest) < 0.005);
+        if (isLatestRecord) {
+          ctx.save();
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.beginPath();
+          ctx.arc(lx, Y(lastLr.bestLap), 7.0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(lx, Y(lastLr.bestLap), 3.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(lx, Y(lastLr.bestLap), 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 

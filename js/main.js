@@ -1914,9 +1914,9 @@ function updateBurstButtonUi() {
 }
 
 $('btn-hyper-burst')?.addEventListener('click', () => {
-  const rem = triggerExplorationBurst(150);
+  const rem = triggerExplorationBurst(40);
   updateBurstButtonUi();
-  toast('🚀 Stagnation Breaker Active: 150 generations of high-variance apex wildcards injected!', 'success');
+  toast('🚀 Stagnation Breaker Active: 40 generations of exploration wildcards injected!', 'success');
 });
 $('btn-hyper-reset-record')?.addEventListener('click', handleResetLapRecord);
 $('btn-hyper-reset-running')?.addEventListener('click', () => resetAllLearning(true));
