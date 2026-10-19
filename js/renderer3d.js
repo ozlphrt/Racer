@@ -6021,7 +6021,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 16000; // Large persistent buffer maintaining permanent skid marks throughout the race
+    this.maxSkidQuads = 128000; // 128k persistent quads: permanent skid marks throughout the entire race across all laps
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -6077,8 +6077,8 @@ export class Renderer3D {
         // Soft lateral tire feathering with solid dark center contact patch
         float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
         float lateral = 0.50 + 0.50 * edge;
-        // Subtle, less opaque rubber that stays permanent and builds up naturally without turning into solid black blocks
-        float alpha = clamp(vAlpha * lateral, 0.0, 0.35);
+        // Subtle, natural rubber that builds up naturally and remains clearly visible across all lighting
+        float alpha = clamp(vAlpha * lateral, 0.0, 0.60);
         if (alpha < 0.005) discard;
         gl_FragColor = vec4(rubber, alpha);
       }
@@ -6093,8 +6093,8 @@ export class Renderer3D {
       side: THREE.DoubleSide, // Essential for dynamic ribbon quads across winding turns
       blending: THREE.NormalBlending,
       polygonOffset: true,
-      polygonOffsetFactor: -4.0,
-      polygonOffsetUnits: -4.0,
+      polygonOffsetFactor: -6.0,
+      polygonOffsetUnits: -6.0,
     });
 
     this.skidMesh = new THREE.Mesh(geo, mat);
@@ -6275,7 +6275,8 @@ export class Renderer3D {
         // --- 1. REAR TIRES (Oversteer, Wheelspin, Brake Locks, Crash) ---
         if (isRearMarking || track.rearActive) {
           const dLR = Math.hypot(rlx - track.rlx, rly - track.rly);
-          if (dLR > 1.25 && dLR < 35) {
+          const minStepR = (Math.abs(car.steer || 0) > 0.35 || oversteerInt > 0.4) ? 1.6 : 2.8;
+          if (dLR > minStepR && dLR < 45) {
             const pRl0x = track.rearActive ? track.rl0x : (track.rlx - nx);
             const pRl0y = track.rearActive ? track.rl0y : (track.rly - ny);
             const pRl1x = track.rearActive ? track.rl1x : (track.rlx + nx);
@@ -6335,7 +6336,8 @@ export class Renderer3D {
         // --- 2. FRONT TIRES (Understeer, Brake Locks, Crash) ---
         if (isFrontMarking || track.frontActive) {
           const dLF = Math.hypot(flx - track.flx, fly - track.fly);
-          if (dLF > 1.25 && dLF < 35) {
+          const minStepF = (Math.abs(car.steer || 0) > 0.35 || understeerInt > 0.4) ? 1.6 : 2.8;
+          if (dLF > minStepF && dLF < 45) {
             const pFl0x = track.frontActive ? track.fl0x : (track.flx - nx);
             const pFl0y = track.frontActive ? track.fl0y : (track.fly - ny);
             const pFl1x = track.frontActive ? track.fl1x : (track.flx + nx);
@@ -6420,11 +6422,15 @@ export class Renderer3D {
       const posAttr = this.skidMesh.geometry.attributes.position;
       const alphaAttr = this.skidMesh.geometry.attributes.alpha;
       if (quadsAdded > 0 && startHead + quadsAdded <= this.maxSkidQuads) {
-        posAttr.updateRange = { offset: startHead * 4 * 3, count: quadsAdded * 4 * 3 };
-        alphaAttr.updateRange = { offset: startHead * 4, count: quadsAdded * 4 };
+        posAttr.updateRange.offset = startHead * 4 * 3;
+        posAttr.updateRange.count = quadsAdded * 4 * 3;
+        alphaAttr.updateRange.offset = startHead * 4;
+        alphaAttr.updateRange.count = quadsAdded * 4;
       } else {
-        posAttr.updateRange = { offset: 0, count: -1 };
-        alphaAttr.updateRange = { offset: 0, count: -1 };
+        posAttr.updateRange.offset = 0;
+        posAttr.updateRange.count = -1;
+        alphaAttr.updateRange.offset = 0;
+        alphaAttr.updateRange.count = -1;
       }
       posAttr.needsUpdate = true;
       alphaAttr.needsUpdate = true;

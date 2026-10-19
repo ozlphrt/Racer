@@ -1117,7 +1117,7 @@ export class Renderer {
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
     const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
-    const maxSkidSegments = 16000;
+    const maxSkidSegments = 64000;
 
     for (let i = 0; i < allCars.length; i++) {
       const car = allCars[i];
@@ -1167,7 +1167,8 @@ export class Renderer {
 
       if (track.initialized && (isMarking || track.active)) {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
-        if (dL > 0.65 && dL < 35) {
+        const minStep = (Math.abs(car.steer || 0) > 0.35 || curInt > 0.4) ? 1.6 : 2.6;
+        if (dL > minStep && dL < 45) {
           const alpha = isMarking ? (0.05 + curInt * 0.15) : 0.03;
           this.skidmarks.push({
             x0: track.lx, y0: track.ly,
