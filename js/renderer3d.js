@@ -6467,11 +6467,8 @@ export class Renderer3D {
   }
 
   setAdaptivePixelRatio(dpr) {
-    if (!this.renderer) return;
-    const target = Math.max(0.80, Math.min(dpr, 1.0));
-    if (Math.abs(this.renderer.getPixelRatio() - target) > 0.01) {
-      this.renderer.setPixelRatio(target);
-    }
+    // Keep canvas pixel ratio locked to eliminate GPU backbuffer reallocations and full-screen flickers
+    return;
   }
 
   findActionFocusPair(sim, rankedCars, focusCar, opts) {
@@ -7366,8 +7363,9 @@ export class Renderer3D {
         }
       }
     }
-
-    this.controls.update();
+    if (isOrbitActive) {
+      this.controls.update();
+    }
     if (this.skyMesh) {
       this.skyMesh.position.copy(this.camera.position);
       if (this.skyMat && this.skyMat.uniforms && this.skyMat.uniforms.uTime) {

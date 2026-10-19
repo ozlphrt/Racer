@@ -362,9 +362,13 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
 
   // Show large broadcast overlay on main screen with corresponding color palette
   if (overlay) {
-    overlay.classList.remove('is-active', 'is-overall-record', 'is-race-fastest');
-    void overlay.offsetWidth; // Force reflow for re-animation
-    overlay.classList.add('is-active', isRaceFastest ? 'is-race-fastest' : 'is-overall-record');
+    const wasActive = overlay.classList.contains('is-active');
+    overlay.classList.remove('is-overall-record', 'is-race-fastest');
+    overlay.classList.add(isRaceFastest ? 'is-race-fastest' : 'is-overall-record');
+    if (!wasActive) {
+      void overlay.offsetWidth; // Reflow only on initial appearance for enter animation
+      overlay.classList.add('is-active');
+    }
     overlay.setAttribute('aria-hidden', 'false');
 
     if (recordCelebrationTimeout) clearTimeout(recordCelebrationTimeout);
@@ -3301,21 +3305,6 @@ function frame(now) {
     if (now - lastPerfLog >= 3000) {
       lastPerfLog = now;
       console.log(`[PERF 3D] ${perfDetail}`);
-    }
-
-    // Adaptive DPR scaling: dynamically protect 60 FPS under heavy rendering loads
-    if (state.view3d && renderer3d && typeof renderer3d.setAdaptivePixelRatio === 'function') {
-      if (currentFps < 48) {
-        lowFpsStreak++;
-        if (lowFpsStreak >= 2) {
-          renderer3d.setAdaptivePixelRatio(0.85);
-        }
-      } else if (currentFps >= 56) {
-        lowFpsStreak = Math.max(0, lowFpsStreak - 1);
-        if (lowFpsStreak === 0) {
-          renderer3d.setAdaptivePixelRatio(1.0);
-        }
-      }
     }
   }
 
