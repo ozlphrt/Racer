@@ -4058,6 +4058,30 @@ export class Renderer3D {
     group.add(badge);
   }
 
+  updateRecordGhost(sim, opts) {
+    const mesh = this.recordGhostMesh;
+    if (!mesh) return;
+    const hasRecord = Number.isFinite(sim?.bestLapEver) && sim.bestLapEver > 0 && sim.bestLapEver < 60;
+    this.recordGhostStatus = opts.recordGhost === false ? 'off' : hasRecord ? 'ready' : 'waiting';
+    mesh.visible = false;
+    if (this.recordGhostStatus !== 'ready') return;
+    const pose = sim.getRecordGhostRenderState?.(opts.renderAlpha);
+    if (!pose || !Number.isFinite(pose.x) || !Number.isFinite(pose.y) || !Number.isFinite(pose.angle)) {
+      this.recordGhostStatus = 'waiting';
+      return;
+    }
+    mesh.visible = true;
+    mesh.position.set(pose.x, -pose.y, 0.12);
+    mesh.rotation.order = 'ZYX';
+    mesh.rotation.set(0, 0, -pose.angle);
+    this.updateRecordGhostBadgeText(`⚡ RECORD GHOST · ${sim.bestLapEver.toFixed(2)}s`);
+    if (mesh.userData.badgeSprite) mesh.userData.badgeSprite.visible = true;
+    if (!this._ghostNdc) this._ghostNdc = new THREE.Vector3();
+    this._ghostNdc.set(pose.x, -pose.y, 2).project(this.camera);
+    this.recordGhostStatus = Math.abs(this._ghostNdc.x) <= 1.1 && Math.abs(this._ghostNdc.y) <= 1.1 &&
+      this._ghostNdc.z >= -1 && this._ghostNdc.z <= 1 ? 'visible' : 'outside-view';
+  }
+
   createRecordGhostBadgeSprite(text = '⚡ RECORD GHOST') {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
@@ -4086,15 +4110,15 @@ export class Renderer3D {
     tex.needsUpdate = true;
     const mat = new THREE.SpriteMaterial({
       map: tex,
-      depthTest: true,
+      depthTest: false,
       depthWrite: false,
       transparent: true,
       opacity: 0.85,
     });
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = 1000;
-    sprite.scale.set(4.6, 1.15, 1);
-    sprite.position.set(0, 0, 4.6);
+    sprite.scale.set(28, 7, 1);
+    sprite.position.set(0, 0, 10);
     return sprite;
   }
 
@@ -4114,6 +4138,7 @@ export class Renderer3D {
   }
 
   setupRecordGhostMesh(template) {
+    this._lastGhostBadgeText = null;
     if (!this.recordGhostMesh) {
       this.recordGhostMesh = new THREE.Group();
       this.recordGhostMesh.visible = false;
@@ -4129,7 +4154,10 @@ export class Renderer3D {
         if (child.isMesh && child.material) {
           const mat = child.material.clone();
           mat.transparent = true;
-          mat.opacity = 0.20;
+          mat.opacity = 0.45;
+          mat.color?.set(0x00e5ff);
+          mat.emissive?.set(0x0099cc);
+          mat.emissiveIntensity = 0.65;
           mat.depthWrite = false;
           child.material = mat;
         }
@@ -4145,9 +4173,9 @@ export class Renderer3D {
       const ghostMat = new THREE.MeshStandardMaterial({
         color: 0x00e5ff,
         emissive: 0x0099cc,
-        emissiveIntensity: 0.35,
+        emissiveIntensity: 0.65,
         transparent: true,
-        opacity: 0.20,
+        opacity: 0.45,
         roughness: 0.30,
         metalness: 0.50,
         depthWrite: false,
@@ -8119,31 +8147,7 @@ export class Renderer3D {
     }
 
     // Update Holographic Record Ghost Car
-    const showRecordGhost = (opts.recordGhost !== false) && (sim && sim.bestLapEver && sim.bestLapEver < 60);
-    if (this.recordGhostMesh) {
-      if (showRecordGhost && sim.getRecordGhostState) {
-        const ghostState = sim.getRecordGhostRenderState(opts.renderAlpha);
-        if (ghostState) {
-          this.recordGhostMesh.visible = true;
-          this.recordGhostMesh.position.set(ghostState.x, -ghostState.y, 0.12);
-          this.recordGhostMesh.rotation.order = 'ZYX';
-          this.recordGhostMesh.rotation.set(0, 0, -ghostState.angle);
-
-          const dur = sim.bestLapEver;
-          const badgeText = (Number.isFinite(dur) && dur > 5 && dur < 60)
-            ? `⚡ P1 GHOST · ${dur.toFixed(2)}s`
-            : '⚡ P1 RECORD GHOST';
-          this.updateRecordGhostBadgeText(badgeText);
-          if (this.recordGhostMesh.userData.badgeSprite) {
-            this.recordGhostMesh.userData.badgeSprite.visible = true;
-          }
-        } else {
-          this.recordGhostMesh.visible = false;
-        }
-      } else {
-        this.recordGhostMesh.visible = false;
-      }
-    }
+    this.updateRecordGhost(sim, opts);
 
     // Update Dynamic Tire Barrier Physics Transforms
     this.updateTireBarriers(sim);

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.1 — 2026-10-20
+
+- Make the record ghost easier to see with a brighter cyan body and a readable marker above the car.
+- Show when Record Ghost is waiting for a valid lap or outside the current camera view.
+- Refresh the ghost marker after the F1 model loads without repeatedly uploading unchanged text.
+- Validate ghost visibility transitions and marker caching; 63 regression checks pass.
+
 ## 1.5.0 — 2026-10-20
 
 - Bundle 11 organically tested milestone brains through generation 5,000 for first-time players. Both JSON export routes now include captured checkpoints.

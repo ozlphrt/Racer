@@ -986,6 +986,54 @@ test('a failed preview releases the queue so another car can render', async (t) 
   assert.equal(preview.busy, false);
 });
 
+test('record ghost appears after a lap becomes available and reports when it leaves the camera view', () => {
+  const renderer = Object.create(Renderer3D.prototype);
+  renderer.recordGhostMesh = new THREE.Group();
+  renderer.recordGhostMesh.userData.badgeSprite = new THREE.Sprite();
+  renderer.updateRecordGhostBadgeText = text => { renderer.lastBadgeText = text; };
+  renderer.camera = new THREE.OrthographicCamera(-100, 100, 100, -100, 1, 500);
+  renderer.camera.position.set(0, 0, 100);
+  renderer.camera.lookAt(0, 0, 0);
+  renderer.camera.updateMatrixWorld(true);
+  let pose = { x: 10, y: 20, angle: 0.4 };
+  const sim = { bestLapEver: Infinity, getRecordGhostRenderState: () => pose };
+  renderer.updateRecordGhost(sim, { recordGhost: true });
+  assert.equal(renderer.recordGhostMesh.visible, false);
+  assert.equal(renderer.recordGhostStatus, 'waiting');
+  sim.bestLapEver = 10.93;
+  renderer.updateRecordGhost(sim, { recordGhost: true });
+  assert.equal(renderer.recordGhostMesh.visible, true);
+  assert.equal(renderer.recordGhostStatus, 'visible');
+  assert.equal(renderer.recordGhostMesh.position.y, -20);
+  assert.equal(renderer.recordGhostMesh.rotation.z, -0.4);
+  assert.match(renderer.lastBadgeText, /10.93s/);
+  pose = { ...pose, x: 1000 };
+  renderer.updateRecordGhost(sim, { recordGhost: true });
+  assert.equal(renderer.recordGhostStatus, 'outside-view');
+  assert.equal(renderer.recordGhostMesh.visible, true, 'camera framing must not disable ghost rendering');
+  renderer.updateRecordGhost(sim, { recordGhost: false });
+  assert.equal(renderer.recordGhostMesh.visible, false);
+  assert.equal(renderer.recordGhostStatus, 'off');
+  pose = { ...pose, x: NaN };
+  renderer.updateRecordGhost(sim, { recordGhost: true });
+  assert.equal(renderer.recordGhostMesh.visible, false, 'invalid playback data cannot reach the GPU');
+});
+
+test('loading the F1 template invalidates the record ghost badge cache', () => {
+  const renderer = Object.create(Renderer3D.prototype);
+  renderer.scene = new THREE.Scene();
+  renderer._lastGhostBadgeText = 'old record';
+  renderer.createRecordGhostBadgeSprite = () => new THREE.Sprite();
+  const template = new THREE.Group();
+  template.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+  renderer.setupRecordGhostMesh(template);
+  assert.equal(renderer._lastGhostBadgeText, null);
+  renderer.updateRecordGhostBadgeText('new record');
+  const badge = renderer.recordGhostMesh.userData.badgeSprite;
+  renderer.updateRecordGhostBadgeText('new record');
+  assert.equal(renderer.recordGhostMesh.userData.badgeSprite, badge, 'unchanged text does not upload a new badge each frame');
+});
+
 test('record ghost and cars share smooth display time at 30, 60, 120 and 144 FPS', () => {
   for (const fps of [30, 60, 120, 144]) {
     const sim = Object.create(Simulation.prototype);
