@@ -5310,10 +5310,19 @@ input[type='range']:disabled {
 .record-celebration-overlay.is-active .record-card {
   transform: scale(1) translateY(0);
   opacity: 1;
-  animation: recordCardGlow 2.5s ease-in-out infinite alternate;
 }
 
-@keyframes recordCardGlow {
+/* === Theme 1: All-Time Overall Circuit Record (Royal Violet & Champion Gold) === */
+.record-celebration-overlay.is-overall-record .record-vignette-pulse {
+  background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(168, 85, 247, 0.22) 75%, rgba(147, 51, 234, 0.42) 100%);
+}
+
+.record-celebration-overlay.is-overall-record .record-card {
+  border: 2px solid rgba(192, 132, 252, 0.85);
+  animation: overallRecordCardGlow 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes overallRecordCardGlow {
   0% {
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.85), 0 0 35px rgba(192, 132, 252, 0.4);
     border-color: rgba(192, 132, 252, 0.8);
@@ -5322,6 +5331,79 @@ input[type='range']:disabled {
     box-shadow: 0 28px 90px rgba(0, 0, 0, 0.9), 0 0 60px rgba(251, 191, 36, 0.55), 0 0 90px rgba(192, 132, 252, 0.4);
     border-color: rgba(251, 191, 36, 0.95);
   }
+}
+
+.record-celebration-overlay.is-overall-record .record-top-header {
+  color: #fbbf24;
+  text-shadow: 0 0 16px rgba(251, 191, 36, 0.7);
+}
+
+.record-celebration-overlay.is-overall-record .record-star-icon {
+  color: #fbbf24;
+}
+
+.record-celebration-overlay.is-overall-record .record-time-digits {
+  text-shadow: 0 0 35px rgba(192, 132, 252, 0.9), 0 0 70px rgba(192, 132, 252, 0.5);
+}
+
+.record-celebration-overlay.is-overall-record .record-delta-chip {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+}
+
+.record-celebration-overlay.is-overall-record .record-gen-badge {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.16);
+  border: 1px solid rgba(192, 132, 252, 0.4);
+}
+
+/* === Theme 2: Fastest Lap of the Current Race (Electric Cyber Cyan & Racing Mint) === */
+.record-celebration-overlay.is-race-fastest .record-vignette-pulse {
+  background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(56, 189, 248, 0.20) 75%, rgba(16, 185, 129, 0.38) 100%);
+}
+
+.record-celebration-overlay.is-race-fastest .record-card {
+  border: 2px solid rgba(56, 189, 248, 0.85);
+  animation: raceFastestCardGlow 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes raceFastestCardGlow {
+  0% {
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.85), 0 0 35px rgba(56, 189, 248, 0.4);
+    border-color: rgba(56, 189, 248, 0.8);
+  }
+  100% {
+    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.9), 0 0 60px rgba(52, 211, 153, 0.55), 0 0 90px rgba(56, 189, 248, 0.4);
+    border-color: rgba(52, 211, 153, 0.95);
+  }
+}
+
+.record-celebration-overlay.is-race-fastest .record-top-header {
+  color: #38bdf8;
+  text-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
+}
+
+.record-celebration-overlay.is-race-fastest .record-star-icon {
+  color: #38bdf8;
+}
+
+.record-celebration-overlay.is-race-fastest .record-time-digits {
+  text-shadow: 0 0 35px rgba(56, 189, 248, 0.9), 0 0 70px rgba(52, 211, 153, 0.5);
+}
+
+.record-celebration-overlay.is-race-fastest .record-delta-chip {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.18);
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
+}
+
+.record-celebration-overlay.is-race-fastest .record-gen-badge {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.4);
 }
 
 .record-card-shimmer {
@@ -5350,13 +5432,10 @@ input[type='range']:disabled {
   font-weight: 800;
   letter-spacing: 0.20em;
   text-transform: uppercase;
-  color: #fbbf24;
-  text-shadow: 0 0 16px rgba(251, 191, 36, 0.7);
 }
 
 .record-star-icon {
   font-size: 15px;
-  color: #fbbf24;
   animation: recordStarSpin 3s linear infinite;
 }
 
@@ -5381,19 +5460,14 @@ input[type='range']:disabled {
   line-height: 1;
   letter-spacing: -0.03em;
   color: #ffffff;
-  text-shadow: 0 0 35px rgba(192, 132, 252, 0.9), 0 0 70px rgba(192, 132, 252, 0.5);
 }
 
 .record-delta-chip {
   font-family: var(--mono, "JetBrains Mono", monospace);
   font-size: 16px;
   font-weight: 800;
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.18);
-  border: 1px solid rgba(52, 211, 153, 0.5);
   padding: 4px 12px;
   border-radius: 9999px;
-  text-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
   transform: translateY(-8px);
 }
 
@@ -5415,11 +5489,8 @@ input[type='range']:disabled {
 }
 
 .record-gen-badge {
-  color: #c084fc;
-  background: rgba(192, 132, 252, 0.16);
   padding: 2px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(192, 132, 252, 0.4);
 }
 
 .record-meta-label {
@@ -5428,6 +5499,12 @@ input[type='range']:disabled {
 }
 
 /* Top HUD Lap Box Celebration Flash */
+.hud-lap-gap.race-fastest {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+}
+
 .hud-item.hud-lap-box.is-record-flash {
   animation: hudRecordPulse 1.2s ease-in-out 3;
 }
@@ -5444,6 +5521,25 @@ input[type='range']:disabled {
   100% {
     transform: scale(1.0);
     filter: drop-shadow(0 0 0px rgba(192, 132, 252, 0));
+  }
+}
+
+.hud-item.hud-lap-box.is-race-fastest-flash {
+  animation: hudRaceFastestPulse 1.2s ease-in-out 3;
+}
+
+@keyframes hudRaceFastestPulse {
+  0% {
+    transform: scale(1.0);
+    filter: drop-shadow(0 0 0px rgba(56, 189, 248, 0));
+  }
+  50% {
+    transform: scale(1.14);
+    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.95)) drop-shadow(0 0 20px rgba(52, 211, 153, 0.7));
+  }
+  100% {
+    transform: scale(1.0);
+    filter: drop-shadow(0 0 0px rgba(56, 189, 248, 0));
   }
 }
 

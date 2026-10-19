@@ -739,6 +739,52 @@ export class SpatialAudioEngine {
       }
     } catch {}
   }
+
+  playRaceFastestChime() {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+    try {
+      const now = this.ctx.currentTime;
+      const master = this.masterGain;
+
+      // Crisp ascending cyber-synth arpeggio: E5 (659Hz), G#5 (830Hz), B5 (987Hz)
+      const notes = [
+        { f: 659.25, t: 0.00, dur: 0.22, gain: 0.24 },
+        { f: 830.61, t: 0.07, dur: 0.24, gain: 0.28 },
+        { f: 987.77, t: 0.14, dur: 0.55, gain: 0.38 },
+      ];
+
+      for (const n of notes) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(n.f, now + n.t);
+
+        gain.gain.setValueAtTime(0.0001, now + n.t);
+        gain.gain.linearRampToValueAtTime(n.gain, now + n.t + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + n.t + n.dur);
+
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(now + n.t);
+        osc.stop(now + n.t + n.dur + 0.05);
+
+        // High cyber overtone
+        const overtone = this.ctx.createOscillator();
+        const overGain = this.ctx.createGain();
+        overtone.type = 'triangle';
+        overtone.frequency.setValueAtTime(n.f * 1.5, now + n.t);
+
+        overGain.gain.setValueAtTime(0.0001, now + n.t);
+        overGain.gain.linearRampToValueAtTime(n.gain * 0.22, now + n.t + 0.008);
+        overGain.gain.exponentialRampToValueAtTime(0.0001, now + n.t + n.dur * 0.6);
+
+        overtone.connect(overGain);
+        overGain.connect(master);
+        overtone.start(now + n.t);
+        overtone.stop(now + n.t + n.dur * 0.6 + 0.05);
+      }
+    } catch {}
+  }
 }
 
 export const audio = new SpatialAudioEngine();

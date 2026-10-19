@@ -301,14 +301,19 @@ sim.onNewBest = (best) => {
 
 let recordCelebrationTimeout = null;
 
-function showRecordCelebration(lapDuration, car, prevRecord) {
+function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overall') {
   const overlay = $('record-celebration-overlay');
   const timeEl = $('record-overlay-time');
   const deltaEl = $('record-overlay-delta');
   const carEl = $('record-overlay-car');
   const genEl = $('record-overlay-gen');
+  const tagEl = $('record-header-tag');
+  const starLeft = $('record-star-left');
+  const starRight = $('record-star-right');
+  const metaLabel = $('record-meta-label');
   const lapBox = document.querySelector('.hud-item.hud-lap-box');
 
+  const isRaceFastest = recordType === 'race';
   const carName = car ? (car.manual ? 'PLAYER' : `CAR #${car.idx + 1}`) : 'P1';
   const genText = `GEN ${sim?.generation || ''}`;
 
@@ -316,55 +321,72 @@ function showRecordCelebration(lapDuration, car, prevRecord) {
   if (carEl) carEl.textContent = carName;
   if (genEl) genEl.textContent = genText;
 
+  if (tagEl) {
+    tagEl.textContent = isRaceFastest ? 'FASTEST LAP OF THE RACE' : 'NEW ALL-TIME CIRCUIT RECORD';
+  }
+  if (starLeft) starLeft.textContent = isRaceFastest ? '⚡' : '👑';
+  if (starRight) starRight.textContent = isRaceFastest ? '⚡' : '👑';
+  if (metaLabel) {
+    metaLabel.textContent = isRaceFastest ? 'RACE PACE LEADER' : 'ALL-TIME PEAK PACE';
+  }
+
   if (deltaEl) {
     if (prevRecord && Number.isFinite(prevRecord) && prevRecord > lapDuration) {
       const diff = lapDuration - prevRecord;
       deltaEl.textContent = `${diff.toFixed(2)}s`;
       deltaEl.hidden = false;
     } else {
-      deltaEl.textContent = '★ RECORD';
+      deltaEl.textContent = isRaceFastest ? '★ RACE BEST' : '★ ALL-TIME';
       deltaEl.hidden = false;
     }
   }
 
-  // Flash top HUD lap box with glowing purple/gold pulse
+  // Flash top HUD lap box with distinct glow animation
   if (lapBox) {
-    lapBox.classList.remove('is-record-flash');
+    lapBox.classList.remove('is-record-flash', 'is-race-fastest-flash');
     void lapBox.offsetWidth; // Force reflow
-    lapBox.classList.add('is-record-flash');
+    lapBox.classList.add(isRaceFastest ? 'is-race-fastest-flash' : 'is-record-flash');
   }
 
   // Activate 3D arch celebration (overhead scoreboard + F1 LED pods strobe)
   if (renderer3d && typeof renderer3d.triggerRecordCelebration === 'function') {
-    renderer3d.triggerRecordCelebration(lapDuration, car);
+    renderer3d.triggerRecordCelebration(lapDuration, car, recordType);
   }
 
-  // Play triumphant audio fanfare
-  audio?.playRecordFanfare?.();
+  // Play audio sound effect
+  if (isRaceFastest) {
+    audio?.playRaceFastestChime?.();
+  } else {
+    audio?.playRecordFanfare?.();
+  }
 
-  // Show large broadcast overlay on main screen
+  // Show large broadcast overlay on main screen with corresponding color palette
   if (overlay) {
-    overlay.classList.remove('is-active');
+    overlay.classList.remove('is-active', 'is-overall-record', 'is-race-fastest');
     void overlay.offsetWidth; // Force reflow for re-animation
-    overlay.classList.add('is-active');
+    overlay.classList.add('is-active', isRaceFastest ? 'is-race-fastest' : 'is-overall-record');
     overlay.setAttribute('aria-hidden', 'false');
 
     if (recordCelebrationTimeout) clearTimeout(recordCelebrationTimeout);
     recordCelebrationTimeout = setTimeout(() => {
-      overlay.classList.remove('is-active');
+      overlay.classList.remove('is-active', 'is-overall-record', 'is-race-fastest');
       overlay.setAttribute('aria-hidden', 'true');
-      if (lapBox) lapBox.classList.remove('is-record-flash');
-    }, 4500);
+      if (lapBox) lapBox.classList.remove('is-record-flash', 'is-race-fastest-flash');
+    }, isRaceFastest ? 3800 : 4800);
   }
 }
 
-sim.onNewBestLap = (lapDuration, car, prevRecord) => {
+sim.onNewBestLap = (lapDuration, car, prevRecord, recordType = 'overall') => {
   if (hyperRunning) return;
   pulse('stat-best-lap-box');
-  const carName = car ? (car.manual ? 'Player' : `Car #${car.idx + 1}`) : 'New Record';
+  const carName = car ? (car.manual ? 'Player' : `Car #${car.idx + 1}`) : 'Car';
   const timeTxt = Number.isFinite(lapDuration) ? `${lapDuration.toFixed(2)}s` : '';
-  toast(`⚡ All-Time Circuit Record Broken: ${carName} (${timeTxt})`, 'success');
-  showRecordCelebration(lapDuration, car, prevRecord);
+  if (recordType === 'race') {
+    toast(`⚡ Fastest Lap of the Race: ${carName} (${timeTxt})`, 'info');
+  } else {
+    toast(`👑 All-Time Circuit Record Smashed: ${carName} (${timeTxt})`, 'success');
+  }
+  showRecordCelebration(lapDuration, car, prevRecord, recordType);
   persistState();
 };
 
@@ -2921,9 +2943,13 @@ function updateHud(leader) {
       if (lapGap) {
         if (Number.isFinite(bestEver) && bestEver < 100) {
           const gap = lastLap - bestEver;
+          const raceBest = sim.raceBestLap;
           if (gap <= 0.005) {
             lapGap.textContent = 'RECORD';
             lapGap.className = 'hud-lap-gap record';
+          } else if (Number.isFinite(raceBest) && Math.abs(lastLap - raceBest) <= 0.005) {
+            lapGap.textContent = 'RACE BEST';
+            lapGap.className = 'hud-lap-gap race-fastest';
           } else {
             lapGap.textContent = `+${gap.toFixed(2)}s`;
             lapGap.className = 'hud-lap-gap positive';

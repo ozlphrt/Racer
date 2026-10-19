@@ -2712,9 +2712,10 @@ export class Renderer3D {
     const t = sim ? sim.time : startDelay;
 
     if (this._recordCelebrationUntil && performance.now() < this._recordCelebrationUntil) {
-      // High-energy celebration strobe sequence across the 5 lights
+      // Celebration strobe sequence across the 5 lights
       const tNow = performance.now();
-      const strobeIdx = Math.floor((tNow / 110) % 5);
+      const isRace = this._recordType === 'race';
+      const strobeIdx = Math.floor((tNow / (isRace ? 85 : 110)) % 5);
       for (let i = 0; i < 5; i++) {
         const mat = this.gantryLedMats[i];
         if (mat) {
@@ -2723,13 +2724,13 @@ export class Renderer3D {
             mat.emissive.setHex(0xffffff);
             mat.emissiveIntensity = 6.0;
           } else if (Math.abs(i - strobeIdx) === 1) {
-            mat.color.setHex(0xc084fc);
-            mat.emissive.setHex(0xa855f7);
-            mat.emissiveIntensity = 4.0;
+            mat.color.setHex(isRace ? 0x38bdf8 : 0xc084fc);
+            mat.emissive.setHex(isRace ? 0x0284c7 : 0xa855f7);
+            mat.emissiveIntensity = 4.5;
           } else {
-            mat.color.setHex(0xfbbf24);
-            mat.emissive.setHex(0xf59e0b);
-            mat.emissiveIntensity = 2.0;
+            mat.color.setHex(isRace ? 0x34d399 : 0xfbbf24);
+            mat.emissive.setHex(isRace ? 0x10b981 : 0xf59e0b);
+            mat.emissiveIntensity = 2.5;
           }
         }
       }
@@ -2891,17 +2892,25 @@ export class Renderer3D {
     let isFinal = false;
 
     if (isCelebratingRecord) {
+      const isRace = this._recordType === 'race';
       const recTimeStr = (this._recordLapDuration && Number.isFinite(this._recordLapDuration))
         ? `${this._recordLapDuration.toFixed(2)}s`
-        : 'RECORD';
-      mainText = `★ ${recTimeStr} RECORD ★`;
+        : 'FASTEST';
       const carTag = this._recordCarName || 'P1';
-      subText = `CIRCUIT LAP RECORD · ${carTag} · ALL-TIME FASTEST`;
-      color = '#c084fc'; // F1 Neon Record Purple
+
+      if (isRace) {
+        mainText = `★ ${recTimeStr} RACE BEST ★`;
+        subText = `FASTEST LAP IN RACE · ${carTag} · SESSION LEADER`;
+        color = '#38bdf8'; // Electric Cyan / Mint
+      } else {
+        mainText = `★ ${recTimeStr} RECORD ★`;
+        subText = `CIRCUIT LAP RECORD · ${carTag} · ALL-TIME FASTEST`;
+        color = '#c084fc'; // F1 Neon Record Purple
+      }
       isFinal = true;
 
       if (this.lapPlateDisplayMat) {
-        this.lapPlateDisplayMat.emissiveIntensity = 1.7 + 0.6 * Math.sin(nowMs * 0.008);
+        this.lapPlateDisplayMat.emissiveIntensity = 1.7 + 0.6 * Math.sin(nowMs * (isRace ? 0.012 : 0.008));
       }
     } else {
       if (this.lapPlateDisplayMat && this.lapPlateDisplayMat.emissiveIntensity !== 1.4) {
@@ -2958,11 +2967,12 @@ export class Renderer3D {
   }
 }
 
-  triggerRecordCelebration(lapDuration, car) {
+  triggerRecordCelebration(lapDuration, car, recordType = 'overall') {
     if (!Number.isFinite(lapDuration) || lapDuration <= 0) return;
-    this._recordCelebrationUntil = performance.now() + 8500;
+    this._recordCelebrationUntil = performance.now() + (recordType === 'race' ? 6500 : 8500);
     this._recordLapDuration = lapDuration;
     this._recordCarName = car ? (car.manual ? 'PLAYER' : `CAR #${car.idx + 1}`) : 'P1';
+    this._recordType = recordType;
     this._lastLapPlateKey = '';
   }
 

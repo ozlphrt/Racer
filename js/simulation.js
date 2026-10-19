@@ -39,6 +39,7 @@ export class Simulation {
     this.history = [];
     this.allTimeBest = null;
     this.bestLapEver = Infinity;
+    this.raceBestLap = Infinity;
     this.recordLapTelemetry = null;
     this.isRealCarTelemetry = false;
     this.deathEvents = [];
@@ -225,6 +226,7 @@ export class Simulation {
     this.postRaceTimer = null;
     this.checkeredFlagTimer = null;
     this.aliveCount = this.cars.length;
+    this.raceBestLap = Infinity;
     this.deathEvents = [];
     this.tireBarriers?.reset();
   }
@@ -241,19 +243,26 @@ export class Simulation {
   handleLapComplete(car, lapDuration, samples) {
     if (!Number.isFinite(lapDuration) || lapDuration <= 5 || lapDuration >= 60) return;
 
-    // Check if this lap beats the current all-time best, or if we need to replace synthetic fallback
-    const prevRecord = this.bestLapEver;
-    const isNewCircuitRecord = lapDuration < this.bestLapEver;
+    const prevOverallRecord = this.bestLapEver;
+    const isOverallRecord = lapDuration < this.bestLapEver;
     const isReplacingSynthetic = !this.isRealCarTelemetry;
 
-    if (isNewCircuitRecord || isReplacingSynthetic) {
-      this.prevBestLapEver = Number.isFinite(prevRecord) && prevRecord < 100 ? prevRecord : null;
+    const prevRaceBest = this.raceBestLap;
+    const isRaceBest = lapDuration < this.raceBestLap;
+
+    if (isOverallRecord || isReplacingSynthetic) {
+      this.prevBestLapEver = Number.isFinite(prevOverallRecord) && prevOverallRecord < 100 ? prevOverallRecord : null;
       this.bestLapEver = lapDuration;
+      this.raceBestLap = lapDuration;
       this.isRealCarTelemetry = true;
       if (samples && samples.length > 5) {
         this.recordLapTelemetry = [...samples];
       }
-      this.onNewBestLap?.(lapDuration, car, this.prevBestLapEver);
+      this.onNewBestLap?.(lapDuration, car, this.prevBestLapEver, 'overall');
+    } else if (isRaceBest && lapDuration < 35.0) {
+      const prev = Number.isFinite(prevRaceBest) && prevRaceBest < 100 ? prevRaceBest : null;
+      this.raceBestLap = lapDuration;
+      this.onNewBestLap?.(lapDuration, car, prev, 'race');
     }
   }
 
@@ -645,7 +654,8 @@ export class Simulation {
             this.recordLapTelemetry = [...samples];
           }
         }
-        this.onNewBestLap?.(genBestLap, fastestCar, this.prevBestLapEver);
+        this.raceBestLap = genBestLap;
+        this.onNewBestLap?.(genBestLap, fastestCar, this.prevBestLapEver, 'overall');
       }
     }
 
