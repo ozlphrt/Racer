@@ -594,7 +594,9 @@ function setToggle(key, on, showToast = true) {
     if (on && state.cameraPreset === 'orbit') {
       setCameraPreset('auto', false);
     }
+    updateCameraPill();
     if (showToast) {
+      flashCameraNameBadge(on ? '🎥 Follow Leader: ON' : '🌐 Follow: OFF (Overview)', on);
       toast(on ? '🎥 Follow Leader: ON' : '🌐 Follow Leader: OFF (Circuit Overview)', 'info');
     }
   }
@@ -1090,21 +1092,27 @@ export function flashCameraNameBadge(shotName, isAuto = false) {
 }
 
 let lastPillIsAuto = null;
+let lastPillIsFollow = null;
 
 function updateCameraPill() {
   const isAuto = (state.cameraPreset || 'auto') === 'auto';
+  const isFollow = Boolean(state.follow);
 
-  if (isAuto !== lastPillIsAuto) {
+  if (isAuto !== lastPillIsAuto || isFollow !== lastPillIsFollow) {
     lastPillIsAuto = isAuto;
+    lastPillIsFollow = isFollow;
     const btn = $('btn-camera-menu');
     const dot = $('cam-active-dot');
 
     if (btn) {
-      btn.classList.toggle('is-auto-director', isAuto);
+      btn.classList.toggle('is-auto-director', isAuto && isFollow);
     }
 
     if (dot) {
-      if (isAuto) {
+      if (!isFollow) {
+        dot.style.background = '#94a3b8';
+        dot.style.boxShadow = '0 0 6px rgba(148, 163, 184, 0.4)';
+      } else if (isAuto) {
         dot.style.background = '#22c55e';
         dot.style.boxShadow = '0 0 6px #22c55e';
       } else {
