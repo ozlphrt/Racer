@@ -51,6 +51,7 @@ export class Simulation {
     this.raceBestLap = Infinity;
     this.raceGhostLap = Infinity;
     this.raceGhostTelemetry = null;
+    this.raceGhostSource = null;
     this.recordLapTelemetry = null;
     this.isRealCarTelemetry = false;
     this.deathEvents = [];
@@ -300,6 +301,7 @@ export class Simulation {
     this.raceBestLap = Infinity;
     this.raceGhostLap = Infinity;
     this.raceGhostTelemetry = null;
+    this.raceGhostSource = null;
     this.deathEvents = [];
     this.tireBarriers?.reset();
   }
@@ -321,12 +323,13 @@ export class Simulation {
 
     // Playback uses only a lap actually driven in this race, independently of
     // historical records, imported brains, or synthetic centerline trajectories.
-    if (lapDuration < this.raceGhostLap && Array.isArray(samples) && samples.length > 5 &&
+    if (lapDuration < this.raceGhostLap - 0.01 && Array.isArray(samples) && samples.length > 5 &&
       samples.every((s, i) => Number.isFinite(s.t) && s.t >= 0 && s.t <= lapDuration + 0.1 &&
         Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.angle) && Number.isFinite(s.speed) &&
         (i === 0 || s.t >= samples[i - 1].t))) {
       this.raceGhostLap = lapDuration;
       this.raceGhostTelemetry = [...samples];
+      this.raceGhostSource = { generation: this.generation, carNumber: car?.carNumber ?? null, lap: car?.laps ?? null };
     }
 
     const prevOverallRecord = this.bestLapEver;

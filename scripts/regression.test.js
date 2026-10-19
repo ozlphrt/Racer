@@ -998,6 +998,12 @@ test('race ghost ignores historical records and refreshes only from laps driven 
   assert.equal(sim.bestLapEver, 8.54, 'race ghost refresh does not discard the historical record');
   assert.notEqual(sim.raceGhostTelemetry, current);
   assert.deepEqual(sim.raceGhostTelemetry, current);
+  const firstSource = sim.raceGhostSource;
+  const tied = current.map(s => ({ ...s, x: s.x + 500 }));
+  sim.handleLapComplete({ carNumber: 99, laps: 2 }, 12 - 1e-10, tied);
+  sim.handleLapComplete({ carNumber: 98, laps: 2 }, 11.995, tied);
+  assert.deepEqual(sim.raceGhostTelemetry, current, 'floating-point ties and sub-centisecond differences do not swap racing lines');
+  assert.equal(sim.raceGhostSource, firstSource);
   sim.handleLapComplete(sim.cars[0], 13, telemetry());
   assert.deepEqual(sim.raceGhostTelemetry, current, 'slower laps cannot replace the current race ghost');
   sim.handleLapComplete(sim.cars[0], 11, null);
@@ -1008,6 +1014,7 @@ test('race ghost ignores historical records and refreshes only from laps driven 
   sim.startGeneration(sim.cars.map(car => car.brain.genome));
   assert.equal(sim.raceGhostLap, Infinity);
   assert.equal(sim.raceGhostTelemetry, null);
+  assert.equal(sim.raceGhostSource, null);
   assert.equal(sim.getRecordGhostState(1), null, 'new races do not inherit the preceding ghost');
   assert.equal(sim.bestLapEver, 8.54);
 });

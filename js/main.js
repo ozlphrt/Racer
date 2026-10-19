@@ -584,6 +584,13 @@ function updateRecordGhostControl() {
     const outside = state.view3d && renderer3d?.recordGhostStatus === 'outside-view';
     const label = !state.recordGhost ? 'OFF' : !ready ? 'WAITING FOR LAP' : outside ? 'ON · OUT OF VIEW' : 'ON';
     if (badge.textContent !== label) badge.textContent = label;
+    const source = sim.raceGhostSource;
+    const detail = ready && source
+      ? `Current race · Gen ${source.generation} · Car #${source.carNumber} · Lap ${source.lap} · ${sim.raceGhostLap.toFixed(2)}s`
+      : 'Waiting for a completed lap in this race. Historical laps are excluded.';
+    if (badge.title !== detail) badge.title = detail;
+    const sourceLabel = $('settings-race-ghost-source');
+    if (sourceLabel && sourceLabel.textContent !== detail) sourceLabel.textContent = detail;
     badge.style.color = !state.recordGhost ? '#94a3b8' : !ready ? '#fbbf24' : '#22c55e';
   }
 }

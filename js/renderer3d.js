@@ -4074,7 +4074,9 @@ export class Renderer3D {
     mesh.position.set(pose.x, -pose.y, 0.12);
     mesh.rotation.order = 'ZYX';
     mesh.rotation.set(0, 0, -pose.angle);
-    this.updateRecordGhostBadgeText(`⚡ RACE GHOST · ${sim.raceGhostLap.toFixed(2)}s`);
+    const source = sim.raceGhostSource;
+    const carLabel = Number.isFinite(source?.carNumber) ? ` #${source.carNumber}` : '';
+    this.updateRecordGhostBadgeText(`⚡ GHOST${carLabel} · ${sim.raceGhostLap.toFixed(2)}s`);
     if (mesh.userData.badgeSprite) mesh.userData.badgeSprite.visible = true;
     if (!this._ghostNdc) this._ghostNdc = new THREE.Vector3();
     this._ghostNdc.set(pose.x, -pose.y, 2).project(this.camera);

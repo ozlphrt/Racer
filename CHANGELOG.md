@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.3 — 2026-10-20
+
+- Keep tied laps from swapping the ghost's racing line due to floating-point noise; require an improvement greater than 0.01 seconds.
+- Identify the replay's source car on its badge and show its generation, car, lap number, and measured time in Settings.
+- Reproduce the Gen 5,000 replay with an injected 8.54-second historical record: the current ghost follows the actually recorded 11.20-second lap.
+
 ## 1.5.2 — 2026-10-20
 
 - Clear ghost playback at every race start and restart; wait for an actual lap in the current race.
