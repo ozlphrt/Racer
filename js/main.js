@@ -68,9 +68,7 @@ const leaderboard = new LeaderboardTower($('leaderboard-tower'), (car) => {
 const eliminationModals = new EliminationModalManager($('elimination-stack'), {
   onSelectCar: (car) => {
     focusedFollowCar = car;
-    state.follow = true;
-    const toggleFollow = $('toggle-follow');
-    if (toggleFollow) toggleFollow.checked = true;
+    setToggle('follow', true, false);
     const carIdx = sim.cars ? sim.cars.indexOf(car) : -1;
     const carNum = car.manual ? 7 : (carIdx >= 0 ? carIdx + 1 : 1);
     toast(`🎥 Camera tracking Car #${carNum}`, 'info');
@@ -250,6 +248,14 @@ function setSimulationMode(mode) {
   if (renderer3d) renderer3d.updateSkidmarks(sim);
 
   if (isRace) {
+    // Camera is at follow mode as default at the start of each race
+    setToggle('follow', true, false);
+    if (state.view3d && renderer3d) {
+      renderer3d.resetCamera(true);
+    }
+    if (renderer) {
+      renderer.cam = null;
+    }
     toast('🏆 20-Car Grand Prix Race: Elite field on starting grid · Collisions ON 100%!', 'success');
   } else {
     toast('🏋️ Training Mode: 80 cars exploring & learning via genetic evolution', 'info');
@@ -274,6 +280,14 @@ sim.onGeneration = () => {
   }
   leaderboard.reset();
   eliminationModals.clear();
+
+  // Camera is at follow mode as default at the start of each race
+  if (sim.mode === 'race') {
+    setToggle('follow', true, false);
+  }
+  if (state.view3d && renderer3d && state.follow) {
+    renderer3d.resetCamera(true);
+  }
 
   if (hyperRunning) {
     // In headless fast-forward, defer expensive full-canvas redraws and synchronous
@@ -566,13 +580,23 @@ function setMaxLaps(laps, showToast = true) {
   }
 }
 
-function setToggle(key, on) {
+function setToggle(key, on, showToast = true) {
   state[key] = on;
   $(`toggle-${key}`) && ($(`toggle-${key}`).checked = on);
   if (key === 'ghosts') {
-    setGhostMode(on);
+    setGhostMode(on, showToast);
   } else if (key === 'gridBox') {
-    setGridBox(on);
+    setGridBox(on, showToast);
+  } else if (key === 'follow') {
+    try {
+      localStorage.setItem('ai-racer:follow', String(on));
+    } catch (_) {}
+    if (on && state.cameraPreset === 'orbit') {
+      setCameraPreset('auto', false);
+    }
+    if (showToast) {
+      toast(on ? '🎥 Follow Leader: ON' : '🌐 Follow Leader: OFF (Circuit Overview)', 'info');
+    }
   }
 }
 
@@ -592,6 +616,9 @@ function restartCurrentGen() {
   prevCollisionActive = false;
   focusedFollowCar = null;
   eliminationModals.clear();
+  if (sim.mode === 'race') {
+    setToggle('follow', true, false);
+  }
   if (sim.cars && sim.cars.length > 0) {
     sim.startGeneration(sim.cars.map((c) => c.brain.genome));
   } else {
@@ -1112,13 +1139,9 @@ function setCameraPreset(preset, showToast = true) {
     set3DView(true);
   }
   if (preset !== 'orbit') {
-    state.follow = true;
-    const toggleFollow = $('toggle-follow');
-    if (toggleFollow) toggleFollow.checked = true;
+    setToggle('follow', true, false);
   } else {
-    state.follow = false;
-    const toggleFollow = $('toggle-follow');
-    if (toggleFollow) toggleFollow.checked = false;
+    setToggle('follow', false, false);
   }
 
   document.querySelectorAll('.btn-cam-preset').forEach((btn) => {
@@ -1247,9 +1270,7 @@ function switchTargetCar(direction) {
   const targetCar = activeCars[nextIdx];
   if (targetCar) {
     focusedFollowCar = targetCar;
-    state.follow = true;
-    const toggleFollow = $('toggle-follow');
-    if (toggleFollow) toggleFollow.checked = true;
+    setToggle('follow', true, false);
 
     if (renderer3d) {
       renderer3d.focusedCar = targetCar;
@@ -3336,6 +3357,9 @@ setAudio(true, false);
 audio.resume();
 
 // Sync settings from localStorage
+const savedFollow = localStorage.getItem('ai-racer:follow');
+setToggle('follow', savedFollow !== null ? savedFollow !== 'false' : true, false);
+
 const savedGhosts = localStorage.getItem('ai-racer:ghosts');
 setGhostMode(savedGhosts !== null ? savedGhosts !== 'false' : true, false);
 
