@@ -173,11 +173,16 @@ function paceTournament(candidates, k) {
 /**
  * Build the next generation: elites survive unchanged, pace-champions are protected,
  * and high-variance wildcard explorers break through plateaus.
- * @param {{genome: Float32Array, fitness: number, bestLap?: number}[]} scored
+ * @param {{genome: Float32Array, fitness: number, bestLap?: number, finished?: boolean}[]} scored
  */
 export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap }) {
-  const sorted = [...scored].sort((a, b) => b.fitness - a.fitness);
+  const sorted = [...scored].sort((a, b) => Number(Boolean(b.finished)) - Number(Boolean(a.finished)) || b.fitness - a.fitness);
+  const finishers = sorted.filter(candidate => candidate.finished);
+  const parentPool = finishers.length ? finishers : sorted;
+  const completionRate = finishers.length / Math.max(1, scored.length);
+  const needsReliability = completionRate < 0.70;
   const next = [];
+  const protectedGenomes = new Set();
 
   // 1. Track Fitness & Pace Progression
   const topFit = sorted[0]?.fitness || 0;
@@ -204,7 +209,7 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
       if (gapToRecord > 0.40) {
         paceStagnantGenerationsCount++;
         // Give 100 generations of exploitation before a brief 20-gen catalyst burst
-        if (paceStagnantGenerationsCount >= 100 && burstGensRemaining === 0) {
+        if (!needsReliability && paceStagnantGenerationsCount >= 100 && burstGensRemaining === 0) {
           triggerExplorationBurst(20);
         }
       } else {
@@ -217,15 +222,16 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   if (burstGensRemaining > 0) burstGensRemaining--;
 
   // Multi-tier stagnation detection (prolonged 80+ gen plateau, sustained deficit, or manual burst)
-  const isPlateauing = stagnantGenerationsCount >= 80 || paceStagnantGenerationsCount >= 80 || isBurstActive;
-  const burstMultiplier = isBurstActive ? 1.4 : (isPlateauing ? 1.2 : 1.0);
+  const isPlateauing = (!needsReliability && (stagnantGenerationsCount >= 80 || paceStagnantGenerationsCount >= 80)) || isBurstActive;
+  const burstMultiplier = isBurstActive ? 1.4 : (needsReliability && finishers.length ? 0.75 : (isPlateauing ? 1.2 : 1.0));
   const effectiveSigma = mutationSigma * burstMultiplier;
   const effectiveRate = Math.min(0.28, mutationRate * burstMultiplier);
 
-  // 1. Keep top elite champions unchanged (guarantees zero regression of best race pace)
+  // 1. Preserve reliable finishers first, ranked by fitness within each group.
   const eliteCount = Math.max(1, elites !== undefined ? elites : 2);
-  for (let i = 0; i < eliteCount && i < sorted.length; i++) {
+  for (let i = 0; i < eliteCount && i < sorted.length && next.length < population; i++) {
     next.push(Float32Array.from(sorted[i].genome));
+    protectedGenomes.add(sorted[i].genome);
   }
 
   // 2. Pace Champion Preservation (protect the car that achieved the fastest individual lap)
@@ -235,7 +241,7 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
 
   if (validLapCars.length > 0 && next.length < population) {
     const fastestLapCar = validLapCars[0];
-    const alreadyIncluded = next.some((g) => g === fastestLapCar.genome);
+    const alreadyIncluded = protectedGenomes.has(fastestLapCar.genome);
     if (!alreadyIncluded) {
       next.push(Float32Array.from(fastestLapCar.genome));
     }
@@ -243,7 +249,7 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
 
   // 3. Stagnation Breaker: Inject targeted Wildcard Explorers when truly plateauing
   if ((isPlateauing || isBurstActive) && next.length < population) {
-    const hotParent = validLapCars[0] || sorted[0];
+    const hotParent = finishers[0] || validLapCars[0] || sorted[0];
     if (hotParent) {
       // Wildcard 1: Late Braker (delays braking on entry, earlier on gas)
       next.push(mutateLateBraker(hotParent.genome, effectiveSigma * 1.25));
@@ -264,19 +270,19 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   const explorerPct = isBurstActive ? 0.18 : (isPlateauing ? 0.14 : 0.08);
   const explorers = Math.max(1, Math.floor(population * explorerPct));
   for (let i = 0; i < explorers && next.length < population; i++) {
-    const parent = sorted[(Math.random() * Math.min(8, sorted.length)) | 0];
+    const parent = parentPool[(Math.random() * Math.min(8, parentPool.length)) | 0];
     const expSigma = isBurstActive ? effectiveSigma * 1.4 : (isPlateauing ? effectiveSigma * 1.25 : effectiveSigma * 1.15);
     const expRate = isBurstActive ? 0.22 : 0.16;
     next.push(mutate(Float32Array.from(parent.genome), expRate, expSigma));
   }
 
   // 5. Breed rest of population via tournament selection & blended crossover
-  // 40% of the time, select parent B from single-lap pace champions rather than 5-lap survivors
+  // Keep a small pace-exploration lane; most offspring inherit proven finishers.
   while (next.length < population) {
-    const a = tournament(sorted, tournamentK);
-    const b = (validLapCars.length >= 2 && Math.random() < 0.40)
+    const a = tournament(parentPool, tournamentK);
+    const b = (validLapCars.length >= 2 && Math.random() < 0.20)
       ? paceTournament(validLapCars, tournamentK)
-      : tournament(sorted, tournamentK);
+      : tournament(parentPool, tournamentK);
     next.push(mutate(crossover(a.genome, b.genome), effectiveRate, effectiveSigma));
   }
   return next;

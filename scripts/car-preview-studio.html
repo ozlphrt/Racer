@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Current fleet preview export</title>
+<style>body{background:#111827;color:#fff;font:16px system-ui}main{display:grid;grid-template-columns:repeat(3,320px);gap:16px}figure{margin:0}img{width:320px;height:90px}</style>
+<h1>Current fleet preview export</h1><p id="status">Rendering current F1 model…</p><main></main>
+<script type="module">
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Renderer3D, F1_CAR_NUMBERS } from '../js/renderer3d.js';
+import { CarSideviewRenderer } from '../js/carSideviewRenderer.js';
+const status = document.querySelector('#status');
+try {
+  const { scene } = await new GLTFLoader().loadAsync('/full_f1_2022/scene.gltf');
+  const factory = Object.create(Renderer3D.prototype);
+  scene.traverse(child => { if (child.isMesh && child.material?.map && !factory.f1Texture) factory.f1Texture = child.material.map; });
+  factory.initF1DecalGeometries(scene);
+  const sources = F1_CAR_NUMBERS.map((number, i) => ({ teamIdx: Math.floor(i / 2), isPlayer: false,
+    carNumber: number, mesh: factory.createF1CarMesh(scene, null, false, i, number) }));
+  sources.push({ teamIdx: 1, isPlayer: true, carNumber: 7, mesh: factory.createF1CarMesh(scene, null, true, 0, 7) });
+  const preview = new CarSideviewRenderer();
+  preview.useStaticAssets = false;
+  let count = 0;
+  preview.onPreviewReady(async (key, url) => {
+    const blob = await (await fetch(url)).blob();
+    const reader = new FileReader();
+    reader.onload = () => {
+      const figure = document.createElement('figure');
+      const image = document.createElement('img');
+      image.dataset.previewKey = key; image.src = reader.result; image.alt = key;
+      const label = document.createElement('figcaption'); label.textContent = key;
+      figure.append(image, label); document.querySelector('main').append(figure);
+      status.textContent = `${++count}/${sources.length} current-car previews ready`;
+    };
+    reader.readAsDataURL(blob);
+  });
+  preview.init(sources);
+  for (const source of sources) preview.getCarSideviewDataUrl(source.teamIdx, source.isPlayer, source.carNumber);
+} catch (error) { status.textContent = error.stack || error.message; }
+</script>
+</html>

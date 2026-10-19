@@ -1,3 +1,5 @@
+import { drawPaceInsights } from './paceInsights.js';
+
 export const compact = (v) => {
   if (!Number.isFinite(v)) return '–';
   const a = Math.abs(v);
@@ -61,19 +63,21 @@ export class FitnessChart {
   }
 
   updateKpiStrip(items) {
+    if (this.canvas.id !== 'hyper-chart-canvas') return;
     const el = document.getElementById('hyper-chart-kpis');
     if (!el) return;
     if (!items || !items.length) {
       el.innerHTML = '';
       return;
     }
-    el.innerHTML = items.map(it => `
+    const html = items.map(it => `
       <div class="kpi-chip">
         ${it.dot ? `<span class="kpi-dot" style="background:${it.dot}"></span>` : ''}
         <span class="kpi-label">${it.label}</span>
         <span class="kpi-val ${it.cls || ''}">${it.val}</span>
       </div>
     `).join('');
+    if (el.innerHTML !== html) el.innerHTML = html;
   }
 
   bindEvents() {
@@ -82,8 +86,9 @@ export class FitnessChart {
       const rect = this.canvas.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const x = clientX - rect.left;
-      const padL = 44;
-      const padR = 36;
+      const insights = this.canvas.id === 'hyper-chart-canvas' && this.mode === 'lap';
+      const padL = insights ? 52 : 44;
+      const padR = insights ? 14 : 36;
       const pw = this.w - padL - padR;
       if (pw <= 0) return;
 
@@ -129,6 +134,10 @@ export class FitnessChart {
 
   draw(history, bestLapEver) {
     this.history = history || [];
+    if (this.canvas.id === 'hyper-chart-canvas') {
+      this.canvas.parentElement?.classList.toggle('is-pace-mode', this.mode === 'lap');
+      if (this.mode !== 'lap') this.canvas.setAttribute('aria-label', `${this.mode} by generation`);
+    }
     if (bestLapEver && Number.isFinite(bestLapEver) && bestLapEver > 0 && bestLapEver < 60) {
       this.bestLapEver = bestLapEver;
     }
@@ -172,6 +181,7 @@ export class FitnessChart {
   // Mode 1: Lap Times & Pace Trajectory (Primary Racing Telemetry)
   // -------------------------------------------------------------
   drawLapChart(pad, pw, ph) {
+    if (this.canvas.id === 'hyper-chart-canvas') return drawPaceInsights(this);
     const { ctx, w, h } = this;
     const n = this.history.length;
     const windowSize = this.windowSize || 200;

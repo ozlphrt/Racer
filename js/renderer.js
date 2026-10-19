@@ -1,4 +1,5 @@
 import { CONFIG } from './config.js';
+import { getRenderPose } from './renderPose.js';
 import { RAY_ANGLES } from './car.js';
 import { TEAM_PALETTE } from './renderer3d.js';
 
@@ -313,6 +314,7 @@ export class Renderer {
   }
 
   render(sim, opts, leader) {
+    this.renderAlpha = opts.renderAlpha;
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0 && (Math.abs(rect.width - this.w) > 1 || Math.abs(rect.height - this.h) > 1 || this.w <= 10)) {
       this.resize();
@@ -336,8 +338,9 @@ export class Renderer {
     let targetS = fit;
 
     if (opts.follow && focus) {
-      targetX = focus.x;
-      targetY = focus.y;
+      const focusPose = getRenderPose(focus, opts.renderAlpha);
+      targetX = focusPose.x;
+      targetY = focusPose.y;
       targetS = baseFollowZoom;
 
       // Dynamic viewport edge detection & smooth zoom-out compensation
@@ -345,8 +348,8 @@ export class Renderer {
         const curS = this.cam.s;
         const halfWorldW = (this.w / 2) / curS;
         const halfWorldH = (this.h / 2) / curS;
-        const dx = Math.abs(focus.x - this.cam.x);
-        const dy = Math.abs(focus.y - this.cam.y);
+        const dx = Math.abs(focusPose.x - this.cam.x);
+        const dy = Math.abs(focusPose.y - this.cam.y);
         // Safe viewport region: central 58% of screen
         const exitX = dx / (halfWorldW * 0.58);
         const exitY = dy / (halfWorldH * 0.58);
@@ -423,16 +426,7 @@ export class Renderer {
 
     // Draw Holographic Circuit Record Ghost Car
     if (opts.recordGhost !== false && sim && sim.bestLapEver && sim.bestLapEver < 60 && sim.getRecordGhostState) {
-      const leaderCar = leader || (sim.cars && sim.cars[0]);
-      const startDelay = CONFIG.generation?.startDelay || 2.0;
-      let lapElapsed = 0;
-      if (leaderCar) {
-        const raw = leaderCar.time - leaderCar.lapStart;
-        lapElapsed = leaderCar.time < startDelay ? 0 : raw;
-      } else {
-        lapElapsed = sim.time < startDelay ? 0 : sim.time;
-      }
-      const ghostState = sim.getRecordGhostState(lapElapsed);
+      const ghostState = sim.getRecordGhostRenderState(opts.renderAlpha);
       if (ghostState) {
         this.drawRecordGhost(ghostState, sim.bestLapEver);
       }
@@ -888,6 +882,7 @@ export class Renderer {
   }
 
   drawCar(car, teamOrColor, isLeader = false, isPlayer = false, carNum = 1, posRank = null) {
+    car = getRenderPose(car, this.renderAlpha);
     const ctx = this.ctx;
     const L = CONFIG.car.length;
     const W = CONFIG.car.width;
@@ -1066,6 +1061,7 @@ export class Renderer {
   }
 
   drawRays(car) {
+    car = getRenderPose(car, this.renderAlpha);
     const ctx = this.ctx;
     const Lmax = CONFIG.sensors.length;
     ctx.lineWidth = 1.2;

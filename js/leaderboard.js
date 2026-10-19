@@ -1,5 +1,5 @@
 import { TEAM_PALETTE, getCarNumber } from './renderer3d.js';
-import { carSideviewRenderer } from './carSideviewRenderer.js';
+import { carSideviewRenderer, carPreviewKey } from './carSideviewRenderer.js';
 
 function toHexColor(hexNum, defaultHex = '#38bdf8') {
   if (typeof hexNum === 'number') {
@@ -37,7 +37,7 @@ export function generateCarSideviewSvg(teamIdx = 0, isPlayer = false, carNumber 
   const rectX = 53 - rectWidth / 2;
 
   return `
-    <svg class="car-sideview-svg" viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg class="car-sideview-svg" data-preview-key="${carPreviewKey(teamIdx, isPlayer, numVal)}" viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <defs>
         <linearGradient id="bodyGrad_${uid}" x1="0%" y1="0%" x2="100%" y2="40%">
           <stop offset="0%" stop-color="${priColor}" />

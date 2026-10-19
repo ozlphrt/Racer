@@ -35,7 +35,8 @@ jobs:
         run: npm ci
 
       - name: Build production bundle
-        run: npm run build
+        # Keep publishing conditional on the simulation and save regressions passing.
+        run: npm run test:regression && npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

@@ -1,9 +1,12 @@
 import { Car } from './car.js';
+import { countRaceOutcomes } from './raceOutcomes.js';
+import { getCarContact, resolveCarContact } from './carContact.js';
 import { NeuralNetwork } from './neuralNetwork.js';
-import { evolve, seedPopulation } from './genetics.js';
+import { evolve, seedPopulation, resetStagnation } from './genetics.js';
 import { TireBarrierSystem } from './tireBarriers.js';
 import { audio } from './audio.js';
 import { getCarNumber } from './renderer3d.js';
+import { PRESET_MILESTONES, physicsSignature, compatibleCaptures } from './milestones.js';
 
 /** Runs generations of AI cars (plus an optional manual player car). DOM-free. */
 export class Simulation {
@@ -36,10 +39,15 @@ export class Simulation {
   }
 
   reset() {
+    resetStagnation();
+    this.capturedPresets = [];
+    this.captureEnabled = true;
     this.generation = 1;
     this.history = [];
     this.allTimeBest = null;
     this.bestLapEver = Infinity;
+    this.prevBestLapEver = null;
+    this.playerBestLap = Infinity;
     this.raceBestLap = Infinity;
     this.recordLapTelemetry = null;
     this.isRealCarTelemetry = false;
@@ -99,21 +107,16 @@ export class Simulation {
   }
 
   resumeState(savedState) {
+    this.capturedPresets = compatibleCaptures(savedState.capturedPresets, this.track, this.config);
+    this.captureEnabled = savedState.captureEnabled === true;
     this.generation = Math.max(1, savedState.generation || 1);
     this.history = Array.isArray(savedState.history) ? [...savedState.history] : [];
     this.allTimeBest = savedState.allTimeBest || null;
-    this.bestLapEver = savedState.bestLapEver ?? Infinity;
-    // Sanitize any phantom unreachable benchmarks (< 8.80s is physically impossible on Grand Prix track)
-    if (typeof this.bestLapEver === 'number' && this.bestLapEver < 8.80) {
-      this.bestLapEver = Infinity;
-      this.recordLapTelemetry = null;
-      this.isRealCarTelemetry = false;
-    } else {
-      this.recordLapTelemetry = Array.isArray(savedState.recordLapTelemetry) && savedState.recordLapTelemetry.length > 10
-        ? savedState.recordLapTelemetry
-        : null;
-      this.isRealCarTelemetry = Boolean(savedState.isRealCarTelemetry && this.recordLapTelemetry);
-    }
+    this.bestLapEver = Number.isFinite(savedState.bestLapEver) && savedState.bestLapEver > 0
+      ? savedState.bestLapEver : Infinity;
+    this.recordLapTelemetry = Number.isFinite(this.bestLapEver) && Array.isArray(savedState.recordLapTelemetry) && savedState.recordLapTelemetry.length > 10
+      ? savedState.recordLapTelemetry : null;
+    this.isRealCarTelemetry = Boolean(savedState.isRealCarTelemetry && this.recordLapTelemetry);
     this.deathEvents = [];
     if (typeof savedState.mutationRate === 'number') {
       this.mutationRate = savedState.mutationRate;
@@ -149,9 +152,21 @@ export class Simulation {
     if (this.track === track) return;
     this.track = track;
     this.tireBarriers?.setTrack(track);
+    this.playerBestLap = Infinity;
+    if (this.player) this.setManual(true);
     if (!keepGeneration) {
       this.reset();
     } else {
+      // Keep the trained population and generation, but discard circuit-specific results.
+      this.history = [];
+      this.allTimeBest = null;
+      this.bestLapEver = Infinity;
+      this.prevBestLapEver = null;
+      this.recordLapTelemetry = null;
+      this.isRealCarTelemetry = false;
+      this.capturedPresets = [];
+      this.captureEnabled = false;
+      resetStagnation();
       if (this.cars && this.cars.length > 0) {
         this.startGeneration(this.cars.map((c) => c.brain.genome));
       } else {
@@ -162,6 +177,7 @@ export class Simulation {
 
   /** Replace the current population with mutated copies of `genome`. */
   seedFrom(genome, meta = null) {
+    this.captureEnabled = false;
     if (meta) {
       if (typeof meta.generation === 'number' && meta.generation > 0) {
         this.generation = meta.generation;
@@ -251,6 +267,7 @@ export class Simulation {
   }
 
   startGeneration(genomes, metaList = null) {
+    this.generationPhysics = physicsSignature(this.track, this.config);
     const gridSlots = this.generateGridSlots(genomes.length);
 
     this.cars = genomes.map((g, idx) => {
@@ -328,10 +345,17 @@ export class Simulation {
 
     for (const car of this.cars) {
       if (!car.alive) continue;
+      car.beforePreviousX = car.previousX;
+      car.beforePreviousY = car.previousY;
+      car.beforePreviousAngle = car.previousAngle;
+      car.previousX = car.x;
+      car.previousY = car.y;
+      car.previousAngle = car.angle;
       aliveTotal++;
       const wasAlive = car.alive;
       const wasCrashed = car.crashed;
       car.update(dt);
+      if (this.motionDebug) { car.motionFreeX = car.x; car.motionFreeY = car.y; }
       if (!wasCrashed && car.crashed) {
         this.onCarEliminated?.(car, car.deathReason);
       }
@@ -348,10 +372,17 @@ export class Simulation {
 
     if (this.player) {
       const p = this.player;
+      p.beforePreviousX = p.previousX;
+      p.beforePreviousY = p.previousY;
+      p.beforePreviousAngle = p.previousAngle;
+      p.previousX = p.x;
+      p.previousY = p.y;
+      p.previousAngle = p.angle;
       const lapsBefore = p.laps;
       const wasAlive = p.alive;
       const wasCrashed = p.crashed;
       p.update(dt, this.playerControls);
+      if (this.motionDebug) { p.motionFreeX = p.x; p.motionFreeY = p.y; }
       if (!wasCrashed && p.crashed) {
         this.onCarEliminated?.(p, p.deathReason);
       }
@@ -371,11 +402,11 @@ export class Simulation {
     const activeCars = this._activeCars;
     for (let i = 0; i < this.cars.length; i++) {
       const c = this.cars[i];
-      if (c && (c.alive || c.crashed || c.finished)) {
+      if (c && (c.alive || c.finished)) {
         activeCars.push(c);
       }
     }
-    if (this.player && (this.player.alive || this.player.crashed || this.player.finished)) {
+    if (this.player && (this.player.alive || this.player.finished)) {
       activeCars.push(this.player);
     }
 
@@ -387,13 +418,14 @@ export class Simulation {
     }
 
     const colConfig = this.config.collision || {};
-    const warmup = colConfig.warmupTime || 30;
-    const leadTime = colConfig.separationLeadTime || 4;
+    const warmup = colConfig.warmupTime ?? 30;
+    const leadTime = colConfig.separationLeadTime ?? 4;
     const isSeparationPhase = Boolean(colConfig.enabled) && (this.time >= (warmup - leadTime)) && (this.time < warmup);
     const colEnabled = Boolean(colConfig.enabled) && (this.time >= warmup);
 
     const col = this.config.collision || { radius: 13.5, restitution: 0.45, scrub: 0.04 };
-    const minColDist = (col.radius || 13.5) * 2;
+    const carLength = this.config.car.length, carWidth = this.config.car.width;
+    const minColDist = Math.max(col.radius || 13.5, Math.hypot(carLength, carWidth) * 0.5) * 2;
     const minColDistSq = minColDist * minColDist;
     const restitution = col.restitution !== undefined ? col.restitution : 0.45;
     const scrub = col.scrub !== undefined ? col.scrub : 0.04;
@@ -457,7 +489,6 @@ export class Simulation {
       }
     } else if (colEnabled) {
       // Realistic Multi-Car Rigid-Body & Contact Friction Physics (Active after 30s)
-      const carMass = 1.0;
       const chassisInertia = 72.0; // Rotational moment of inertia for 26x13 chassis
       const frictionCoeff = 0.42; // Coulomb tangential scraping friction / body rub drag
 
@@ -472,13 +503,11 @@ export class Simulation {
           if (Math.abs(dy) >= minColDist) continue;
           const distSq = dx * dx + dy * dy;
 
-          if (distSq < minColDistSq && distSq > 0.0001) {
-            const dist = Math.sqrt(distSq);
-            const nx = dx / dist;
-            const ny = dy / dist;
-            const tx = -ny; // Tangent vector along contact plane
-            const ty = nx;
-            const overlap = minColDist - dist;
+          if (distSq < minColDistSq) {
+            const contact = getCarContact(c1, c2, carLength, carWidth);
+            if (!contact) continue;
+            const { nx, ny } = contact;
+            const overlap = contact.depth;
 
             // 1. Non-penetration positional relaxation
             const push = overlap * 0.32;
@@ -487,38 +516,15 @@ export class Simulation {
             c2.x += nx * push;
             c2.y += ny * push;
 
-            // 2. Relative velocity at contact interface
-            const rvx = c2.vx - c1.vx;
-            const rvy = c2.vy - c1.vy;
-            const vRelNorm = rvx * nx + rvy * ny;
-            const vRelTang = rvx * tx + rvy * ty;
-
-            if (vRelNorm < 0) {
-              // 3. Normal Restitution Impulse (elastic separation)
-              const jNorm = -(1 + restitution) * vRelNorm * 0.5 * carMass;
-
-              // 4. Tangential Scraping Drag Impulse (Coulomb body friction drags rubbing cars together)
-              const maxFriction = jNorm * frictionCoeff;
-              const jTang = Math.max(-maxFriction, Math.min(maxFriction, -vRelTang * 0.40 * carMass));
-
-              // Total 2D impulse vector applied to Car 2 (and opposite to Car 1)
-              const jx = jNorm * nx + jTang * tx;
-              const jy = jNorm * ny + jTang * ty;
-
-              c1.vx -= jx / carMass;
-              c1.vy -= jy / carMass;
-              c2.vx += jx / carMass;
-              c2.vy += jy / carMass;
-
-              // Speed scrub & contact penalty
-              c1.vx *= 1 - scrub;
-              c1.vy *= 1 - scrub;
-              c2.vx *= 1 - scrub;
-              c2.vy *= 1 - scrub;
-              c1.speed = Math.hypot(c1.vx, c1.vy);
-              c2.speed = Math.hypot(c2.vx, c2.vy);
-
-              const impactSpeed = Math.abs(vRelNorm) + Math.abs(vRelTang) * 0.45;
+            const response = resolveCarContact(c1, c2, contact, {
+              inertia: chassisInertia, restitution, friction: frictionCoeff, scrub,
+            });
+            if (response) {
+              const { impactSpeed } = response;
+              if (impactSpeed > 5) {
+                c1.lastCarContactTime = c1.time;
+                c2.lastCarContactTime = c2.time;
+              }
               const penalty = (this.config.fitness?.contactPenalty || 50) * (1 + impactSpeed / 40);
               c1.collisionPenalty = (c1.collisionPenalty || 0) + penalty;
               c2.collisionPenalty = (c2.collisionPenalty || 0) + penalty;
@@ -526,20 +532,6 @@ export class Simulation {
               c1.contacts++;
               c2.contacts++;
 
-              // 5. Realistic Off-Center Torque & Yaw Deflection (Leverage from contact point)
-              // Contact point offset from car centers (r x F)
-              const r1x = dx * 0.5;
-              const r1y = dy * 0.5;
-              const r2x = -dx * 0.5;
-              const r2y = -dy * 0.5;
-
-              // Torque = rx * Fy - ry * Fx
-              const torque1 = -(r1x * jy - r1y * jx);
-              const torque2 = (r2x * jy - r2y * jx);
-
-              // Apply dynamic yaw velocity (progressively steered and damped by tire grip, NO center spinning!)
-              c1.yawRate = (c1.yawRate || 0) + (torque1 / chassisInertia) * 0.75;
-              c2.yawRate = (c2.yawRate || 0) + (torque2 / chassisInertia) * 0.75;
             }
           }
         }
@@ -549,24 +541,23 @@ export class Simulation {
     // Update sensors for all active cars (opponent detection engages during separation + collision phases)
     const senseOpponents = isSeparationPhase || colEnabled;
     for (const c of activeCars) {
+      if (this.motionDebug) c.motionCorrection = Math.hypot(c.x - c.motionFreeX, c.y - c.motionFreeY);
       c.sense(senseOpponents ? activeCars : null);
     }
 
     this.time += dt;
     this.aliveCount = aliveRacing;
 
-    // F1 Checkered Flag Rule:
-    // Once any car crosses the line to finish the race (taking the checkered flag),
-    // enforce a 5.0s window for trailing cars to finish before concluding the race.
+    // Both live and fast-forward races use the same trailing-finisher window.
     const anyCarFinished = this.cars.some((c) => c.finished);
     if (anyCarFinished) {
       if (this.checkeredFlagTimer === null || this.checkeredFlagTimer === undefined) {
-        this.checkeredFlagTimer = 5.0; // 5-second F1 Chequered Flag cooldown window
+        this.checkeredFlagTimer = this.config.generation.finishWindow ?? 15;
       } else {
         this.checkeredFlagTimer -= dt;
         if (this.checkeredFlagTimer <= 0) {
           this.checkeredFlagTimer = null;
-          this.endGeneration();
+          this.endGeneration('finish-window');
           return;
         }
       }
@@ -585,7 +576,7 @@ export class Simulation {
         this.postRaceTimer -= dt;
         if (this.postRaceTimer <= 0) {
           this.postRaceTimer = null;
-          this.endGeneration();
+          this.endGeneration('all-stopped');
           return;
         }
       }
@@ -594,15 +585,15 @@ export class Simulation {
     }
 
     if (this.time >= this.config.generation.timeLimit) {
-      this.endGeneration();
+      this.endGeneration('time-limit');
     }
   }
 
-  endGeneration() {
+  endGeneration(endReason = 'race-ended') {
     // Sort cars by true race finishing order (P1 ahead of field)
     const sortedCars = [...this.cars].sort((a, b) => {
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
-      if (a.finished && b.finished) return a.time - b.time;
+      if (a.finished && b.finished) return (a.finishTime ?? a.time) - (b.finishTime ?? b.time);
       if (a.laps !== b.laps) return b.laps - a.laps;
       return b.maxIdx - a.maxIdx;
     });
@@ -617,6 +608,7 @@ export class Simulation {
       else if (rankIdx < 10) fit += (10 - rankIdx) * 60;
 
       return {
+        car: c,
         genome: c.brain.genome,
         fitness: Math.max(0, fit),
         bestLap: c.bestLap,
@@ -674,10 +666,35 @@ export class Simulation {
       finishers,
       eliminated,
       population: scored.length,
+      outcomes: countRaceOutcomes(this.cars, endReason),
+      crashDiagnostics: this.cars.filter(c => c.deathReason === 'crash' && c.crashDiagnostic)
+        .map(c => ({ ...c.crashDiagnostic })),
+      endReason,
       fitnessDeltaPct,
       lapImprovementPct,
     };
     this.history.push(record);
+    // Keep raw S1 traces for the same 25-race diagnostic window; retain summaries.
+    const expiredTraces = this.history[this.history.length - 26];
+    for (const crash of expiredTraces?.crashDiagnostics || []) delete crash.approach;
+
+    // Capture the actual tested champion before its population is replaced by offspring.
+    if (this.captureEnabled && this.mode === 'train' && PRESET_MILESTONES.includes(this.generation) &&
+      this.generationPhysics === physicsSignature(this.track, this.config) &&
+      !this.capturedPresets.some((p) => p.gen === this.generation)) {
+      const car = best.car;
+      this.capturedPresets.push({
+        source: 'organic-training', gen: this.generation, layers: [...this.layers],
+        genome: Array.from(best.genome), fitness: best.fitness,
+        bestLap: Number.isFinite(car.bestLap) ? car.bestLap : null,
+        topSpeed: car.topSpeed, laps: car.laps, finished: car.finished,
+        raceLaps: this.config.generation.maxLaps,
+        gridSlot: car.gridSlot, contacts: car.contacts,
+        collisions: Boolean(this.config.collision?.enabled),
+        physicsSignature: this.generationPhysics, capturedAt: new Date().toISOString(),
+      });
+      this.onMilestoneCaptured?.(this.capturedPresets[this.capturedPresets.length - 1]);
+    }
 
     if (!this.allTimeBest || best.fitness > this.allTimeBest.fitness) {
       this.allTimeBest = {
@@ -888,9 +905,15 @@ export class Simulation {
     return samples;
   }
 
-  /**
-   * Computes the interpolated state of the Record Ghost car at a given elapsed lap time.
-   */
+  /** Use the same display time as interpolated cars, independent of camera/leader changes. */
+  getRecordGhostRenderState(renderAlpha = 1) {
+    const alpha = Math.max(0, Math.min(1, renderAlpha));
+    const displayTime = Math.max(0, this.time - this.config.dt * (1 - alpha));
+    const startDelay = this.config.generation?.startDelay ?? 2;
+    return this.getRecordGhostState(displayTime < startDelay ? 0 : displayTime);
+  }
+
+  /** Computes the interpolated record pose, including the seam between laps. */
   getRecordGhostState(lapElapsed) {
     const dur = (Number.isFinite(this.bestLapEver) && this.bestLapEver > 0 && this.bestLapEver < 60)
       ? this.bestLapEver
@@ -899,27 +922,33 @@ export class Simulation {
     if (!samples || samples.length === 0) return null;
 
     const clampedTime = ((lapElapsed % dur) + dur) % dur;
-    let s0 = samples[0];
-    let s1 = samples[samples.length - 1];
-
-    if (clampedTime <= samples[0].t) {
-      s0 = samples[0];
-      s1 = samples.length > 1 ? samples[1] : samples[0];
-    } else if (clampedTime >= samples[samples.length - 1].t) {
-      s0 = samples.length > 1 ? samples[samples.length - 2] : samples[0];
-      s1 = samples[samples.length - 1];
+    const first = samples[0], last = samples[samples.length - 1];
+    let s0, s1, t0, t1;
+    if (clampedTime < first.t) {
+      s0 = last;
+      s1 = first;
+      t0 = last.t - dur;
+      t1 = first.t;
+    } else if (clampedTime >= last.t) {
+      s0 = last;
+      s1 = first;
+      t0 = last.t;
+      t1 = first.t + dur;
     } else {
-      for (let i = 0; i < samples.length - 1; i++) {
-        if (samples[i].t <= clampedTime && samples[i + 1].t >= clampedTime) {
-          s0 = samples[i];
-          s1 = samples[i + 1];
-          break;
-        }
+      let lo = 0, hi = samples.length - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >>> 1;
+        if (samples[mid].t <= clampedTime) lo = mid;
+        else hi = mid;
       }
+      s0 = samples[lo];
+      s1 = samples[hi];
+      t0 = s0.t;
+      t1 = s1.t;
     }
 
-    const span = s1.t - s0.t;
-    const alpha = span > 0.0001 ? Math.max(0, Math.min(1, (clampedTime - s0.t) / span)) : 0;
+    const span = t1 - t0;
+    const alpha = span > 0.0001 ? Math.max(0, Math.min(1, (clampedTime - t0) / span)) : 0;
     const x = s0.x + (s1.x - s0.x) * alpha;
     const y = s0.y + (s1.y - s0.y) * alpha;
 

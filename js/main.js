@@ -1,4 +1,9 @@
 import { CONFIG } from './config.js';
+import { FixedStepClock } from './fixedStepClock.js';
+import { DeferredTask } from './deferredTask.js';
+import { installFrameDiagnostics } from './frameDiagnostics.js';
+import { ClassAnimationScheduler } from './uiAnimations.js';
+import { raceOutcomeMarkup } from './raceOutcomes.js';
 import { Track, TRACK_PRESETS } from './track.js';
 import { Simulation } from './simulation.js';
 import { Renderer } from './renderer.js';
@@ -12,7 +17,8 @@ import { audio } from './audio.js';
 import { carSideviewRenderer } from './carSideviewRenderer.js';
 import * as storage from './storage.js';
 import { NeuralNetwork } from './neuralNetwork.js';
-import { PRESET_BRAINS, PRESET_MILESTONES } from './presetBrains.js';
+import { availableCaptures } from './milestones.js';
+import { PRESET_BRAINS } from './presetBrains.js';
 import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
 
 const $ = (id) => document.getElementById(id);
@@ -83,10 +89,24 @@ const eliminationModals = new EliminationModalManager($('elimination-stack'), {
   },
 });
 
+// Async GPU readback can still stall inside the graphics driver. Keep cached
+// 3D previews during racing and fill missing thumbnails while off-track.
+carSideviewRenderer.canRender = () => state.paused || state.hyperRunning;
 carSideviewRenderer.onReady(() => {
   const previewEl = $('cockpit-car-preview');
   if (previewEl) previewEl.dataset.key = '';
   if (leaderboard) leaderboard.reset();
+});
+
+carSideviewRenderer.onPreviewReady((key, url) => {
+  for (const placeholder of document.querySelectorAll('svg[data-preview-key]')) {
+    if (placeholder.dataset.previewKey !== key) continue;
+    const image = document.createElement('img');
+    image.className = 'car-sideview-img';
+    image.src = url;
+    image.alt = `F1 3D Car #${key.split('_').pop()}`;
+    placeholder.replaceWith(image);
+  }
 });
 
 sim.onCarEliminated = (car, reason) => {
@@ -148,11 +168,9 @@ if (pillArch) pillArch.textContent = LAYERS.join('·');
 export const SPEED_TO_KMH = (5.63 / 26) * 3.6; // ~0.7795 (aligns 26-unit car model with 5.63m real F1 chassis)
 const fmtTime = (s) => (Number.isFinite(s) ? s.toFixed(2) + 's' : '–');
 
+const classAnimations = new ClassAnimationScheduler();
 function pulse(id) {
-  const el = $(id);
-  el.classList.remove('pulse');
-  void el.offsetWidth; // restart animation
-  el.classList.add('pulse');
+  classAnimations.restart($(id), 'pulse');
 }
 
 let toastTimer = 0;
@@ -172,6 +190,7 @@ function timeAgo(iso) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+let lastSavedInfoHtml = '';
 function refreshSavedInfo() {
   const data = storage.loadBrain(LAYERS);
   const curGen = sim.generation;
@@ -185,8 +204,11 @@ function refreshSavedInfo() {
       `<span style="color:var(--text-muted); font-size:11px;">Active Session: Gen ${curGen} · Auto-saved ${timeAgo(data.savedAt)}</span>`
     : `Active: Gen <strong>${curGen}</strong><br><span style="color:var(--text-muted); font-size:11px;">No champion saved yet. Auto-saves when a new fitness record is set.</span>`;
 
-  if (panelInfo) panelInfo.innerHTML = textHtml;
-  if (hubInfo) hubInfo.innerHTML = textHtml;
+  if (textHtml !== lastSavedInfoHtml) {
+    if (panelInfo) panelInfo.innerHTML = textHtml;
+    if (hubInfo) hubInfo.innerHTML = textHtml;
+    lastSavedInfoHtml = textHtml;
+  }
   if (hubTimestamp) hubTimestamp.textContent = data?.savedAt ? `Auto-saved ${timeAgo(data.savedAt)}` : 'Active Session';
 
   updateHubAnalytics();
@@ -265,15 +287,24 @@ function setSimulationMode(mode) {
   }
 }
 
+const saveQueue = new DeferredTask(writeTrainingState);
 function persistState() {
+  saveQueue.request();
+}
+
+function writeTrainingState() {
+  if (activePresetGen !== null || isMultiGenBattle) return;
+  const saveStart = performance.now();
   storage.saveTrainingState(sim, LAYERS, $('track-select').value);
   refreshSavedInfo();
+  lastSaveMs = performance.now() - saveStart;
+  lastSaveAt = performance.now();
 }
 
 // ---------- Simulation callbacks ----------
 let prevCollisionActive = false;
 
-sim.onGeneration = () => {
+sim.onGeneration = (record) => {
   prevCollisionActive = false;
   focusedFollowCar = null;
   if (renderer3d) {
@@ -295,6 +326,10 @@ sim.onGeneration = () => {
     renderer3d.resetCamera(true);
   }
 
+  if (sim.captureEnabled && sim.capturedPresets.some((p) => p.gen === record.generation)) {
+    if (hyperRunning) storage.saveTrainingState(sim, LAYERS, $('track-select').value);
+    renderGenPresetsRibbon();
+  }
   if (hyperRunning) {
     // In headless fast-forward, defer expensive full-canvas redraws and synchronous
     // multi-megabyte localStorage serialization until hyper training completes
@@ -326,6 +361,7 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
   const timeEl = $('record-overlay-time');
   const deltaEl = $('record-overlay-delta');
   const carEl = $('record-overlay-car');
+  const carPreviewEl = $('record-overlay-car-preview');
   const genEl = $('record-overlay-gen');
   const tagEl = $('record-header-tag');
   const starLeft = $('record-star-left');
@@ -334,12 +370,20 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
   const lapBox = document.querySelector('.hud-item.hud-lap-box');
 
   const isRaceFastest = recordType === 'race';
-  const carNum = car ? (car.manual ? 7 : (car.carNumber || (typeof car.idx === 'number' ? car.idx + 1 : 1))) : 1;
+  const isPlayer = !!car && (car === sim.player || car.manual);
+  const carIdx = car ? sim.cars.indexOf(car) : -1;
+  const gridSlot = carIdx >= 0 ? carIdx : (car?.gridSlot ?? car?.idx ?? 0);
+  const carNum = isPlayer ? 7 : (car?.carNumber || getCarNumber(gridSlot));
+  const teamIdx = isPlayer ? 1 : (car?.teamIdx ?? Math.floor(gridSlot / 2) % TEAM_PALETTE.length);
   const carName = car ? (car.manual ? 'PLAYER' : `CAR #${carNum}`) : 'P1';
   const genText = `GEN ${sim?.generation || ''}`;
 
   if (timeEl) timeEl.textContent = `${lapDuration.toFixed(2)}s`;
   if (carEl) carEl.textContent = carName;
+  if (carPreviewEl) {
+    carPreviewEl.innerHTML = generateCarSideviewSvg(teamIdx, isPlayer, carNum);
+    carPreviewEl.setAttribute('aria-label', `${carName} — record-setting car`);
+  }
   if (genEl) genEl.textContent = genText;
 
   if (tagEl) {
@@ -364,9 +408,8 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
 
   // Flash top HUD lap box with distinct glow animation
   if (lapBox) {
-    lapBox.classList.remove('is-record-flash', 'is-race-fastest-flash');
-    void lapBox.offsetWidth; // Force reflow
-    lapBox.classList.add(isRaceFastest ? 'is-race-fastest-flash' : 'is-record-flash');
+    classAnimations.restart(lapBox, isRaceFastest ? 'is-race-fastest-flash' : 'is-record-flash',
+      ['is-record-flash', 'is-race-fastest-flash']);
   }
 
   // Activate 3D arch celebration (overhead scoreboard + F1 LED pods strobe)
@@ -387,7 +430,6 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
     overlay.classList.remove('is-overall-record', 'is-race-fastest');
     overlay.classList.add(isRaceFastest ? 'is-race-fastest' : 'is-overall-record');
     if (!wasActive) {
-      void overlay.offsetWidth; // Reflow only on initial appearance for enter animation
       overlay.classList.add('is-active');
     }
     overlay.setAttribute('aria-hidden', 'false');
@@ -419,6 +461,7 @@ sim.onNewBestLap = (lapDuration, car, prevRecord, recordType = 'overall') => {
 // ---------- Controls ----------
 function setPaused(p) {
   state.paused = p;
+  if (p) carSideviewRenderer.scheduleNext();
   $('btn-pause').textContent = p ? '▶ Resume' : '❚❚ Pause';
   $('paused-overlay').hidden = !p;
   updateStatus();
@@ -571,6 +614,7 @@ function setMaxLaps(laps, showToast = true) {
   const numLaps = Math.max(1, parseInt(laps, 10) || 5);
   CONFIG.generation = CONFIG.generation || {};
   CONFIG.generation.maxLaps = numLaps;
+  CONFIG.generation.timeLimit = numLaps === 1 ? 26 : (numLaps === 2 ? 50 : numLaps * 22);
   localStorage.setItem('ai-racer:maxLaps', String(numLaps));
 
   const select = $('settings-laps-select');
@@ -718,18 +762,30 @@ $('track-select').addEventListener('change', (e) => {
   eliminationModals.clear();
   currentTrack = new Track(preset.points, CONFIG.track.width, CONFIG.track.samples);
   sim.setTrack(currentTrack, true);
+  activePresetGen = null;
+  isMultiGenBattle = false;
+  userHighestGen = sim.generation;
+  userLiveStateSnapshot = null;
+  compareSelectedGens.clear();
+  lastRibbonCurrentGen = -1;
+  renderGenPresetsRibbon();
+  renderCompareMatrixTable();
+  leaderboard.reset();
+  prevCollisionActive = false;
   renderer.setTrack(currentTrack);
   if (renderer3d) renderer3d.setTrack(currentTrack);
   chart.draw(sim.history, sim.bestLapEver);
+  hubChart?.draw(sim.history, sim.bestLapEver);
+  hyperChart?.draw(sim.history, sim.bestLapEver);
   persistState();
   toast(`Switched to ${preset.name}`);
 });
 
 // Always persist state when navigating away, switching tabs, or periodically
-window.addEventListener('beforeunload', persistState);
-window.addEventListener('pagehide', persistState);
+window.addEventListener('beforeunload', () => saveQueue.flush());
+window.addEventListener('pagehide', () => saveQueue.flush());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) persistState();
+  if (document.hidden) saveQueue.flush();
 });
 setInterval(() => {
   if (!state.paused && sim.cars && sim.cars.length > 0) {
@@ -772,11 +828,7 @@ const unlockAudio = () => {
 
 // Storage
 $('btn-load').addEventListener('click', async () => {
-  let data = storage.loadBrain(LAYERS);
-  if (!data) {
-    const trackKey = $('track-select')?.value || 'grand-prix';
-    data = await storage.loadPretrainedBrain(trackKey, LAYERS);
-  }
+  const data = storage.loadBrain(LAYERS);
   if (!data) return toast('No saved brain or champion found', 'error');
   sim.seedFrom(data.genome, data);
   storage.saveBrain(data, LAYERS);
@@ -821,7 +873,10 @@ $('btn-export').addEventListener('click', () => {
   }
 
   if (!targetBrain) return toast('Nothing to export yet. Let a generation run first', 'error');
-  storage.exportBrain(targetBrain, LAYERS);
+  storage.exportBrain(targetBrain, LAYERS, {
+    track: $('track-select').value,
+    capturedPresets: availablePresets(),
+  });
   toast(`Brain exported as JSON (Gen ${targetBrain.generation || sim.generation})`, 'success');
 });
 
@@ -855,6 +910,17 @@ function resetAllLearning(fromRunningModal = false) {
   if (confirm('Are you sure you want to reset all learning progress?\n\nThis will erase all learned neural network weights, best lap records, and restart fresh from Generation 1.')) {
     storage.clearTrainingState();
     sim.reset();
+    activePresetGen = null;
+    isMultiGenBattle = false;
+    userHighestGen = 1;
+    userLiveStateSnapshot = null;
+    compareSelectedGens.clear();
+    lastRibbonCurrentGen = -1;
+    leaderboard.reset();
+    eliminationModals.clear();
+    focusedFollowCar = null;
+    renderGenPresetsRibbon();
+    renderCompareMatrixTable();
     renderer3d?.clearSkidmarks();
     storage.saveTrainingState(sim, LAYERS, $('track-select')?.value || 'grand-prix', true);
     chart.draw(sim.history, sim.bestLapEver);
@@ -1156,9 +1222,6 @@ function updateCameraPill() {
 
 function setCameraPreset(preset, showToast = true) {
   state.cameraPreset = preset;
-  try {
-    localStorage.setItem('ai-racer:cameraPreset', preset);
-  } catch (_) {}
   if (renderer3d) {
     renderer3d._lastPresetSwitchTime = performance.now();
     renderer3d._autoPreset = (preset === 'auto') ? 'follow' : preset;
@@ -1370,7 +1433,7 @@ btnGuideLoadAi?.addEventListener('click', () => {
     btnGenDial.setAttribute('aria-expanded', 'true');
     btnGenDial.classList.add('is-active');
   }
-  toast('🧠 Select a Pre-trained AI model (e.g. 100k or 130k) to race!', 'info');
+  toast('Milestones appear here after completing their training generation.', 'info');
 });
 
 btnGuideOpenHub?.addEventListener('click', () => {
@@ -1761,6 +1824,12 @@ function updateHyperTelemetryUi(rateStr) {
   if (statPopAvg && !$('hyper-stat-speed')) statPopAvg.textContent = lastRecord ? compact(lastRecord.avg) : '–';
 
   const statPopSurvival = $('hyper-stat-pop-survival');
+  const outcomePanel = $('hyper-race-outcomes');
+  if (outcomePanel && !outcomePanel.querySelector('.approach-inspector[open]')) {
+    const markup = raceOutcomeMarkup(sim.history, sim.track);
+    // Keep an inspected snapshot stable while new races finish in the background.
+    if (outcomePanel.innerHTML !== markup) outcomePanel.innerHTML = markup;
+  }
   if (statPopSurvival) {
     if (lastRecord) {
       const pop = lastRecord.population || 20;
@@ -1869,7 +1938,6 @@ function stopAndResume3DView() {
   hyperRunning = false;
   state.hyperRunning = false;
   sim.hyperRunning = false;
-  headlessPostFinishTimer = null;
 
   if (CONFIG.generation) {
     CONFIG.generation.startDelay = prevStartDelay;
@@ -1916,7 +1984,6 @@ function pauseHyperTraining() {
   hyperRunning = false;
   state.hyperRunning = false;
   sim.hyperRunning = false;
-  headlessPostFinishTimer = null;
 
   if (CONFIG.generation) {
     CONFIG.generation.startDelay = prevStartDelay;
@@ -2147,20 +2214,25 @@ function scheduleNextHyperBatch() {
 
 let prevStartDelay = 2.0;
 let prevMaxLaps = 5;
-let prevTimeLimit = 85;
+let prevTimeLimit = 110;
 let prevTireBarriers = null;
-let headlessPostFinishTimer = null;
 
-let hyperLaps = 2; // Default to 2 Laps: Lap 1 Launch + Lap 2 Flying Benchmark (Matches Live GP)
+let hyperLaps = 5;
 try {
+  // Apply the requested new race distance once; later manual choices remain saved.
+  if (localStorage.getItem('ai-racer:5-lap-distance') !== '1') {
+    localStorage.setItem('ai-racer:maxLaps', '5');
+    localStorage.setItem('ai-racer:hyperLaps', '5');
+    localStorage.setItem('ai-racer:5-lap-distance', '1');
+  }
   const savedHyperLaps = localStorage.getItem('ai-racer:hyperLaps');
   if (savedHyperLaps) {
-    hyperLaps = Math.max(1, parseInt(savedHyperLaps, 10) || 2);
+    hyperLaps = Math.max(1, parseInt(savedHyperLaps, 10) || 5);
   }
 } catch (_) {}
 
 function setHyperLaps(laps) {
-  hyperLaps = Math.max(1, parseInt(laps, 10) || 2);
+  hyperLaps = Math.max(1, parseInt(laps, 10) || 5);
   try {
     localStorage.setItem('ai-racer:hyperLaps', String(hyperLaps));
   } catch (_) {}
@@ -2178,7 +2250,7 @@ function setHyperLaps(laps) {
     } else if (hyperLaps === 2) {
       hintEl.textContent = 'Lap 1 Launch + Lap 2 Flying Benchmark (Matches Live GP · ~4.7 gen/s)';
     } else {
-      hintEl.textContent = `${hyperLaps}-Lap Full Race Distance (Complete Grand Prix Simulation · ~1.7 gen/s)`;
+      hintEl.textContent = `${hyperLaps}-Lap Full Race Distance (Complete Grand Prix Simulation)`;
     }
   }
 
@@ -2212,17 +2284,17 @@ document.querySelectorAll('#hub-lap-chips .hub-lap-chip').forEach((btn) => {
 function startHyperTraining() {
   hyperRunning = true;
   state.hyperRunning = true;
+  carSideviewRenderer.scheduleNext();
   sim.hyperRunning = true;
-  headlessPostFinishTimer = null;
 
   prevStartDelay = CONFIG.generation?.startDelay ?? 2.0;
   prevMaxLaps = CONFIG.generation?.maxLaps ?? 5;
-  prevTimeLimit = CONFIG.generation?.timeLimit ?? 85;
+  prevTimeLimit = CONFIG.generation?.timeLimit ?? 110;
   prevTireBarriers = sim.tireBarriers;
 
   if (CONFIG.generation) {
     CONFIG.generation.startDelay = 0.0001; // Bypass 120 stationary start ticks in headless mode
-    CONFIG.generation.maxLaps = hyperLaps; // 1-Lap sprint, 2-Lap Flying Benchmark (default), or 5-Lap GP
+    CONFIG.generation.maxLaps = hyperLaps;
     CONFIG.generation.timeLimit = hyperLaps === 1 ? 26 : (hyperLaps === 2 ? 50 : (hyperLaps * 22));
   }
   sim.tireBarriers = null; // Bypass off-track tire physics during headless run
@@ -2273,12 +2345,9 @@ function runHyperBatch() {
       for (let k = 0; k < 60; k++) {
         sim.step();
 
-        // In headless fast-forward, immediately bypass the human victory cooldown & fast-forward checkered timer
+        // Skip the presentation cooldown once every car has stopped racing.
         if (sim.postRaceTimer !== null && sim.postRaceTimer > 0) {
           sim.postRaceTimer = 0;
-        }
-        if (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 4.0) {
-          sim.checkeredFlagTimer = 4.0;
         }
 
         // Fast-forward death slide of crashed cars so finished grids don't waste 180 simulation steps
@@ -2291,27 +2360,15 @@ function runHyperBatch() {
           }
         }
 
-        // F1 Checkered Flag Rule in Headless Mode:
-        // When the race leader (P1) finishes, give a generous 4.0s window for trailing cars to finish.
-        // If all non-crashed surviving cars cross the line earlier, conclude immediately for high throughput.
+        // Finish early when every surviving car has finished. Otherwise the
+        // simulation owns the same configured deadline as the live race.
         if (sim.cars && sim.cars.some(c => c.finished)) {
           const nonCrashed = sim.cars.filter(c => !c.crashed);
           const allSurvivingFinished = nonCrashed.length > 0 && nonCrashed.every(c => c.finished);
 
           if (allSurvivingFinished) {
-            headlessPostFinishTimer = null;
-            sim.endGeneration();
-          } else if (headlessPostFinishTimer === null) {
-            headlessPostFinishTimer = 4.0;
-          } else {
-            headlessPostFinishTimer -= CONFIG.dt;
-            if (headlessPostFinishTimer <= 0) {
-              headlessPostFinishTimer = null;
-              sim.endGeneration();
-            }
+            sim.endGeneration('all-finished');
           }
-        } else {
-          headlessPostFinishTimer = null;
         }
 
         if (isFinite(hyperGenGoal) && sim.generation >= hyperGenGoal) {
@@ -2471,7 +2528,6 @@ function finishHyperTraining() {
   hyperRunning = false;
   state.hyperRunning = false;
   sim.hyperRunning = false;
-  headlessPostFinishTimer = null;
 
   if (CONFIG.generation) {
     CONFIG.generation.startDelay = prevStartDelay;
@@ -2519,7 +2575,7 @@ let userLiveStateSnapshot = null;
 let activePresetGen = null;
 let lastRibbonCurrentGen = -1;
 let isMultiGenBattle = false;
-let compareSelectedGens = new Set([1, 10, 100, 500]);
+let compareSelectedGens = new Set();
 
 function updateHighestGenAndLiveSnapshot() {
   if (!activePresetGen && !isMultiGenBattle && sim) {
@@ -2532,65 +2588,29 @@ function updateHighestGenAndLiveSnapshot() {
       history: [...(sim.history || [])],
       genomes: sim.cars.map((c) => Array.from(c.brain.genome)),
       allTimeBest: sim.allTimeBest ? { ...sim.allTimeBest, genome: Array.from(sim.allTimeBest.genome) } : null,
+      currentGenomes: sim.cars.map((c) => Array.from(c.brain.genome)),
+      capturedPresets: [...sim.capturedPresets],
+      captureEnabled: sim.captureEnabled,
+      recordLapTelemetry: sim.recordLapTelemetry,
+      isRealCarTelemetry: sim.isRealCarTelemetry,
     };
   }
 }
 
-const GEN_BENCHMARK_META = {
-  1: { tier: 'Random Exploration · Stochastic weights', lap: null, speed: 48, completion: 12, rating: 'D', gradeClass: 'd' },
-  2: { tier: 'First Steering · Basic angular guidance', lap: null, speed: 68, completion: 28, rating: 'D+', gradeClass: 'd' },
-  5: { tier: 'Path Seeker · Baseline track following', lap: null, speed: 92, completion: 55, rating: 'C', gradeClass: 'c' },
-  10: { tier: 'Track Keeper · Single lap consistency', lap: 58.4, speed: 125, completion: 88, rating: 'C+', gradeClass: 'c' },
-  50: { tier: 'Apex Learner · Smooth throttle control', lap: 44.2, speed: 158, completion: 98, rating: 'B', gradeClass: 'b' },
-  100: { tier: 'Braking Control · Clean apex entry line', lap: 36.8, speed: 182, completion: 100, rating: 'B+', gradeClass: 'b' },
-  250: { tier: 'Corner Carver · High-speed apex line', lap: 32.1, speed: 204, completion: 100, rating: 'A', gradeClass: 'a' },
-  500: { tier: 'Racing Line Master · Momentum preservation', lap: 29.5, speed: 222, completion: 100, rating: 'A+', gradeClass: 'a' },
-  1000: { tier: 'Grand Prix Champion · Precision slipstream', lap: 27.4, speed: 236, completion: 100, rating: 'S', gradeClass: 's' },
-  2000: { tier: 'Hyper Evolved · Millimeter kerb clipping', lap: 25.2, speed: 246, completion: 100, rating: 'S+', gradeClass: 's' },
-  5000: { tier: 'Apex Predator · Theoretical physics limit', lap: 23.8, speed: 254, completion: 100, rating: 'SS', gradeClass: 'ss' },
-  10000: { tier: 'Grandmaster Elite · Pixel-perfect apex clip', lap: 22.9, speed: 258, completion: 100, rating: 'SSS', gradeClass: 'sss' },
-  20000: { tier: 'Neural Singularity · Micro-slip vector mastery', lap: 22.1, speed: 262, completion: 100, rating: 'EX', gradeClass: 'ex' },
-  50000: { tier: 'Quantum Instinct · Telemetric aerodynamic lock', lap: 21.4, speed: 266, completion: 100, rating: 'EX+', gradeClass: 'ex' },
-  100000: { tier: 'Absolute Pinnacle · Zero-entropy racing god', lap: 20.8, speed: 270, completion: 100, rating: 'GOD', gradeClass: 'god' },
-  130000: { tier: 'Apex Singularity · Flawless racing perfection', lap: 20.2, speed: 275, completion: 100, rating: 'GOD+', gradeClass: 'god' },
-};
+function availablePresets() {
+  return availableCaptures(Object.values(PRESET_BRAINS), sim.capturedPresets, currentTrack, CONFIG);
+}
 
 function getGenMeta(g) {
-  const isLive = g === 'live' || g === userHighestGen || (activePresetGen === null && g === sim.generation);
-  if (isLive) {
-    const bestLap = sim.bestLapEver && Number.isFinite(sim.bestLapEver) ? +sim.bestLapEver.toFixed(2) : null;
-    return {
-      name: `Live (Gen ${userHighestGen})`,
-      genLabel: formatGenLabel(userHighestGen),
-      isLive: true,
-      tier: 'Active real-time neural evolution model',
-      lap: bestLap,
-      speed: sim.allTimeBest ? 245 : 210,
-      completion: 100,
-      rating: 'LIVE',
-      gradeClass: 'live',
-    };
-  }
-  const preset = PRESET_BRAINS[g];
-  const benchmark = GEN_BENCHMARK_META[g] || {
-    tier: 'Custom Milestone Model',
-    lap: null,
-    speed: 200,
-    completion: 100,
-    rating: 'A',
-    gradeClass: 'a',
-  };
-  const lap = preset?.bestLap ? preset.bestLap : benchmark.lap;
+  const preset = availablePresets().find((p) => p.gen === g);
+  if (!preset) return null;
+  const bundled = Object.values(PRESET_BRAINS).includes(preset);
   return {
-    name: formatGenLabel(g),
-    genLabel: formatGenLabel(g),
-    isLive: false,
-    tier: benchmark.tier,
-    lap: lap,
-    speed: benchmark.speed,
-    completion: benchmark.completion,
-    rating: benchmark.rating,
-    gradeClass: benchmark.gradeClass,
+    name: formatGenLabel(g), genLabel: formatGenLabel(g), isLive: false,
+    tier: (bundled ? 'Bundled · ' : 'Tested ') + preset.laps + '/' + preset.raceLaps + ' laps · ' + (preset.collisions ? 'contacts enabled' : 'ghost mode'),
+    lap: preset.bestLap, speed: Math.round(preset.topSpeed * SPEED_TO_KMH),
+    completion: Math.round(100 * Math.min(1, preset.laps / preset.raceLaps)),
+    rating: preset.finished ? 'FINISHED' : 'TESTED', gradeClass: preset.finished ? 'a' : 'c',
   };
 }
 
@@ -2613,22 +2633,8 @@ function renderCompareMatrixTable() {
   const startBtn = $('btn-start-showdown');
   if (!tbody) return;
 
-  const highestGen = Math.max(userHighestGen, 1);
-  const isPresetMatch = PRESET_MILESTONES.includes(highestGen);
-
-  const allGens = [];
-  let currentInserted = false;
-
-  for (const m of PRESET_MILESTONES) {
-    if (!currentInserted && !isPresetMatch && highestGen < m) {
-      allGens.push(highestGen);
-      currentInserted = true;
-    }
-    allGens.push(m);
-  }
-  if (!currentInserted && !isPresetMatch) {
-    allGens.push(highestGen);
-  }
+  const allGens = availablePresets().map((p) => p.gen);
+  compareSelectedGens = new Set([...compareSelectedGens].filter((g) => allGens.includes(g)));
 
   const selectedCount = compareSelectedGens.size;
   const carsPerGen = selectedCount > 0 ? Math.floor(Math.min(80, Math.max(20, selectedCount * 10)) / selectedCount) : 0;
@@ -2644,7 +2650,7 @@ function renderCompareMatrixTable() {
     startBtn.disabled = selectedCount < 2;
   }
 
-  let html = '';
+  let html = allGens.length ? '' : '<tr><td colspan="7">No tested milestones yet. Complete a milestone generation to capture its brain.</td></tr>';
   for (const g of allGens) {
     const isChecked = compareSelectedGens.has(g);
     const meta = getGenMeta(g);
@@ -2690,16 +2696,9 @@ function renderCompareMatrixTable() {
   tbody.querySelectorAll('.compare-row').forEach((row) => {
     row.addEventListener('click', (e) => {
       const g = Number(row.getAttribute('data-gen'));
-      if (compareSelectedGens.has(g)) {
-        if (compareSelectedGens.size > 2) {
-          compareSelectedGens.delete(g);
-        } else {
-          toast('⚠️ Need at least 2 generations for showdown', 'info');
-          return;
-        }
-      } else {
-        compareSelectedGens.add(g);
-      }
+      if (compareSelectedGens.has(g)) compareSelectedGens.delete(g);
+      else compareSelectedGens.add(g);
+
       renderCompareMatrixTable();
     });
   });
@@ -2710,17 +2709,9 @@ function renderCompareMatrixTable() {
     });
     chk.addEventListener('change', (e) => {
       const g = Number(chk.getAttribute('data-gen'));
-      if (chk.checked) {
-        compareSelectedGens.add(g);
-      } else {
-        if (compareSelectedGens.size > 2) {
-          compareSelectedGens.delete(g);
-        } else {
-          chk.checked = true;
-          toast('⚠️ Need at least 2 generations for showdown', 'info');
-          return;
-        }
-      }
+      if (chk.checked) compareSelectedGens.add(g);
+      else compareSelectedGens.delete(g);
+
       renderCompareMatrixTable();
     });
   });
@@ -2732,8 +2723,22 @@ export function startMultiGenBattle(selectedGens) {
     return;
   }
 
+  const captures = availablePresets();
+  if (!selectedGens.every((g) => captures.some((p) => p.gen === g))) {
+    toast('Only captured and tested milestones can enter a showdown.', 'warning');
+    return;
+  }
+  if (activePresetGen === null && !isMultiGenBattle) updateHighestGenAndLiveSnapshot();
+  saveQueue.flush();
+  sim.captureEnabled = false;
   isMultiGenBattle = true;
   activePresetGen = null;
+  sim.history = [];
+  sim.allTimeBest = null;
+  sim.bestLapEver = Infinity;
+  sim.prevBestLapEver = null;
+  sim.recordLapTelemetry = null;
+  sim.isRealCarTelemetry = false;
   closeGenCompareModal();
 
   const totalCars = Math.min(80, Math.max(20, selectedGens.length * 10));
@@ -2743,28 +2748,15 @@ export function startMultiGenBattle(selectedGens) {
   const metaList = [];
 
   selectedGens.forEach((g, gIdx) => {
-    let baseGenome = null;
-    if (g === 'live' || g === userHighestGen || g === sim.generation) {
-      baseGenome = userLiveStateSnapshot?.allTimeBest?.genome || sim.allTimeBest?.genome || (sim.cars && sim.cars[0]?.brain?.genome);
-    }
-    if (!baseGenome) {
-      const p = PRESET_BRAINS[g];
-      baseGenome = p ? p.genome : null;
-    }
-    if (!baseGenome) {
-      baseGenome = NeuralNetwork.randomGenome(CONFIG.nn.layers);
-    }
+    const baseGenome = captures.find((p) => p.gen === g).genome;
 
     const teamIdx = (gIdx * 3 + 1) % 20; // Distinct vivid livery for each generation
     const genLabel = formatGenLabel(g === 'live' ? userHighestGen : g);
 
     for (let c = 0; c < carsPerGen; c++) {
       const carGenome = Float32Array.from(baseGenome);
-      if (c > 0) {
-        for (let w = 0; w < carGenome.length; w++) {
-          if (Math.random() < 0.08) carGenome[w] += (Math.random() * 2 - 1) * 0.05;
-        }
-      }
+
+
       genomes.push(carGenome);
       metaList.push({
         genTag: g,
@@ -2802,23 +2794,15 @@ $('btn-start-showdown')?.addEventListener('click', () => {
   startMultiGenBattle(sortedGens);
 });
 
-// Quick Matchup Buttons
-$('btn-matchup-all')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([1, 10, 100, 500, 1000, 5000]);
+// Quick matchups only use checkpoints that this run has actually tested.
+function selectCapturedMatchup(select) {
+  compareSelectedGens = new Set(select(availablePresets().map((p) => p.gen)));
   renderCompareMatrixTable();
-});
-$('btn-matchup-rookie')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([1, 100000]);
-  renderCompareMatrixTable();
-});
-$('btn-matchup-champs')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([1000, 5000, 10000, 50000, 100000]);
-  renderCompareMatrixTable();
-});
-$('btn-matchup-live')?.addEventListener('click', () => {
-  compareSelectedGens = new Set([userHighestGen, 10000, 100000]);
-  renderCompareMatrixTable();
-});
+}
+$('btn-matchup-all')?.addEventListener('click', () => selectCapturedMatchup((gens) => gens));
+$('btn-matchup-rookie')?.addEventListener('click', () => selectCapturedMatchup((gens) => gens.length > 1 ? [gens[0], gens.at(-1)] : gens));
+$('btn-matchup-champs')?.addEventListener('click', () => selectCapturedMatchup((gens) => gens.slice(-5)));
+$('btn-matchup-live')?.addEventListener('click', () => selectCapturedMatchup((gens) => gens.slice(-2)));
 
 function formatGenLabel(g) {
   if (g >= 1000) {
@@ -2828,23 +2812,7 @@ function formatGenLabel(g) {
   return `Gen ${g}`;
 }
 
-function getPresetTier(gen) {
-  if (gen >= 100000) return 'Absolute Pinnacle';
-  if (gen >= 50000) return 'Quantum Instinct';
-  if (gen >= 20000) return 'Neural Singularity';
-  if (gen >= 10000) return 'Grandmaster Elite';
-  if (gen >= 5000) return 'Ultimate Apex';
-  if (gen >= 2000) return 'Grand Master';
-  if (gen >= 1000) return 'Titan Master';
-  if (gen >= 500) return 'Apex Champion';
-  if (gen >= 250) return 'Veteran Pro';
-  if (gen >= 100) return 'Track Master';
-  if (gen >= 50) return 'Experienced';
-  if (gen >= 10) return 'Intermediate';
-  if (gen >= 5) return 'Learning';
-  if (gen >= 2) return 'Toddler';
-  return 'Random Explorer';
-}
+
 
 const btnGenDial = $('btn-gen-dial');
 const genDialPopover = $('gen-dial-popover');
@@ -2872,155 +2840,80 @@ document.addEventListener('click', (e) => {
 });
 
 export function loadGenerationPreset(g) {
-  // If user was in live mode before selecting another preset, capture their live state
-  if (!activePresetGen && !isMultiGenBattle && sim) {
-    updateHighestGenAndLiveSnapshot();
-  }
-
-  // If user chooses their highest tested generation or an unrecognized preset -> Resume Live Training!
-  if (g === userHighestGen || !PRESET_BRAINS[g]) {
+  if (g === 'live') {
+    if (!userLiveStateSnapshot || (activePresetGen === null && !isMultiGenBattle)) return;
+    sim.resumeState(userLiveStateSnapshot);
     activePresetGen = null;
     isMultiGenBattle = false;
-    const compareBtn = $('btn-compare-gens');
-    if (compareBtn) compareBtn.classList.remove('active');
-
-    sim.generation = userHighestGen;
-    if (userLiveStateSnapshot) {
-      if (userLiveStateSnapshot.bestLapEver) sim.bestLapEver = userLiveStateSnapshot.bestLapEver;
-      if (userLiveStateSnapshot.history) sim.history = [...userLiveStateSnapshot.history];
-      if (userLiveStateSnapshot.allTimeBest) sim.allTimeBest = userLiveStateSnapshot.allTimeBest;
-      if (userLiveStateSnapshot.genomes && userLiveStateSnapshot.genomes.length) {
-        sim.startGeneration(userLiveStateSnapshot.genomes);
-      } else {
-        sim.startGeneration();
-      }
-    } else {
-      const bestBrain = storage.loadBrain(LAYERS);
-      if (bestBrain?.genome) {
-        sim.startGeneration(sim.cars.map(() => Array.from(bestBrain.genome)));
-      } else {
-        sim.startGeneration();
-      }
-    }
-
-    leaderboard.reset();
-    refreshSavedInfo();
-    updateHubAnalytics();
-    audio.playSuccess();
-    renderGenPresetsRibbon();
-    toast(`⚡ Resumed Highest Tested Gen ${formatGenLabel(userHighestGen)}`, 'success');
-    return;
+  } else {
+    const preset = availablePresets().find((p) => p.gen === g);
+    if (!preset) return toast('That milestone has not been captured and tested.', 'info');
+    if (activePresetGen === null && !isMultiGenBattle) updateHighestGenAndLiveSnapshot();
+    saveQueue.flush();
+    sim.captureEnabled = false;
+    activePresetGen = g;
+    isMultiGenBattle = false;
+    sim.generation = g;
+    sim.history = [];
+    sim.allTimeBest = null;
+    sim.bestLapEver = Infinity;
+    sim.prevBestLapEver = null;
+    sim.recordLapTelemetry = null;
+    sim.isRealCarTelemetry = false;
+    sim.startGeneration(Array.from({ length: CONFIG.ga.population }, () => preset.genome));
   }
-
-  // Load selected milestone preset
-  const preset = PRESET_BRAINS[g];
-  isMultiGenBattle = false;
-  const compareBtn = $('btn-compare-gens');
-  if (compareBtn) compareBtn.classList.remove('active');
-
-  activePresetGen = g;
-  const layers = preset.layers || CONFIG.nn.layers;
-  const genome = preset.genome;
-
-  // Immediately seed the population with the selected preset brain genome
-  sim.generation = g;
-  if (preset.bestLap && Number.isFinite(preset.bestLap)) {
-    sim.bestLapEver = preset.bestLap;
-  }
-  sim.recordLapTelemetry = null;
-  sim.isRealCarTelemetry = false;
+  $('btn-compare-gens')?.classList.remove('active');
   leaderboard.reset();
-  sim.startGeneration(sim.cars.map(() => Array.from(genome)));
-
+  focusedFollowCar = null;
   refreshSavedInfo();
   updateHubAnalytics();
-  audio.playSuccess();
-
-  const fitStr = preset.fitness ? ` · Fit ${compact(preset.fitness)}` : '';
-  const lapStr = preset.bestLap ? ` · Lap ${preset.bestLap}s` : '';
-  toast(`⚡ Loaded Gen ${formatGenLabel(g)} Preset${fitStr}${lapStr}`, 'success');
-
   renderGenPresetsRibbon();
+  toast(g === 'live' ? 'Resumed live training' : 'Loaded tested ' + formatGenLabel(g), 'success');
 }
 
 export function renderGenPresetsRibbon() {
   const container = $('gen-presets-track');
   const activeLabelEl = $('gen-dial-label') || $('gen-dial-active-label');
-
-  const highestGen = Math.max(userHighestGen, 1);
-  const isPresetMatch = PRESET_MILESTONES.includes(highestGen);
-
-  // Build the list of chips: milestone presets + user's highest tested Gen placed in between
-  const chips = [];
-  let currentInserted = false;
-
-  for (const m of PRESET_MILESTONES) {
-    if (!currentInserted && !isPresetMatch && highestGen < m) {
-      chips.push({ gen: highestGen, isHighestLive: true });
-      currentInserted = true;
-    }
-    chips.push({ gen: m, isHighestLive: isPresetMatch && m === highestGen });
-  }
-  if (!currentInserted && !isPresetMatch) {
-    chips.push({ gen: highestGen, isHighestLive: true });
-  }
-
-  // Update active label on Dial Menu Trigger Button
-  if (activeLabelEl) {
-    if (isMultiGenBattle) {
-      activeLabelEl.innerHTML = `<span style="color:#f59e0b">⚔️ Showdown</span>`;
-    } else if (activePresetGen !== null) {
-      activeLabelEl.innerHTML = `Pre-trained AI &middot; <strong>${formatGenLabel(activePresetGen)}</strong>`;
-    } else {
-      activeLabelEl.textContent = 'Pre-trained AI';
-    }
-  }
-
+  const presets = availablePresets();
+  const badge = $('captured-presets-count');
+  if (badge) badge.textContent = presets.length + ' AVAILABLE';
+  const exportButton = $('btn-export-presets');
+  if (exportButton) exportButton.disabled = presets.length === 0;
+  if (activeLabelEl) activeLabelEl.textContent = isMultiGenBattle ? 'Showdown' :
+    (activePresetGen !== null ? 'Tested ' + formatGenLabel(activePresetGen) : 'Milestone brains (' + presets.length + ')');
   if (!container) return;
-
-  let html = '';
-  for (const chip of chips) {
-    const isHighest = chip.isHighestLive;
-    const isSelected = !isMultiGenBattle && (activePresetGen === chip.gen || (activePresetGen === null && isHighest));
-    const label = formatGenLabel(chip.gen);
-    const preset = PRESET_BRAINS[chip.gen];
-    const meta = getGenMeta(chip.gen);
-    const bestLap = (isHighest && sim?.bestLapEver) ? `${sim.bestLapEver.toFixed(1)}s` : (preset?.bestLap ? `${preset.bestLap}s` : (meta.lap ? `${meta.lap}s` : null));
-    const tier = isHighest ? 'Highest Real-time Trained' : (meta.tier || getPresetTier(chip.gen));
-
-    html += `
-      <button class="gen-dial-item ${isSelected ? 'active' : ''} ${isHighest ? 'is-live' : ''}" data-gen="${chip.gen}" type="button" title="${isHighest ? `Your live highest trained model (${chip.gen})` : `Load Pretrained Gen ${chip.gen} (${meta.rating})`}">
-        <div class="gen-dial-item-main">
-          <div class="gen-dial-item-head">
-            ${isHighest ? '<span class="chip-dot"></span>' : ''}
-            <span class="gen-dial-item-title">${label}</span>
-            <span class="matrix-grade-badge grade-${meta.gradeClass}">${meta.rating}</span>
-            ${isHighest ? '<span class="gen-dial-item-live-badge">LIVE</span>' : ''}
-          </div>
-          <span class="gen-dial-item-tier">${tier}</span>
-        </div>
-        <div class="gen-dial-item-metric">
-          ${bestLap ? `<span class="gen-dial-item-lap">${bestLap}</span>` : ''}
-          ${isSelected ? `<svg class="gen-dial-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>` : ''}
-        </div>
-      </button>
-    `;
+  let html = '<button class="gen-dial-item is-live" data-gen="live" type="button">↩ Live training · Gen ' + userHighestGen + '</button>';
+  if (!presets.length) html += '<p class="gen-dial-item-tier">No tested milestones yet. Brains are captured after each milestone generation completes.</p>';
+  for (const preset of presets) {
+    const meta = getGenMeta(preset.gen);
+    const lap = preset.bestLap === null ? 'No completed lap' : preset.bestLap.toFixed(2) + 's';
+    html += '<button class="gen-dial-item ' + (activePresetGen === preset.gen ? 'active' : '') + '" data-gen="' + preset.gen + '" type="button">' +
+      '<div class="gen-dial-item-main"><span class="gen-dial-item-title">' + formatGenLabel(preset.gen) + '</span>' +
+      '<span class="gen-dial-item-tier">' + meta.tier + '</span></div><span class="gen-dial-item-lap">' + lap + '</span></button>';
   }
-
   container.innerHTML = html;
-
-  container.querySelectorAll('.gen-dial-item').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const g = Number(btn.getAttribute('data-gen'));
-      loadGenerationPreset(g);
-      setGenDialPopoverOpen(false);
-    });
-  });
+  container.querySelectorAll('[data-gen]').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const value = button.getAttribute('data-gen');
+    loadGenerationPreset(value === 'live' ? 'live' : Number(value));
+    setGenDialPopoverOpen(false);
+  }));
 }
+
+$('btn-export-presets')?.addEventListener('click', () => {
+  const presets = availablePresets();
+  if (!presets.length) return;
+  const blob = new Blob([JSON.stringify({ version: 1, track: $('track-select').value, presets }, null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'ai-racer-captured-milestones.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+});
 
 // ---------- HUD ----------
 function updateHud(leader) {
+  if (activePresetGen === null && !isMultiGenBattle) userHighestGen = sim.generation;
   const isRaceMode = sim.mode === 'race';
   const pop = isRaceMode ? 20 : CONFIG.ga.population;
   const setTxt = (id, val) => {
@@ -3114,7 +3007,7 @@ function updateHud(leader) {
       if (ghostTitle) ghostTitle.textContent = 'GHOST MODE';
       if (ghostVal) ghostVal.textContent = 'ON';
     } else {
-      const warmup = colConfig.warmupTime || 30;
+      const warmup = colConfig.warmupTime ?? 30;
       const remainingGhost = Math.max(0, warmup - sim.time);
       if (remainingGhost > 0) {
         ghostPill.classList.remove('hidden', 'active-contact');
@@ -3135,7 +3028,7 @@ function updateHud(leader) {
   }
 
   // Toast notification when collisions activate
-  if (!isPermanentGhost && sim.time >= (colConfig.warmupTime || 30) && !prevCollisionActive) {
+  if (!isPermanentGhost && sim.time >= (colConfig.warmupTime ?? 30) && !prevCollisionActive) {
     prevCollisionActive = true;
     toast('⚠️ Collision Avoidance & Contact Physics ACTIVE!', 'warning');
   }
@@ -3276,7 +3169,7 @@ function updateCockpitAnimation(focusCar) {
 
 // ---------- Main loop ----------
 let last = performance.now();
-let acc = 0;
+const playbackClock = new FixedStepClock(CONFIG.dt);
 let stepCounter = 0;
 let rateStart = last;
 let effSpeed = 1;
@@ -3290,16 +3183,37 @@ let simTimeAccum = 0;
 let renderTimeAccum = 0;
 let profFrameCount = 0;
 let lastPerfLog = 0;
+let lastSaveMs = 0;
+let lastSaveAt = -Infinity;
+let lastStutterLog = 0;
+let worstFrameMs = 0;
+let previousSimMs = 0;
+let previousRenderMs = 0;
+let previousUiMs = 0;
+let diagnosticFocus = null;
+let diagnosticCamera = null;
+let lastFocusChangeAt = -Infinity;
+let lastCameraChangeAt = -Infinity;
+installFrameDiagnostics();
+const motionDebug = new URLSearchParams(window.location.search).has('motionDebug');
+sim.motionDebug = motionDebug;
 
 function frame(now) {
-  const realDt = Math.min(0.05, (now - last) / 1000);
+  const realDt = (now - last) / 1000;
+  worstFrameMs = Math.max(worstFrameMs, realDt * 1000);
   last = now;
 
   if (hyperRunning) {
+    playbackClock.reset();
     frameActive = false;
     return;
   }
   frameActive = true;
+
+  if (!document.hidden && realDt > 0.034 && now - lastStutterLog > 1000) {
+    lastStutterLog = now;
+    console.info(`[STUTTER] Gap ${(realDt * 1000).toFixed(1)}ms | Previous sim ${previousSimMs.toFixed(1)}ms | Render ${previousRenderMs.toFixed(1)}ms | UI ${previousUiMs.toFixed(1)}ms | Save ${lastSaveMs.toFixed(1)}ms (${(performance.now() - lastSaveAt).toFixed(0)}ms ago) | Focus changed ${(now - lastFocusChangeAt).toFixed(0)}ms ago | Camera changed ${(now - lastCameraChangeAt).toFixed(0)}ms ago`);
+  }
 
   sim.playerControls.steer = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
   sim.playerControls.throttle = keys.ArrowUp ? 1 : keys.ArrowDown ? -1 : 0;
@@ -3308,6 +3222,7 @@ function frame(now) {
   if (!state.paused) {
     const t0 = performance.now();
     if (state.turbo) {
+      playbackClock.reset();
       do {
         for (let k = 0; k < 10; k++) sim.step(CONFIG.dt);
         stepCounter += 10;
@@ -3315,20 +3230,10 @@ function frame(now) {
     } else {
       const PLAYBACK_SPEED_FACTOR = 0.90; // Calibrated playback speed: aligns real visual velocity with authentic F1 300+ km/h speeds
       const simSpeed = (state.manual ? 1.0 : state.speed) * PLAYBACK_SPEED_FACTOR;
-      if (simSpeed <= 1.0) {
-        // Continuous, frame-synced physics (smooth per-frame step)
-        sim.step(CONFIG.dt * simSpeed);
-        stepCounter++;
-      } else {
-        // Uniform sub-stepping for speed multipliers (>1x)
-        const subSteps = Math.min(6, Math.max(1, Math.round(simSpeed)));
-        const subDt = (CONFIG.dt * simSpeed) / subSteps;
-        for (let s = 0; s < subSteps; s++) {
-          sim.step(subDt);
-          stepCounter++;
-        }
-      }
+      stepCounter += playbackClock.advance(realDt, simSpeed, (dt) => sim.step(dt));
     }
+  } else {
+    playbackClock.reset();
   }
   const tSim = performance.now() - tSimStart;
   simTimeAccum += tSim;
@@ -3344,7 +3249,10 @@ function frame(now) {
 
   const activeFocus = userManualCar || p1Leader;
 
-  const renderOpts = { ...state, manualFocusCar: userManualCar };
+  const renderOpts = { ...state, manualFocusCar: userManualCar,
+    motionDebug,
+    renderDt: realDt,
+    renderAlpha: state.paused || state.turbo ? 1 : playbackClock.alpha };
 
   const tRenderStart = performance.now();
   if (state.view3d && renderer3d) {
@@ -3353,6 +3261,7 @@ function frame(now) {
     renderer.render(sim, renderOpts, activeFocus);
   }
   const tRender = performance.now() - tRenderStart;
+  const tUiStart = performance.now();
   renderTimeAccum += tRender;
   profFrameCount++;
 
@@ -3362,6 +3271,11 @@ function frame(now) {
     : (state.view3d && renderer3d?.focusedCar && (renderer3d.focusedCar.alive || renderer3d.focusedCar.finished))
       ? renderer3d.focusedCar
       : ((renderer?.focusedCar && (renderer.focusedCar.alive || renderer.focusedCar.finished)) ? renderer.focusedCar : activeFocus);
+  if (currentFocus !== diagnosticFocus) lastFocusChangeAt = now;
+  diagnosticFocus = currentFocus;
+  const cameraName = state.view3d ? renderer3d?.activeCameraPreset : '2D';
+  if (cameraName !== diagnosticCamera) lastCameraChangeAt = now;
+  diagnosticCamera = cameraName;
 
   // Real-time camera pill status (displays active shot and green auto-director icon)
   updateCameraPill();
@@ -3396,7 +3310,7 @@ function frame(now) {
 
     const calls = (state.view3d && renderer3d?.renderer?.info?.render?.calls) || 0;
     const tris = (state.view3d && renderer3d?.renderer?.info?.render?.triangles) || 0;
-    const perfDetail = `FPS: ${currentFps} | Sim: ${avgSimMs}ms | Render: ${avgRenderMs}ms | Calls: ${calls} | Tris: ${(tris / 1000).toFixed(0)}k`;
+    const perfDetail = `FPS: ${currentFps} | Sim: ${avgSimMs}ms | Render: ${avgRenderMs}ms | Worst frame: ${worstFrameMs.toFixed(1)}ms | Save: ${lastSaveMs.toFixed(1)}ms | Calls: ${calls} | Tris: ${(tris / 1000).toFixed(0)}k`;
 
     const pillFps = $('pill-fps');
     if (pillFps) {
@@ -3417,6 +3331,7 @@ function frame(now) {
     if (now - lastPerfLog >= 3000) {
       lastPerfLog = now;
       console.log(`[PERF 3D] ${perfDetail}`);
+      worstFrameMs = 0;
     }
   }
 
@@ -3432,6 +3347,9 @@ function frame(now) {
     updateHud(currentFocus);
     hudTimer = now;
   }
+  previousSimMs = tSim;
+  previousRenderMs = tRender;
+  previousUiMs = performance.now() - tUiStart;
   requestAnimationFrame(frame);
 }
 
@@ -3460,9 +3378,8 @@ setGridBox(savedGridBox !== null ? savedGridBox !== 'false' : true, false);
 const savedLaps = localStorage.getItem('ai-racer:maxLaps');
 setMaxLaps(savedLaps !== null ? parseInt(savedLaps, 10) : (CONFIG.generation?.maxLaps || 5), false);
 
-const savedCamPreset = localStorage.getItem('ai-racer:cameraPreset');
-state.cameraPreset = savedCamPreset || 'auto';
-setCameraPreset(state.cameraPreset, false);
+// Every session starts with Auto Director; manual camera choices last this session.
+setCameraPreset('auto', false);
 renderGenPresetsRibbon();
 updateHud(sim.leader);
 chart.draw(sim.history, sim.bestLapEver);

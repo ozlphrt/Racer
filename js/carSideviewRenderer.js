@@ -1,29 +1,51 @@
 import * as THREE from 'three';
-import { TEAM_PALETTE, F1_DECAL_CONFIG } from './renderer3d.js';
+import { carPreviewAsset } from './carPreviewAssets.js';
+
 
 /**
  * CarSideviewRenderer
  * Renders high-fidelity, crisp, authentic orthographic side profiles of the real 3D F1 2022 car model
  * with full team liveries, shaders, Pirelli tires, aero wings, halo, and side number decals.
  */
-class CarSideviewRenderer {
-  constructor() {
-    this.f1Template = null;
-    this.f1DecalGeometries = null;
-    this.f1Texture = null;
+export function carPreviewKey(teamIdx, isPlayer, carNumber) {
+  return `${isPlayer ? 'p' : 'c'}_${isPlayer ? 1 : teamIdx}_${carNumber}`;
+}
+
+const idle = (fn) => {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn);
+  else setTimeout(fn, 0);
+};
+
+export class CarSideviewRenderer {
+  constructor(schedule = idle) {
+    this.schedule = schedule;
+    this.canRender = () => true;
+    this.useStaticAssets = true;
+    this.sources = new Map();
+    this.pending = new Set();
+    this.queue = [];
+    this.busy = false;
+    this.previewListeners = [];
     this.renderer = null;
     this.scene = null;
     this.camera = null;
-    this.cache = new Map(); // key -> dataUrl
+    this.cache = new Map(); // key -> page-lifetime blob URL; bounded by fleet sources
     this.isReady = false;
     this.listeners = [];
   }
 
-  init(template, decalGeometries, texture) {
-    if (!template) return;
-    this.f1Template = template;
-    this.f1DecalGeometries = decalGeometries;
-    this.f1Texture = texture;
+  init(sources) {
+    if (this.isReady) return;
+    for (const source of sources) {
+      this.sources.set(carPreviewKey(source.teamIdx, source.isPlayer, source.carNumber), source.mesh);
+    }
+
+    if (this.useStaticAssets && sources.length && [...this.sources.keys()].every(carPreviewAsset)) {
+      this.isReady = true;
+      this.listeners.forEach(fn => { try { fn(); } catch (_) {} });
+      this.listeners = [];
+      return;
+    }
 
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
@@ -38,7 +60,6 @@ class CarSideviewRenderer {
         canvas,
         alpha: true,
         antialias: true,
-        preserveDrawingBuffer: true,
         powerPreference: 'low-power'
       });
       this.renderer.setSize(width, height, false);
@@ -46,6 +67,15 @@ class CarSideviewRenderer {
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.15;
+      // Copy finished (tone-mapped, antialiased) pixels on the GPU, then read them asynchronously.
+      this.snapshotTarget = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false, stencilBuffer: false });
+      this.renderer.initRenderTarget(this.snapshotTarget);
+      this.snapshotPixels = new Uint8Array(width * height * 4);
+      this.snapshotCanvas = document.createElement('canvas');
+      this.snapshotCanvas.width = width;
+      this.snapshotCanvas.height = height;
+      this.snapshotContext = this.snapshotCanvas.getContext('2d');
+      this.snapshotImage = this.snapshotContext.createImageData(width, height);
 
       this.scene = new THREE.Scene();
 
@@ -112,282 +142,97 @@ class CarSideviewRenderer {
     }
   }
 
-  createRaceNumberTexture(num, isPlayer = false) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 512, 512);
-
-    const numStr = String(num);
-    const fontSize = numStr.length >= 3 ? 200 : numStr.length === 2 ? 260 : 310;
-
-    // Classic Motorsport White Roundel Disc
-    ctx.beginPath();
-    ctx.arc(256, 256, 230, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.fill();
-
-    // Bold Outer Border
-    ctx.lineWidth = 26;
-    ctx.strokeStyle = '#000000';
-    ctx.stroke();
-
-    // Crisp Bold Black Number
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `900 ${fontSize}px "Outfit", "JetBrains Mono", Impact, "Arial Black", sans-serif`;
-    ctx.fillStyle = '#000000';
-    ctx.fillText(numStr, 256, 260);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    tex.generateMipmaps = false;
-    return tex;
+  onPreviewReady(fn) {
+    this.previewListeners.push(fn);
   }
 
-  buildCarMesh(teamIdx = 0, isPlayer = false, carNumber = 1) {
-    if (!this.f1Template) return null;
+  // A cache miss must never render or read pixels inside a simulation update.
+  getCarSideviewDataUrl(teamIdx = 0, isPlayer = false, carNumber = 1) {
+    const key = carPreviewKey(teamIdx, isPlayer, carNumber);
+    const asset = this.useStaticAssets && carPreviewAsset(key);
+    if (asset) return asset;
+    if (this.cache.has(key)) return this.cache.get(key);
+    if (this.isReady && this.sources.has(key) && !this.pending.has(key)) {
+      this.pending.add(key);
+      this.queue.push(key);
+      this.scheduleNext();
+    }
+    return null;
+  }
 
-    const tm = isPlayer
-      ? { hex: 0x00e626, secHex: 0xfacc15, accHex: 0xffffff, quadHex: 0x00e626 }
-      : (TEAM_PALETTE[teamIdx % TEAM_PALETTE.length] || TEAM_PALETTE[0]);
+  scheduleNext() {
+    if (this.busy || !this.queue.length || !this.canRender()) return;
+    this.busy = true;
+    const preview = this;
+    this.schedule(function prepareCarPreview() {
+      if (!preview.canRender()) { preview.busy = false; return; }
+      return preview.renderNext();
+    });
+  }
 
-    const group = new THREE.Group();
-    const carSubGroup = new THREE.Group();
-    const model = this.f1Template.clone(true);
+  async capturePreviewBlob() {
+    const { width, height } = this.snapshotTarget;
+    // This copy stays on the GPU. Canvas.toBlob on the WebGL canvas would first force a readback.
+    this.renderer.copyFramebufferToTexture(this.snapshotTarget.texture);
+    await this.renderer.readRenderTargetPixelsAsync(this.snapshotTarget, 0, 0, width, height, this.snapshotPixels);
+    const rowBytes = width * 4;
+    for (let y = 0; y < height; y++) {
+      const source = (height - 1 - y) * rowBytes;
+      this.snapshotImage.data.set(this.snapshotPixels.subarray(source, source + rowBytes), y * rowBytes);
+    }
+    // The WebGL drawing buffer uses premultiplied alpha; ImageData expects straight alpha.
+    for (let i = 0; i < this.snapshotImage.data.length; i += 4) {
+      const alpha = this.snapshotImage.data[i + 3];
+      if (alpha > 0 && alpha < 255) {
+        for (let channel = 0; channel < 3; channel++) {
+          this.snapshotImage.data[i + channel] = Math.min(255, Math.round(this.snapshotImage.data[i + channel] * 255 / alpha));
+        }
+      }
+    }
+    this.snapshotContext.putImageData(this.snapshotImage, 0, 0);
+    return new Promise(resolve => this.snapshotCanvas.toBlob(resolve, 'image/png'));
+  }
 
-    const s = 6.0;
-    model.scale.set(s, s, s);
-    model.rotation.set(Math.PI / 2, 0, 0);
-    model.position.set(0, 0, 0);
-
-    const cPri = new THREE.Color(tm.hex);
-    const cSec = new THREE.Color(tm.secHex);
-    const cAcc = new THREE.Color(tm.accHex);
-    const cQuad = new THREE.Color(tm.quadHex || tm.secHex);
-    const numTex = this.createRaceNumberTexture(carNumber, isPlayer);
-
-    model.traverse((child) => {
-      if (
-        child.name &&
-        (child.name.includes('Plane') ||
-          child.name.includes('Sphere') ||
-          child.name.includes('Object_12') ||
-          child.name.includes('Object_4'))
-      ) {
-        child.visible = false;
+  async renderNext() {
+    const key = this.queue.shift();
+    let mesh;
+    let compileMs = 0, drawMs = 0;
+    let deferred = false;
+    try {
+      // Share prepared fleet buffers and materials; never dispose their resources.
+      mesh = this.sources.get(key).clone(true);
+      this.scene.add(mesh);
+      const compileStart = performance.now();
+      const compilation = this.renderer.compileAsync(this.scene, this.camera);
+      compileMs = performance.now() - compileStart;
+      await compilation;
+      await new Promise((resolve) => this.schedule(resolve));
+      // Shader compilation can finish after racing resumes. Keep the pending
+      // request for the next pause instead of starting a GPU readback now.
+      if (!this.canRender()) {
+        this.queue.unshift(key);
+        deferred = true;
         return;
       }
-
-      if (child.isMesh) {
-        const isFrontWheelsMesh = child.name === 'Object_8';
-        const isRearWheelsMesh = child.name === 'Object_10';
-
-        const origMap = child.material?.map || this.f1Texture;
-        const origRoughness = child.material?.roughness ?? 0.45;
-        const origMetalness = child.material?.metalness ?? 0.1;
-
-        const geo = child.geometry.clone();
-        child.geometry = geo;
-
-        const posAttr = geo.attributes.position;
-        const count = posAttr.count;
-        const liveryColorArr = new Float32Array(count * 3);
-        const isBodyArr = new Float32Array(count);
-        const isTireArr = new Float32Array(count);
-
-        for (let i = 0; i < count; i++) {
-          const x = posAttr.getX(i);
-          const y = posAttr.getY(i);
-          const z = posAttr.getZ(i);
-          const absZ = Math.abs(z);
-
-          if (isFrontWheelsMesh || isRearWheelsMesh) {
-            isTireArr[i] = 1.0;
-            isBodyArr[i] = 0.0;
-            liveryColorArr[i * 3] = 1.0;
-            liveryColorArr[i * 3 + 1] = 1.0;
-            liveryColorArr[i * 3 + 2] = 1.0;
-          } else {
-            isTireArr[i] = 0.0;
-
-            const isUnderfloor = (y < 0.105) || (x < -1.1 && y < 0.16 && absZ < 0.40);
-            const isWheelDeflector = (Math.abs(x - 1.58) < 0.55 && absZ > 0.42 && y >= 0.09 && y <= 0.85);
-
-            if (isUnderfloor || isWheelDeflector) {
-              isBodyArr[i] = 0.0;
-              liveryColorArr[i * 3] = 0.08;
-              liveryColorArr[i * 3 + 1] = 0.08;
-              liveryColorArr[i * 3 + 2] = 0.09;
-            } else {
-              isBodyArr[i] = 1.0;
-              let c;
-
-              if (x > 1.75) {
-                c = cSec; // Nose Tip & Front Wing
-              } else if (
-                (x < -0.15 && x > -1.25 && y > 0.56 && absZ < 0.12) ||
-                (x >= -0.25 && x <= 0.35 && y > 0.54 && absZ < 0.24)
-              ) {
-                c = cAcc; // Halo Safety Ring & Shark Fin
-              } else if (absZ >= 0.22 && absZ <= 0.58 && x >= -0.45 && x <= 0.75 && y >= 0.13 && y <= 0.50) {
-                c = cQuad; // Sidepod Radiator Inlets
-              } else if (absZ > 0.50 && Math.abs(x - (-1.48)) < 0.50 && y >= 0.12 && y <= 0.45) {
-                c = cAcc; // Rear brake duct winglets
-              } else {
-                c = cPri; // Main Chassis Monocoque & Engine Cover
-              }
-
-              liveryColorArr[i * 3] = c.r;
-              liveryColorArr[i * 3 + 1] = c.g;
-              liveryColorArr[i * 3 + 2] = c.b;
-            }
-          }
-        }
-
-        geo.setAttribute('liveryColor', new THREE.BufferAttribute(liveryColorArr, 3));
-        geo.setAttribute('isBody', new THREE.BufferAttribute(isBodyArr, 1));
-        geo.setAttribute('isTire', new THREE.BufferAttribute(isTireArr, 1));
-
-        const mat = new THREE.MeshStandardMaterial({
-          map: origMap,
-          roughness: origRoughness,
-          metalness: origMetalness,
-        });
-
-        mat.onBeforeCompile = (shader) => {
-          shader.uniforms.decalTex = { value: numTex };
-          shader.vertexShader = shader.vertexShader.replace(
-            '#include <common>',
-            `#include <common>
-            attribute vec3 liveryColor;
-            attribute float isBody;
-            attribute float isTire;
-            varying vec3 vLiveryColor;
-            varying float vIsBody;
-            varying float vIsTire;
-            varying vec3 vModelPos;`
-          );
-          shader.vertexShader = shader.vertexShader.replace(
-            '#include <begin_vertex>',
-            `#include <begin_vertex>
-            vLiveryColor = liveryColor;
-            vIsBody = isBody;
-            vIsTire = isTire;
-            vModelPos = position;`
-          );
-          shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <common>',
-            `#include <common>
-            uniform sampler2D decalTex;
-            varying vec3 vLiveryColor;
-            varying float vIsBody;
-            varying float vIsTire;
-            varying vec3 vModelPos;`
-          );
-          shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <map_fragment>',
-            `#ifdef USE_MAP
-              vec4 texColor = texture2D( map, vMapUv );
-              if (vIsBody > 0.5) {
-                diffuseColor.rgb = vLiveryColor;
-              } else if (vIsTire > 0.5) {
-                if (texColor.r > 0.45 && texColor.r > (texColor.g + texColor.b) * 1.2) {
-                  diffuseColor.rgb = vec3(0.12, 0.12, 0.13);
-                } else {
-                  diffuseColor = texColor;
-                }
-              } else {
-                diffuseColor.rgb = vec3(0.08, 0.08, 0.09);
-              }
-            #else
-              if (vIsBody > 0.5) {
-                diffuseColor.rgb = vLiveryColor;
-              } else {
-                diffuseColor.rgb = vec3(0.08, 0.08, 0.09);
-              }
-            #endif`
-          );
-        };
-
-        child.material = mat;
-      }
-    });
-
-    carSubGroup.add(model);
-
-    // Apply 3D Decals
-    if (this.f1DecalGeometries) {
-      const decalMat = new THREE.MeshBasicMaterial({
-        map: numTex,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthTest: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -4,
-        polygonOffsetUnits: -4,
-      });
-
-      Object.keys(F1_DECAL_CONFIG).forEach((k) => {
-        const geo = this.f1DecalGeometries[k];
-        if (geo) {
-          const decalMesh = new THREE.Mesh(geo, decalMat);
-          decalMesh.renderOrder = 999;
-          carSubGroup.add(decalMesh);
-        }
-      });
-    }
-
-    // Orient car with nose pointing right (+X) and rear wing on left (-X)
-    carSubGroup.rotation.z = Math.PI;
-    group.add(carSubGroup);
-
-    return group;
-  }
-
-  getCarSideviewDataUrl(teamIdx = 0, isPlayer = false, carNumber = 1) {
-    const key = `${isPlayer ? 'p' : 'c'}_${teamIdx}_${carNumber}`;
-    if (this.cache.has(key)) {
-      return this.cache.get(key);
-    }
-
-    if (!this.isReady || !this.renderer || !this.scene || !this.camera) {
-      return null;
-    }
-
-    try {
-      const carMesh = this.buildCarMesh(teamIdx, isPlayer, carNumber);
-      if (!carMesh) return null;
-
-      this.scene.add(carMesh);
+      const drawStart = performance.now();
       this.renderer.render(this.scene, this.camera);
-      const dataUrl = this.renderer.domElement.toDataURL('image/png');
-      this.scene.remove(carMesh);
-
-      // Clean up geometries and materials created for this snapshot
-      carMesh.traverse((child) => {
-        if (child.isMesh) {
-          if (child.geometry && child.geometry !== this.f1DecalGeometries?.[child.name]) {
-            child.geometry.dispose();
-          }
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach((m) => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        }
-      });
-
-      this.cache.set(key, dataUrl);
-      return dataUrl;
+      drawMs = performance.now() - drawStart;
+      const blob = await this.capturePreviewBlob();
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        this.cache.set(key, url);
+        for (const fn of this.previewListeners) fn(key, url);
+      }
     } catch (err) {
       console.warn('Error rendering 3D car side view:', err);
-      return null;
+    } finally {
+      if (compileMs + drawMs > 8) {
+        console.info(`[BACKGROUND] Preview ${key}: compile ${compileMs.toFixed(1)}ms | draw ${drawMs.toFixed(1)}ms`);
+      }
+      if (mesh) this.scene.remove(mesh);
+      if (!deferred) this.pending.delete(key);
+      this.busy = false;
+      this.scheduleNext();
     }
   }
 }

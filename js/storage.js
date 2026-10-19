@@ -4,6 +4,7 @@ const KEY_BRAIN = 'ai-racer:best-brain:v1';
 const KEY_STATE = 'ai-racer:training-state:v2';
 const KEY_BACKUP = 'ai-racer:training-state:backup';
 const KEY_ANCHOR = 'ai-racer:generation-anchor';
+const populationSaveCache = new WeakMap();
 
 function pack(best, layers) {
   return {
@@ -78,9 +79,15 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
     }
 
     // Save all genomes compactly (4 decimal places to stay lean and avoid quota limits)
-    const currentGenomes = simState.cars
-      ? simState.cars.map((c) => Array.from(c.brain.genome, (v) => +v.toFixed(4)))
-      : [];
+    // Network weights are immutable during a generation; avoid rounding every weight on each save.
+    let cachedPopulation = populationSaveCache.get(simState);
+    if (isExplicitResetOrOverride || !cachedPopulation || cachedPopulation.cars !== simState.cars ||
+      cachedPopulation.generation !== simState.generation) {
+      cachedPopulation = { cars: simState.cars, generation: simState.generation,
+        genomes: simState.cars ? simState.cars.map((c) => Array.from(c.brain.genome, (v) => +v.toFixed(4))) : [] };
+      populationSaveCache.set(simState, cachedPopulation);
+    }
+    const currentGenomes = cachedPopulation.genomes;
 
     // Ensure best brain is always populated (fall back to leader or first car)
     const bestToSave = simState.allTimeBest || (simState.leader ? {
@@ -92,6 +99,8 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
 
     const payload = {
       version: 3,
+      capturedPresets: simState.capturedPresets || [],
+      captureEnabled: simState.captureEnabled === true,
       generation: simState.generation,
       history: (simState.history || []).slice(-200),
       bestLapEver: Number.isFinite(simState.bestLapEver) ? simState.bestLapEver : null,
@@ -130,11 +139,28 @@ export function loadTrainingState(layers) {
   const anchorGen = parseInt(localStorage.getItem(KEY_ANCHOR) || '0', 10);
   const keysToTry = [KEY_STATE, KEY_BACKUP, 'ai-racer:training-state:v1', 'ai-racer:training-state'];
   let raw = null;
+  let data = null;
 
   for (const k of keysToTry) {
     try {
       const val = localStorage.getItem(k);
       if (val && val.length > 10) {
+        let candidate;
+        try {
+          candidate = JSON.parse(val);
+        } catch {
+          // Only attempt partial recovery after all intact backups have been tried.
+          raw ??= val;
+          continue;
+        }
+        if (!candidate || !Number.isInteger(candidate.generation) || candidate.generation < 1) continue;
+        if (candidate.allTimeBest) {
+          try { validate(candidate.allTimeBest, layers); } catch { continue; }
+        }
+        if (candidate.currentGenomes != null && (!Array.isArray(candidate.currentGenomes) ||
+          candidate.currentGenomes.some((g) => !Array.isArray(g) ||
+            g.length !== NeuralNetwork.genomeSize(layers) || g.some((v) => !Number.isFinite(v))))) continue;
+        data = candidate;
         raw = val;
         break;
       }
@@ -161,9 +187,8 @@ export function loadTrainingState(layers) {
   }
 
   try {
-    let data = null;
     try {
-      data = JSON.parse(raw);
+      data ??= JSON.parse(raw);
     } catch (parseErr) {
       console.warn('Corrupted/truncated JSON in training state, attempting regex rescue:', parseErr);
       const genMatch = raw.match(/"generation"\s*:\s*(\d+)/);
@@ -192,7 +217,7 @@ export function loadTrainingState(layers) {
       const expectedSize = NeuralNetwork.genomeSize(layers);
       const validGenomes = [];
       for (const g of data.currentGenomes) {
-        if (Array.isArray(g) && g.length === expectedSize) {
+        if (Array.isArray(g) && g.length === expectedSize && g.every(Number.isFinite)) {
           validGenomes.push(Float32Array.from(g));
         }
       }
@@ -203,14 +228,14 @@ export function loadTrainingState(layers) {
 
     const resolvedGen = Math.max(1, data.generation || 1, anchorGen || 1);
 
-    let loadedBestLap = data.bestLapEver ?? Infinity;
-    if (typeof loadedBestLap === 'number' && loadedBestLap < 8.80) {
-      loadedBestLap = Infinity;
-    }
+    const loadedBestLap = Number.isFinite(data.bestLapEver) && data.bestLapEver > 0
+      ? data.bestLapEver : Infinity;
     const hasRealTelemetry = Boolean(data.isRealCarTelemetry && Array.isArray(data.recordLapTelemetry) && data.recordLapTelemetry.length > 10 && loadedBestLap < Infinity);
 
     return {
       generation: resolvedGen,
+      capturedPresets: Array.isArray(data.capturedPresets) ? data.capturedPresets : [],
+      captureEnabled: data.captureEnabled === true,
       history: Array.isArray(data.history) ? data.history : [],
       bestLapEver: loadedBestLap,
       recordLapTelemetry: hasRealTelemetry ? data.recordLapTelemetry : null,
@@ -252,8 +277,12 @@ export function clearBrain() {
   clearTrainingState();
 }
 
-export function exportBrain(best, layers) {
-  const blob = new Blob([JSON.stringify(pack(best, layers), null, 2)], { type: 'application/json' });
+export function buildBrainExport(best, layers, { track, capturedPresets = [] } = {}) {
+  return { ...pack(best, layers), track, capturedPresets };
+}
+
+export function exportBrain(best, layers, captures = {}) {
+  const blob = new Blob([JSON.stringify(buildBrainExport(best, layers, captures), null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `ai-racer-brain-gen${best.generation ?? 'current'}.json`;

@@ -2616,12 +2616,13 @@ input[type='range']:disabled {
 
 /* Modal Header */
 .hyper-modal-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto 32px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   width: 100%;
   max-width: 880px;
@@ -2655,7 +2656,7 @@ input[type='range']:disabled {
 
 .hyper-modal-title h3 {
   font-family: 'Outfit', sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: #ffffff;
@@ -2705,14 +2706,13 @@ input[type='range']:disabled {
 .hub-nav-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  max-width: 540px;
-  width: 100%;
-  margin: 0 auto 12px auto;
+  width: auto;
+  margin: 0;
   background: #06080e;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 9px;
-  padding: 4px;
-  gap: 4px;
+  padding: 3px;
+  gap: 3px;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
@@ -2721,10 +2721,10 @@ input[type='range']:disabled {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 5px 10px;
   border-radius: 7px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: #cbd5e1;
@@ -3234,21 +3234,31 @@ input[type='range']:disabled {
 }
 
 /* Hub Simulation Distance / Benchmark Mode Selector */
-.hub-lap-selector-wrap {
+.hub-run-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
   background: rgba(15, 23, 42, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: 8px;
+}
+
+.hub-lap-selector-wrap {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .hub-lap-selector-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   gap: 12px;
 }
 
@@ -3256,7 +3266,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3264,15 +3274,19 @@ input[type='range']:disabled {
 }
 
 .hub-lap-hint {
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 500;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .hub-lap-chips {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 5px;
 }
 
 .hub-lap-chip {
@@ -3281,7 +3295,7 @@ input[type='range']:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 10px;
+  padding: 5px 6px;
   border-radius: 8px;
   background: rgba(30, 41, 59, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -3303,6 +3317,7 @@ input[type='range']:disabled {
 }
 
 .hub-lap-chip .chip-badge {
+  display: none;
   position: absolute;
   top: -7px;
   right: 10px;
@@ -3318,7 +3333,7 @@ input[type='range']:disabled {
 }
 
 .hub-lap-chip .chip-main {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #f1f5f9;
 }
@@ -3329,7 +3344,7 @@ input[type='range']:disabled {
 }
 
 .hub-lap-chip .chip-meta {
-  font-size: 10px;
+  font-size: 9px;
   color: #94a3b8;
   margin-top: 2px;
 }
@@ -3340,7 +3355,7 @@ input[type='range']:disabled {
 
 @media (max-width: 640px) {
   .hub-lap-chips {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
   .hub-lap-selector-header {
@@ -3350,9 +3365,35 @@ input[type='range']:disabled {
   }
 }
 
+@media (max-width: 760px) {
+  .hyper-modal-header {
+    grid-template-columns: minmax(0, 1fr) 32px;
+    gap: 6px 10px;
+  }
+  .hyper-modal-header .hub-nav-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .hyper-modal-header .btn-hub-close {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .hub-run-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .btn-hub-tab { padding: 6px 4px; font-size: 10px; }
+  .btn-hub-tab svg { display: none; }
+  .hub-lap-chip .chip-meta { display: none; }
+}
+
 /* Running Telemetry View */
 .hyper-progress-wrap {
-  margin-bottom: 11px;
+  min-width: 0;
+  margin-bottom: 0;
 }
 
 .hyper-progress-labels {
@@ -3360,14 +3401,16 @@ input[type='range']:disabled {
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .prog-label-left {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: #ffffff;
@@ -3398,7 +3441,8 @@ input[type='range']:disabled {
   align-items: center;
   gap: 8px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 10px;
+  flex-wrap: wrap;
   color: #8b949e;
 }
 
@@ -3416,7 +3460,7 @@ input[type='range']:disabled {
 }
 
 .hyper-bar {
-  height: 6px;
+  height: 3px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
@@ -3437,8 +3481,8 @@ input[type='range']:disabled {
   background: #111726;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9px;
-  padding: 8px 12px;
-  margin-bottom: 11px;
+  padding: 5px 9px;
+  margin-bottom: 8px;
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -3956,6 +4000,14 @@ input[type='range']:disabled {
     0 8px 30px rgba(0, 0, 0, 0.7),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 24px rgba(56, 189, 248, 0.03);
+}
+
+.hyper-chart-container.is-pace-mode {
+  height: clamp(350px, calc(100dvh - 385px), 560px);
+}
+
+.hyper-chart-container.is-pace-mode .hyper-chart-header {
+  flex-wrap: wrap;
 }
 
 .hyper-chart-header {
@@ -5375,13 +5427,62 @@ input[type='range']:disabled {
 }
 
 /* ===== Grand Prix All-Time Lap Record Celebration Overlay ===== */
+.race-outcomes {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border: 1px solid #293344;
+  border-radius: 10px;
+  background: #0d1420;
+  font-size: 11px;
+}
+.outcome-heading { display: flex; align-items: center; gap: 10px; color: #e2e8f0; font-weight: 700; }
+.outcome-note { color: #94a3b8; font-size: 10px; font-weight: 400; }
+.outcome-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; }
+.outcome-item { white-space: nowrap; }
+.outcome-item b { color: #f8fafc; margin-left: 3px; }
+.outcome-bar { grid-column: 1 / -1; display: flex; height: 6px; border-radius: 4px; overflow: hidden; background: #1e293b; }
+.outcome-bar span { background: currentColor; }
+.outcome-recent { grid-column: 1 / -1; }
+.crash-diagnostics { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; border-top: 1px solid #293344; padding-top: 4px; }
+.crash-diagnostics svg { flex: 0 0 140px; width: 140px; height: 52px; }
+.crash-detail { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: #cbd5e1; }
+.crash-detail strong { color: #fb7185; }
+.crash-detail b { color: #f8fafc; }
+.approach-diagnostics { grid-column: 1 / -1; position: relative; display: flex; flex-direction: column; gap: 3px; border-top: 1px solid #293344; padding-top: 4px; color: #cbd5e1; font-size: 10px; }
+.approach-diagnostics > strong { color: #38bdf8; }
+.approach-inspector > summary { cursor: pointer; color: #7dd3fc; padding: 3px 0; }
+.approach-inspector > summary:focus-visible { outline: 1px solid #38bdf8; outline-offset: 2px; }
+.approach-popover { position: absolute; bottom: calc(100% + 5px); left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; gap: 5px; padding: 10px; border: 1px solid #38bdf8; border-radius: 8px; background: #0d1726; box-shadow: 0 8px 25px #000a; }
+.approach-metric { display: grid; grid-template-columns: minmax(95px, 1fr) minmax(0, 1.25fr); align-items: center; gap: 5px; }
+.approach-metric small { display: block; color: #94a3b8; font-size: 9px; }
+.approach-metric svg { width: 100%; height: 32px; }
+.approach-axis { display: flex; justify-content: space-between; color: #94a3b8; font-size: 9px; }
+.outcome-finished { color: #34d399; }
+.outcome-crashed { color: #fb7185; }
+.outcome-stalled { color: #fbbf24; }
+.outcome-timedOut { color: #38bdf8; }
+.outcome-wrongWay { color: #c4b5fd; }
+.outcome-other { color: #94a3b8; }
+#hub-pane-train .stat-split-left:has(#hyper-stat-pop-survival) { flex: 0 0 auto; width: auto; min-width: 104px; max-width: none; }
+#hyper-stat-pop-survival { font-size: clamp(12px, 1.4vw, 20px); white-space: nowrap; }
+@media (max-width: 760px) {
+  .race-outcomes { grid-template-columns: 1fr; font-size: 10px; }
+  .outcome-legend { justify-content: flex-start; }
+  .outcome-heading { flex-wrap: wrap; gap: 4px 8px; }
+}
+
 .record-celebration-overlay {
   position: absolute;
   inset: 0;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
   pointer-events: none;
   z-index: 110;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   opacity: 0;
   visibility: hidden;
@@ -5395,6 +5496,7 @@ input[type='range']:disabled {
 }
 
 .record-vignette-pulse {
+  display: none;
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(168, 85, 247, 0.22) 75%, rgba(147, 51, 234, 0.42) 100%);
@@ -5409,16 +5511,14 @@ input[type='range']:disabled {
 
 .record-card {
   position: relative;
-  max-width: 580px;
-  width: 90%;
-  padding: 26px 36px;
+  max-width: 460px;
+  width: calc(100% - 32px);
+  padding: 16px 22px;
   background: rgba(8, 12, 22, 0.94);
   border: 2px solid rgba(192, 132, 252, 0.85);
   border-radius: 22px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.85), 0 0 50px rgba(192, 132, 252, 0.45), inset 0 1px 2px rgba(255, 255, 255, 0.3);
   text-align: center;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
   transform: scale(0.7) translateY(-35px);
   opacity: 0;
   transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
@@ -5436,7 +5536,7 @@ input[type='range']:disabled {
 
 .record-celebration-overlay.is-overall-record .record-card {
   border: 2px solid rgba(192, 132, 252, 0.85);
-  animation: overallRecordCardGlow 2.5s ease-in-out infinite alternate;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.65), 0 0 28px rgba(192, 132, 252, 0.4);
 }
 
 @keyframes overallRecordCardGlow {
@@ -5483,7 +5583,7 @@ input[type='range']:disabled {
 
 .record-celebration-overlay.is-race-fastest .record-card {
   border: 2px solid rgba(56, 189, 248, 0.85);
-  animation: raceFastestCardGlow 2.5s ease-in-out infinite alternate;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.65), 0 0 28px rgba(56, 189, 248, 0.4);
 }
 
 @keyframes raceFastestCardGlow {
@@ -5545,9 +5645,9 @@ input[type='range']:disabled {
   gap: 10px;
   margin-bottom: 6px;
   font-family: var(--font-display, "Outfit", sans-serif);
-  font-size: 13px;
+  font-size: clamp(10px, 2.4vw, 12px);
   font-weight: 800;
-  letter-spacing: 0.20em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -5566,13 +5666,13 @@ input[type='range']:disabled {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 16px;
-  margin: 2px 0 12px;
+  gap: 12px;
+  margin: 2px 0 6px;
 }
 
 .record-time-digits {
   font-family: var(--mono, "JetBrains Mono", monospace);
-  font-size: 74px;
+  font-size: clamp(36px, 9vw, 54px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -5581,21 +5681,36 @@ input[type='range']:disabled {
 
 .record-delta-chip {
   font-family: var(--mono, "JetBrains Mono", monospace);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 800;
   padding: 4px 12px;
   border-radius: 9999px;
   transform: translateY(-8px);
 }
 
+.record-car-preview {
+  width: min(200px, 100%);
+  height: 56px;
+  margin: 0 auto 6px;
+}
+
+.record-car-preview .car-sideview-img,
+.record-car-preview .car-sideview-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .record-meta-bar {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  font-size: 12.5px;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   color: #cbd5e1;
 }
 
@@ -5613,6 +5728,108 @@ input[type='range']:disabled {
 .record-meta-label {
   color: #94a3b8;
   font-size: 11px;
+}
+
+/* Keep the training dashboard within one viewport; charts consume the remaining height. */
+.hyper-modal:has(#hub-pane-train.active) {
+  overflow: hidden;
+  padding: clamp(6px, 1.2dvh, 14px) clamp(10px, 2vw, 24px);
+}
+
+.hyper-modal:has(#hub-pane-train.active) .hyper-modal-header,
+#hub-pane-train .hub-run-toolbar,
+#hub-pane-train .hyper-health-banner,
+#hub-pane-train .hyper-stats-grid,
+#hub-pane-train .hub-action-row {
+  flex-shrink: 0;
+}
+
+#hub-pane-train .hyper-stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, clamp(70px, 14dvh, 108px));
+  flex: 0 0 auto;
+  min-height: 0;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+#hub-pane-train .hyper-stats-grid .stat {
+  grid-column: auto;
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+/* Overview on the left, portrait analysis panel on the right. */
+#hub-pane-train .training-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 10px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+#hub-pane-train .training-overview { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#hub-pane-train .race-outcomes { grid-template-columns: 1fr; gap: 8px; margin-bottom: 0; flex: 1 1 0; min-height: 0; align-content: start; padding: 10px; }
+#hub-pane-train .outcome-heading { flex-wrap: wrap; gap: 3px 8px; }
+#hub-pane-train .outcome-legend { justify-content: flex-start; gap: 3px 10px; }
+#hub-pane-train .crash-diagnostics { gap: 10px; padding: 8px 0; }
+#hub-pane-train .crash-diagnostics svg { width: 120px; flex-basis: 120px; height: 76px; }
+#hub-pane-train .crash-detail { font-size: 10px; }
+#hub-pane-train .hyper-chart-header { flex-direction: column; align-items: stretch; }
+#hub-pane-train .chart-tab-group { justify-content: space-between; }
+#hub-pane-train .chart-kpi-strip { justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+
+#hub-pane-train .stat.stat-square .stat-header { margin-bottom: 2px; }
+#hub-pane-train .stat.stat-square .stat-square-body { gap: 3px; }
+#hub-pane-train .stat.stat-square .stat-value { font-size: clamp(19px, 3.3dvh, 25px); }
+#hub-pane-train .stat.stat-split { gap: 5px; }
+#hub-pane-train .stat.stat-split .stat-split-left {
+  flex-basis: 82px;
+  width: 82px;
+  min-width: 0;
+  max-width: 100%;
+}
+#hub-pane-train .stat.stat-split .stat-split-right { min-height: 0; }
+#hub-pane-train .stat.stat-split .tile-split-canvas { height: 100%; }
+
+#hub-pane-train .hyper-chart-container,
+#hub-pane-train .hyper-chart-container.is-pace-mode {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+  margin-bottom: 0;
+  padding: 7px 10px 5px;
+}
+
+#hub-pane-train .hyper-chart-header {
+  flex-shrink: 0;
+  margin-bottom: 5px;
+  gap: 5px 10px;
+}
+
+#hub-pane-train .hub-action-row {
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+#hub-pane-train .hub-action-row button {
+  min-width: 0;
+  padding: 8px;
+  font-size: clamp(9px, 1.1vw, 12px);
+}
+
+@media (max-width: 600px) {
+  #hub-pane-train .training-workspace { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 5px; }
+  #hub-pane-train .hyper-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #hub-pane-train .hyper-stats-grid .stat { height: auto; padding: 4px 6px; }
+  #hub-pane-train .stat.stat-square .stat-value { font-size: 18px; }
+  #hub-pane-train .stat .stat-label { font-size: 8px; }
+  #hub-pane-train .stat .trend-badge { font-size: 7px; padding: 1px 4px; }
+  #hub-pane-train .health-message { font-size: 9px; }
+  #hub-pane-train .hub-action-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #hub-pane-train .hub-action-row .btn-hub-primary { grid-column: span 2; }
+  #hub-pane-train .chart-kpi-strip { gap: 7px; padding: 2px 5px; }
 }
 
 /* Top HUD Lap Box Celebration Flash */

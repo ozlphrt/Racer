@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AI Racer · Neuroevolution Car Racing Lab</title>
   <meta name="description" content="Watch a population of neural-network-driven cars learn to stay on track and race faster every generation with a genetic algorithm, live in your browser.">
+  <meta name="application-version" content="1.5.0">
   <meta name="theme-color" content="#05070f">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -72,6 +73,7 @@
             <span class="record-time-digits" id="record-overlay-time">11.64s</span>
             <div class="record-delta-chip" id="record-overlay-delta">-0.32s</div>
           </div>
+          <div class="record-car-preview" id="record-overlay-car-preview" role="img" aria-label="Record-setting car"></div>
           <div class="record-meta-bar">
             <span class="record-car-name" id="record-overlay-car">CAR #3</span>
             <span class="record-meta-dot">·</span>
@@ -450,13 +452,13 @@
           <!-- AI Generation Presets Widget (Stacked directly above Training Hub) -->
           <div class="gen-dial-widget" id="gen-dial-widget">
             <div class="gen-dial-bar">
-              <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="Pre-trained AI Models" title="Select Pre-trained AI Model (1G - 130kG)">
+              <button class="gen-dial-btn glass" id="btn-gen-dial" type="button" aria-expanded="false" aria-controls="gen-dial-popover" aria-label="Captured milestone brains" title="Replay a tested milestone brain">
                 <svg class="gen-dial-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
                   <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
                   <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
                 </svg>
-                <span class="gen-dial-label" id="gen-dial-label">Pre-trained AI</span>
+                <span class="gen-dial-label" id="gen-dial-label">Captured brains (0)</span>
                 <svg class="gen-dial-chevron" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
@@ -464,18 +466,19 @@
             </div>
 
             <!-- Dial Menu Popover Dropdown (Opens Upwards) -->
-            <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="Pre-trained AI Models" hidden>
+            <div class="gen-dial-popover glass" id="gen-dial-popover" role="region" aria-label="Captured milestone brains" hidden>
               <div class="gen-dial-popover-header">
                 <div class="gen-dial-header-title">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
                     <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
                   </svg>
-                  <span>PRE-TRAINED AI MODELS</span>
+                  <span>TESTED MILESTONE BRAINS</span>
                 </div>
-                <span class="gen-dial-header-badge">13 PRESETS</span>
+                <span class="gen-dial-header-badge" id="captured-presets-count">0 CAPTURED</span>
               </div>
               <div class="gen-dial-preset-list" id="gen-presets-track"></div>
+              <button class="gen-dial-item" id="btn-export-presets" type="button" disabled>Export captured brains</button>
             </div>
           </div>
 
@@ -654,10 +657,10 @@
             </svg>
           </div>
           <div class="welcome-card-badge">INSTANT ACTION</div>
-          <h3 class="welcome-card-h3">Pick Pre-trained AI</h3>
-          <p class="welcome-card-desc">Jump straight to master-level driving (e.g. <strong>Gen 100k or 130k</strong>) to watch cars carve apexes, draft, and hit top speeds of 275 km/h.</p>
+          <h3 class="welcome-card-h3">Replay Captured Brains</h3>
+          <p class="welcome-card-desc">Replay bundled, organically tested milestone brains immediately. Compare their measured results, or capture new milestones through your own training.</p>
           <button class="welcome-card-btn btn-action-pretrained" id="btn-guide-load-ai" type="button">
-            <span>🧠 Pick Pre-trained Model</span>
+            <span>🧠 View Captured Brains</span>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </div>
@@ -728,18 +731,9 @@
           <div>
             <div class="hyper-title-row">
               <h3>NEURAL TRAINING HUB</h3>
-              <span class="hub-version-badge">HEADLESS v2.4</span>
             </div>
-            <p class="tagline">High-Throughput Evolutionary Simulation · Multi-Threaded Physics</p>
           </div>
         </div>
-        <button class="btn-hub-close" id="btn-hyper-close" type="button" aria-label="Close modal">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
 
       <!-- Hub Section Navigation Tabs -->
       <div class="hub-nav-tabs" role="tablist">
@@ -767,11 +761,20 @@
         </button>
       </div>
 
+        <button class="btn-hub-close" id="btn-hyper-close" type="button" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
       <div class="hub-tab-body">
         <!-- ================= SECTION 1: TRAIN YOURSELF ================= -->
         <div class="hub-pane active" id="hub-pane-train">
           <!-- Fast-Forward Continuous Simulation Dashboard -->
           <div class="hyper-running" id="hyper-running-view">
+            <div class="hub-run-toolbar">
             <!-- Hub Simulation Distance & Benchmark Mode Selector -->
             <div class="hub-lap-selector-wrap">
               <div class="hub-lap-selector-header">
@@ -780,23 +783,22 @@
                     <circle cx="12" cy="12" r="10"></circle>
                     <polyline points="12 6 12 12 16 14"></polyline>
                   </svg>
-                  <span class="hub-lap-title">GENERATION BENCHMARK MODE</span>
+                  <span class="hub-lap-title">Race distance</span>
                 </div>
-                <span class="hub-lap-hint" id="hub-lap-hint">Lap 1 Launch + Lap 2 Flying Benchmark (Matches Live GP)</span>
+                <span class="hub-lap-hint" id="hub-lap-hint">5-Lap Full Race Distance (Complete Grand Prix Simulation)</span>
               </div>
-              <div class="hub-lap-chips" id="hub-lap-chips" role="radiogroup" aria-label="Simulation Lap Distance">
+              <div class="hub-lap-chips" id="hub-lap-chips" role="radiogroup" aria-label="Simulation Lap Distance" aria-describedby="hub-lap-hint">
                 <button class="hub-lap-chip" data-laps="1" type="button" role="radio" aria-checked="false" title="1-Lap Sprint (~8.0 gen/s) · Standing start from grid">
                   <span class="chip-main">1 Lap</span>
-                  <span class="chip-meta">Sprint · ~8 gen/s</span>
+                  <span class="chip-meta">Sprint</span>
                 </button>
-                <button class="hub-lap-chip active" data-laps="2" type="button" role="radio" aria-checked="true" title="2-Lap Flying Benchmark (~4.7 gen/s) · Lap 1 Launch + Lap 2 Flying Lap (Matches Live GP)">
-                  <span class="chip-badge">RECOMMENDED</span>
+                <button class="hub-lap-chip" data-laps="2" type="button" role="radio" aria-checked="false" title="2-Lap Flying Benchmark · Lap 1 Launch + Lap 2 Flying Lap">
                   <span class="chip-main">2 Laps</span>
-                  <span class="chip-meta">Flying Benchmark · ~4.7 gen/s</span>
+                  <span class="chip-meta">Flying lap</span>
                 </button>
-                <button class="hub-lap-chip" data-laps="5" type="button" role="radio" aria-checked="false" title="5-Lap Full Grand Prix (~1.7 gen/s) · Full race distance parity">
+                <button class="hub-lap-chip active" data-laps="5" type="button" role="radio" aria-checked="true" title="5-Lap Grand Prix · Full race endurance">
                   <span class="chip-main">5 Laps</span>
-                  <span class="chip-meta">Full GP · ~1.7 gen/s</span>
+                  <span class="chip-meta">Full GP</span>
                 </button>
               </div>
             </div>
@@ -814,6 +816,7 @@
               </div>
               <div class="hyper-bar"><div class="hyper-bar-fill" id="hyper-bar-fill" style="width: 100%;"></div></div>
             </div>
+            </div>
 
             <!-- AI Training Health Diagnostic Banner -->
             <div class="hyper-health-banner" id="hyper-health-banner">
@@ -828,41 +831,10 @@
               </div>
             </div>
 
+            <div class="training-workspace">
+            <div class="training-overview">
             <div class="hyper-stats-grid">
-              <!-- Tile 1: AI Competency (Span 3 - Balanced Square Card) -->
-              <div class="stat stat-trend stat-square stat-col-3">
-                <div class="stat-header">
-                  <span class="stat-label">AI Competency</span>
-                </div>
-                <div class="stat-square-body">
-                  <span class="stat-value highlight-num" id="hyper-quality-val">68/100</span>
-                  <span class="trend-badge improving" id="hyper-quality-tier">Apex Braking</span>
-                </div>
-              </div>
-
-              <!-- Tile 2: Peak Fitness (Span 3 - Balanced Square Card) -->
-              <div class="stat stat-trend stat-square stat-col-3">
-                <div class="stat-header">
-                  <span class="stat-label">Peak Fitness</span>
-                </div>
-                <div class="stat-square-body">
-                  <span class="stat-value highlight-num" id="hyper-stat-fitness">–</span>
-                  <span class="trend-badge" id="hyper-delta-fitness">–</span>
-                </div>
-              </div>
-
-              <!-- Tile 3: Corner Straightness (Span 3 - Balanced Square Card) -->
-              <div class="stat stat-trend stat-square stat-col-3">
-                <div class="stat-header">
-                  <span class="stat-label">Corner Straightness</span>
-                </div>
-                <div class="stat-square-body">
-                  <span class="stat-value highlight-num" id="hyper-stat-curvature">–</span>
-                  <span class="trend-badge" id="hyper-delta-curvature">–</span>
-                </div>
-              </div>
-
-              <!-- Tile 4: Fastest Lap Record (Split Layout: Left Text, Right 5k Waterfall) -->
+              <!-- Peak pace -->
               <div class="stat stat-trend stat-split stat-col-3">
                 <div class="stat-split-left">
                   <div class="stat-header">
@@ -876,7 +848,7 @@
                 </div>
               </div>
 
-              <!-- Tile 5: Pack Pace & Gap to Leader (Span 3 - Square Card) -->
+              <!-- Population pace -->
               <div class="stat stat-trend stat-square stat-col-3">
                 <div class="stat-header">
                   <span class="stat-label">Pack Pace</span>
@@ -887,11 +859,11 @@
                 </div>
               </div>
 
-              <!-- Tile 6: Grid Survival (Split Layout: Left Text, Right 0-100% Graph - Span 3) -->
+              <!-- Reliability -->
               <div class="stat stat-trend stat-split stat-col-3 stat-wide-mobile">
                 <div class="stat-split-left">
                   <div class="stat-header">
-                    <span class="stat-label">Grid Survival</span>
+                    <span class="stat-label">Race Completion</span>
                   </div>
                   <span class="stat-value highlight-num" id="hyper-stat-pop-survival">–</span>
                   <span class="trend-badge" id="hyper-delta-survival">–</span>
@@ -901,18 +873,7 @@
                 </div>
               </div>
 
-              <!-- Tile 7: Convergence Stability (Span 3 - Square Card) -->
-              <div class="stat stat-trend stat-square stat-col-3">
-                <div class="stat-header">
-                  <span class="stat-label">Convergence Stability</span>
-                </div>
-                <div class="stat-square-body">
-                  <span class="stat-value highlight-num" id="hyper-stat-stagnation">94%</span>
-                  <span class="trend-badge improving" id="hyper-delta-stagnation">Locked · Steady</span>
-                </div>
-              </div>
-
-              <!-- Tile 8: Genetic Diversity (Split Layout: Left Text, Right Target Range Gauge) -->
+              <!-- Exploration -->
               <div class="stat stat-trend stat-split stat-col-3">
                 <div class="stat-split-left">
                   <div class="stat-header">
@@ -927,6 +888,12 @@
               </div>
             </div>
 
+            <section class="race-outcomes" id="hyper-race-outcomes" aria-label="Race outcome breakdown">
+              <span class="outcome-heading">Race outcomes</span>
+              <span class="outcome-note">Breakdown available after the next completed race.</span>
+            </section>
+            </div>
+
             <div class="hyper-chart-container">
               <div class="hyper-chart-header">
                 <div class="chart-tab-group" role="tablist" id="hyper-chart-tabs">
@@ -938,6 +905,8 @@
                 <div class="chart-kpi-strip" id="hyper-chart-kpis"></div>
               </div>
               <canvas id="hyper-chart-canvas" class="chart-canvas"></canvas>
+            </div>
+
             </div>
 
             <div class="hub-action-row">
@@ -1108,7 +1077,7 @@
           <!-- Evolution & Storage Insights Summary -->
           <div class="hub-insights-grid">
             <div class="stat"><span class="stat-label">Gen Count</span><span class="stat-value" id="hub-stat-gen">1</span></div>
-            <div class="stat"><span class="stat-label">Best Fitness</span><span class="stat-value highlight-num" id="hub-stat-fit">–</span></div>
+            <div class="stat"><span class="stat-label">Peak Fitness</span><span class="stat-value highlight-num" id="hub-stat-fit">–</span><small class="outcome-note">Historical maximum · varies with race distance</small></div>
             <div class="stat"><span class="stat-label">Record Lap</span><span class="stat-value" id="hub-stat-lap">–</span></div>
             <div class="stat"><span class="stat-label">Clean Rate</span><span class="stat-value" id="hub-stat-clean">100%</span></div>
           </div>
@@ -1151,16 +1120,16 @@
           <span class="compare-section-label">QUICK MATCHUPS</span>
           <div class="compare-quick-presets">
             <button class="btn-quick-matchup" id="btn-matchup-all" type="button">
-              <span class="btn-quick-matchup-name">All Eras (6)</span>
+              <span class="btn-quick-matchup-name">All Captured</span>
             </button>
             <button class="btn-quick-matchup" id="btn-matchup-rookie" type="button">
-              <span class="btn-quick-matchup-name">Rookie vs Apex</span>
+              <span class="btn-quick-matchup-name">First vs Latest</span>
             </button>
             <button class="btn-quick-matchup" id="btn-matchup-champs" type="button">
-              <span class="btn-quick-matchup-name">Champions League</span>
+              <span class="btn-quick-matchup-name">Latest Five</span>
             </button>
             <button class="btn-quick-matchup" id="btn-matchup-live" type="button">
-              <span class="btn-quick-matchup-name">Live vs Titans</span>
+              <span class="btn-quick-matchup-name">Latest Two</span>
             </button>
           </div>
         </div>
@@ -1177,7 +1146,7 @@
                   <th class="th-lap" style="width: 105px; text-align: right;">BEST LAP</th>
                   <th class="th-speed" style="width: 105px; text-align: right;">TOP SPEED</th>
                   <th class="th-completion" style="width: 100px; text-align: right;">COMPLETION</th>
-                  <th class="th-rating" style="width: 75px; text-align: center;">GRADE</th>
+                  <th class="th-rating" style="width: 75px; text-align: center;">RESULT</th>
                 </tr>
               </thead>
               <tbody id="compare-matrix-tbody">
@@ -1191,8 +1160,8 @@
       <!-- Modal Footer -->
       <div class="compare-footer">
         <div class="compare-footer-info">
-          <span class="compare-selected-badge" id="compare-selected-badge">4 ERAS</span>
-          <span class="compare-selected-count" id="compare-selected-summary">40 Cars on Grid · 10 per era</span>
+          <span class="compare-selected-badge" id="compare-selected-badge">0 ERAS</span>
+          <span class="compare-selected-count" id="compare-selected-summary">No tested milestones selected</span>
         </div>
         <div class="compare-footer-actions">
           <button class="btn-compare-cancel" id="btn-cancel-compare" type="button">Close</button>

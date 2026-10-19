@@ -3,6 +3,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 import { CONFIG } from './config.js';
+import { getRenderPose } from './renderPose.js';
+import { batchStaticMeshes, batchSceneryInstances } from './staticBatch.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RAY_ANGLES } from './car.js';
 import { audio } from './audio.js';
 import { TireBarrierSystem } from './tireBarriers.js';
@@ -10,11 +13,11 @@ import { carSideviewRenderer } from './carSideviewRenderer.js';
 
 // F1 Number Decals Configuration (Calibrated in 3D Decal Studio)
 export const F1_DECAL_CONFIG = {
-  front: { posX: -5.58, posY: 0.01,  posZ: 3.02, scaleX: 2.6,  scaleY: 1.7,  rotX: 70,  rotY: 0,   rotZ: -90 },
+  front: { posX: -10.05, posY: 0.05, posZ: 1,    scaleX: 4.35, scaleY: 2.45, rotX: 21,  rotY: -3,  rotZ: -90 },
   top:   { posX: 0.82,  posY: 0.24,  posZ: 3.29, scaleX: 3.75, scaleY: 3.9,  rotX: 0,   rotY: 10,  rotZ: -90 },
   rear:  { posX: 12.14, posY: 0.03,  posZ: 4.24, scaleX: 3.45, scaleY: 2.75, rotX: 5,   rotY: 0,   rotZ: 90 },
-  left:  { posX: 5.1,   posY: -1.05, posZ: 2.06, scaleX: 3.25, scaleY: 2.85, rotX: 90,  rotY: 0,   rotZ: 0 },
-  right: { posX: 4.3,   posY: 2.0,   posZ: 1.84, scaleX: 3.0,  scaleY: 2.3,  rotX: -90, rotY: 180, rotZ: 0 }
+  left:  { posX: 5.4,   posY: -1.7,  posZ: 2.4,  scaleX: 4.4,  scaleY: 3.45, rotX: 90,  rotY: 0,   rotZ: 0 },
+  right: { posX: 4.2,   posY: 1.9,   posZ: 2.44, scaleX: 4.75, scaleY: 3.45, rotX: -90, rotY: 180, rotZ: 0 }
 };
 
 // Authentic F1 Racing Numbers (Decoupled from positions & grid slots)
@@ -1107,6 +1110,10 @@ export class Renderer3D {
 
   getWaterBodies() {
     if (!this.track) return { lakes: [], river: [] };
+    // Terrain probes share static water geometry instead of allocating 63 objects per call.
+    if (this._waterBodiesTrack === this.track && this._waterBodiesBounds === this.track.bounds) {
+      return this._waterBodies;
+    }
     const b = this.track.bounds;
     const span = Math.max(b.w, b.h);
     const cx = b.cx;
@@ -1141,7 +1148,10 @@ export class Renderer3D {
       river.push({ x: px, y: py, waterZ, width: 46.0 + Math.sin(u * 5) * 10 });
     }
 
-    return { lakes, river };
+    this._waterBodiesTrack = this.track;
+    this._waterBodiesBounds = this.track.bounds;
+    this._waterBodies = { lakes, river };
+    return this._waterBodies;
   }
 
   getTerrainHeight(x, y) {
@@ -2634,6 +2644,7 @@ export class Renderer3D {
     this.lapPlateTexture.anisotropy = Math.min(16, this.renderer?.capabilities?.getMaxAnisotropy?.() || 8);
     this.lapPlateTexture.minFilter = THREE.LinearFilter;
     this.lapPlateTexture.magFilter = THREE.LinearFilter;
+    this.lapPlateTexture.generateMipmaps = false;
 
     const displayMat = new THREE.MeshStandardMaterial({
       map: this.lapPlateTexture,
@@ -2667,6 +2678,7 @@ export class Renderer3D {
     this._lastLapPlateKey = '';
     this.updateLapPlate(null, null);
 
+    batchStaticMeshes(gantryGroup);
     this.decorGroup.add(gantryGroup);
     this.setupStartingGridBoxes();
   }
@@ -2753,6 +2765,7 @@ export class Renderer3D {
       this.gridBoxesGroup.add(slotGroup);
     }
 
+    batchStaticMeshes(this.gridBoxesGroup);
     this.gridBoxesGroup.visible = Boolean(CONFIG.gridBox ?? true);
     this.decorGroup.add(this.gridBoxesGroup);
   }
@@ -3238,8 +3251,9 @@ export class Renderer3D {
       ? (this._recordType === 'race' ? '#38bdf8' : '#c084fc')
       : (isFinal ? '#fbbf24' : (simTime < startDelay ? '#ef4444' : (lapsColor || '#38bdf8')));
 
-    const animTick = isCelebrating ? Math.floor(nowMs / 120) : 0;
-    const stateKey = `${lapsMain}|${lapsSub}|${lapsLabel}|${lapsColor}|${bestMain}|${bestSub}|${bestLabel}|${bestColor}|${topHeaderLeft}|${topHeaderCenter}|${topHeaderRight}|${accentColor}|${isFinal}|${animTick}`;
+    // The glow animates through the material above. Only repaint and upload the
+    // scoreboard texture when its actual text or styling changes.
+    const stateKey = `${lapsMain}|${lapsSub}|${lapsLabel}|${lapsColor}|${bestMain}|${bestSub}|${bestLabel}|${bestColor}|${topHeaderLeft}|${topHeaderCenter}|${topHeaderRight}|${accentColor}|${isFinal}|${isCelebrating}`;
 
     if (stateKey !== this._lastLapPlateKey) {
       this._lastLapPlateKey = stateKey;
@@ -3965,7 +3979,13 @@ export class Renderer3D {
         this.initF1DecalGeometries(gltf.scene);
         this.applyF1ModelToFleet(gltf.scene);
         this.f1Loaded = true;
-        carSideviewRenderer.init(gltf.scene, this.f1DecalGeometries, this.f1Texture);
+        carSideviewRenderer.init([
+          { teamIdx: 1, isPlayer: true, carNumber: 7, mesh: this.playerCar.children[0] },
+          ...this.carPool.map((car, i) => ({
+            teamIdx: Math.floor(i / 2) % TEAM_PALETTE.length,
+            isPlayer: false, carNumber: getCarNumber(i, false), mesh: car.children[0],
+          })),
+        ]);
       },
       undefined,
       (err) => {
@@ -3977,6 +3997,8 @@ export class Renderer3D {
 
   initF1DecalGeometries(template) {
     this.f1DecalGeometries = {};
+    this.f1MergedDecalGeometry?.dispose();
+    this.f1MergedDecalGeometry = null;
     let bodyMesh = null;
     template.traverse((c) => {
       if (c.isMesh && c.name === 'Object_6') bodyMesh = c;
@@ -4184,6 +4206,9 @@ export class Renderer3D {
     const cAcc = new THREE.Color(tm.accHex);
     const cQuad = new THREE.Color(tm.quadHex || tm.secHex);
     const numTex = this.createRaceNumberTexture(carNumber, false, isPlayer);
+    // Livery is a vertex attribute; identical body shaders can share one material.
+    if (!this.f1BodyMaterials) this.f1BodyMaterials = new Map();
+    const bodyGeometries = [];
 
     model.traverse((child) => {
       // Exclude studio background floor plane and environment sphere
@@ -4280,6 +4305,14 @@ export class Renderer3D {
         geo.setAttribute('isBody', new THREE.BufferAttribute(isBodyArr, 1));
         geo.setAttribute('isTire', new THREE.BufferAttribute(isTireArr, 1));
 
+        bodyGeometries.push(geo);
+        const materialKey = `${origMap?.uuid || ''}_${origRoughness}_${origMetalness}`;
+        const sharedMaterial = this.f1BodyMaterials.get(materialKey);
+        if (sharedMaterial) {
+          child.material = sharedMaterial;
+          return;
+        }
+
         const mat = new THREE.MeshStandardMaterial({
           map: origMap,
           roughness: origRoughness,
@@ -4289,7 +4322,6 @@ export class Renderer3D {
         mat.customProgramCacheKey = () => 'f1_ground_effect_body_v1';
 
         mat.onBeforeCompile = (shader) => {
-          shader.uniforms.decalTex = { value: numTex };
           shader.vertexShader = shader.vertexShader.replace(
             '#include <common>',
             `#include <common>
@@ -4312,7 +4344,6 @@ export class Renderer3D {
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <common>',
             `#include <common>
-            uniform sampler2D decalTex;
             varying vec3 vLiveryColor;
             varying float vIsBody;
             varying float vIsTire;
@@ -4347,9 +4378,17 @@ export class Renderer3D {
         };
 
         child.material = mat;
+        this.f1BodyMaterials.set(materialKey, mat);
       }
     });
 
+    // Body and wheel parts have identical shading; retain every triangle in one draw.
+    batchStaticMeshes(model);
+    const retainedGeometries = new Set();
+    model.traverse((child) => { if (child.isMesh) retainedGeometries.add(child.geometry); });
+    for (const geometry of bodyGeometries) {
+      if (!retainedGeometries.has(geometry)) geometry.dispose();
+    }
     carSubGroup.add(model);
 
     // Apply calibrated 3D wrapped number decals (Front, Top, Rear, Left, Right)
@@ -4365,14 +4404,15 @@ export class Renderer3D {
         polygonOffsetUnits: -4,
       });
 
-      Object.keys(F1_DECAL_CONFIG).forEach((k) => {
-        const geo = this.f1DecalGeometries[k];
-        if (geo) {
-          const decalMesh = new THREE.Mesh(geo, decalMat);
-          decalMesh.renderOrder = 999;
-          carSubGroup.add(decalMesh);
-        }
-      });
+      // All five wrapped decals use the same texture and local coordinate space.
+      if (!this.f1MergedDecalGeometry) {
+        this.f1MergedDecalGeometry = mergeGeometries(Object.values(this.f1DecalGeometries).filter(Boolean), false);
+      }
+      if (this.f1MergedDecalGeometry) {
+        const decalMesh = new THREE.Mesh(this.f1MergedDecalGeometry, decalMat);
+        decalMesh.renderOrder = 999;
+        carSubGroup.add(decalMesh);
+      }
     }
 
     // Yaw 180Â° so the car's nose points forward along velocity vector +X
@@ -5118,6 +5158,7 @@ export class Renderer3D {
     wrapper.add(cloned);
     wrapper.updateMatrixWorld(true);
 
+
     // Bake child mesh transforms relative to wrapper origin into geometry for high-performance InstancedMesh
     const parts = [];
     cloned.traverse((child) => {
@@ -5279,6 +5320,7 @@ export class Renderer3D {
     while (this.treeGroup.children.length > 0) {
       const child = this.treeGroup.children[0];
       this.treeGroup.remove(child);
+      if (child.isInstancedMesh || child.isBatchedMesh) child.dispose();
       if (!child.userData || !child.userData.isSharedTemplate) {
         child.traverse((c) => {
           if (c.geometry) c.geometry.dispose();
@@ -5376,7 +5418,10 @@ export class Renderer3D {
       });
     }
 
-    // Build InstancedMesh groups for each template's baked parts
+    // Group identical foliage materials across species, then batch the geometry
+    // with per-tree culling rather than issuing a draw for every part and cell.
+    const sceneryParts = [];
+    const sharedMaterials = new Map();
     templateAssignments.forEach((matrices, tmpl) => {
       if (!matrices || matrices.length === 0) return;
       const parts = (tmpl.userData && tmpl.userData.parts) || [];
@@ -5384,7 +5429,7 @@ export class Renderer3D {
 
       if (parts.length > 0) {
         parts.forEach((part) => {
-          let instMat = part.material;
+          let instMat = part.instancedMaterial || part.material;
           if (instMat && instMat.isMeshStandardMaterial) {
             instMat = new THREE.MeshLambertMaterial({
               color: instMat.color,
@@ -5394,17 +5439,15 @@ export class Renderer3D {
               alphaTest: instMat.alphaTest,
               side: THREE.FrontSide,
             });
+            part.instancedMaterial = instMat;
           }
-          const instMesh = new THREE.InstancedMesh(part.geometry, instMat, count);
-          for (let k = 0; k < count; k++) {
-            instMesh.setMatrixAt(k, matrices[k]);
+          if (instMat?.isMeshLambertMaterial) {
+            const key = [instMat.color.getHex(), instMat.map?.uuid, instMat.transparent,
+              instMat.opacity, instMat.alphaTest, instMat.side].join('|');
+            if (!sharedMaterials.has(key)) sharedMaterials.set(key, instMat);
+            instMat = sharedMaterials.get(key);
           }
-          instMesh.instanceMatrix.needsUpdate = true;
-          instMesh.castShadow = false;
-          instMesh.receiveShadow = false;
-          instMesh.matrixAutoUpdate = false;
-          instMesh.userData = { isSharedTemplate: true };
-          this.treeGroup.add(instMesh);
+          sceneryParts.push({ geometry: part.geometry, material: instMat, matrices });
         });
       } else {
         for (let k = 0; k < count; k++) {
@@ -5415,6 +5458,8 @@ export class Renderer3D {
         }
       }
     });
+
+    for (const batch of batchSceneryInstances(sceneryParts)) this.treeGroup.add(batch);
 
     this.treeGroup.matrixAutoUpdate = false;
     this.treeGroup.updateMatrix();
@@ -5434,7 +5479,7 @@ export class Renderer3D {
       12: { name: 'Bush-05', pack: 'shapespark', desc: 'Low Green Bush' },
     };
     window.treeCatalog = catalog;
-    console.log(`[Trees] Instanced ${catalog.length} trees across ${this.treeGroup.children.length} instanced batches. Locked 60 FPS performance.`);
+    console.log(`[Trees] Instanced ${catalog.length} trees across ${this.treeGroup.children.length} batches with individual culling.`);
   }
 
   setupRocks() {
@@ -5664,19 +5709,16 @@ export class Renderer3D {
   setupTireBarriers(sim = null) {
     if (this.tireGroup) {
       this.scene.remove(this.tireGroup);
-      if (this.tireMesh) {
-        this.tireMesh.geometry.dispose();
-        if (Array.isArray(this.tireMesh.material)) {
-          this.tireMesh.material.forEach((m) => m.dispose());
-        } else {
-          this.tireMesh.material.dispose();
-        }
-      }
+      for (const batch of this.tireBatches || []) batch.dispose();
+      this.tireGeometry?.dispose();
+      this.tireMaterial?.dispose();
     }
 
     this.tireGroup = new THREE.Group();
     this.tireDummy = new THREE.Object3D();
     this.tireColor = new THREE.Color();
+    this.tireBatches = [];
+    this.tireInstances = [];
 
     // FIA Standard safety protection tyre (Extruded ring with distinct hollow center & rounded rubber tread)
     const outerRadius = 2.10;
@@ -5735,29 +5777,40 @@ export class Renderer3D {
 
     const tires = sim?.tireBarriers?.tires || (this.track ? this.generateTiresForTrack(this.track) : []);
     this.tireCount = tires.length;
-
-    if (this.tireCount > 0) {
-      this.tireMesh = new THREE.InstancedMesh(tireGeo, tireMat, this.tireCount);
-      this.tireMesh.castShadow = false; // Disable heavy shadow-map pass for 3,862 instances
-      this.tireMesh.receiveShadow = false; // Disable expensive shadow-map sampling on 3,862 instances
-      this.tireMesh.matrixAutoUpdate = false;
-      this.tireMesh.updateMatrix();
-
-      for (let i = 0; i < this.tireCount; i++) {
-        const t = tires[i];
+    this.tireGeometry = tireGeo;
+    this.tireMaterial = tireMat;
+    const cells = new Map();
+    tires.forEach((t, index) => {
+      const key = `${Math.floor(t.x / 256)},${Math.floor(t.y / 256)}`;
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(index);
+    });
+    for (const indices of cells.values()) {
+      const batch = new THREE.InstancedMesh(tireGeo, tireMat, indices.length);
+      batch.name = 'Local tire barrier batch';
+      batch.castShadow = false;
+      batch.receiveShadow = false;
+      batch.matrixAutoUpdate = false;
+      batch.updateMatrix();
+      batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let slot = 0; slot < indices.length; slot++) {
+        const index = indices[slot], t = tires[index];
         this.tireDummy.position.set(t.x, -t.y, t.z);
         this.tireDummy.rotation.set(t.pitch || 0, t.roll || 0, -(t.yaw || 0));
-        this.tireDummy.scale.set(1, 1, 1);
+        this.tireDummy.scale.setScalar(t.scale ?? 1);
         this.tireDummy.updateMatrix();
-        this.tireMesh.setMatrixAt(i, this.tireDummy.matrix);
+        batch.setMatrixAt(slot, this.tireDummy.matrix);
 
         this.tireColor.setRGB(t.color.r, t.color.g, t.color.b);
-        this.tireMesh.setColorAt(i, this.tireColor);
+        batch.setColorAt(slot, this.tireColor);
+        this.tireInstances[index] = { batch, slot };
       }
 
-      this.tireMesh.instanceMatrix.needsUpdate = true;
-      if (this.tireMesh.instanceColor) this.tireMesh.instanceColor.needsUpdate = true;
-      this.tireGroup.add(this.tireMesh);
+      batch.instanceMatrix.needsUpdate = true;
+      if (batch.instanceColor) batch.instanceColor.needsUpdate = true;
+      batch.computeBoundingSphere();
+      this.tireBatches.push(batch);
+      this.tireGroup.add(batch);
     }
 
     this.tireGroup.matrixAutoUpdate = false;
@@ -5772,14 +5825,14 @@ export class Renderer3D {
   }
 
   updateTireBarriers(sim) {
-    if (!sim?.tireBarriers?.tires || !this.tireMesh) return;
+    if (!sim?.tireBarriers?.tires || !this.tireInstances) return;
     const tires = sim.tireBarriers.tires;
     if (tires.length !== this.tireCount) {
       this.setupTireBarriers(sim);
       return;
     }
 
-    let updated = false;
+    const updated = new Set();
     for (let i = 0; i < tires.length; i++) {
       const t = tires[i];
       if (!t.sleeping || t.needsRenderUpdate) {
@@ -5788,14 +5841,17 @@ export class Renderer3D {
         const s = t.scale !== undefined ? t.scale : 1;
         this.tireDummy.scale.set(s, s, s);
         this.tireDummy.updateMatrix();
-        this.tireMesh.setMatrixAt(i, this.tireDummy.matrix);
+        const { batch, slot } = this.tireInstances[i];
+        batch.setMatrixAt(slot, this.tireDummy.matrix);
         t.needsRenderUpdate = false;
-        updated = true;
+        updated.add(batch);
       }
     }
 
-    if (updated) {
-      this.tireMesh.instanceMatrix.needsUpdate = true;
+    for (const batch of updated) {
+      batch.instanceMatrix.needsUpdate = true;
+      // A struck tire can leave its initial cell; keep bounds correct without rebuilding batches.
+      batch.computeBoundingSphere();
     }
   }
 
@@ -5819,6 +5875,9 @@ export class Renderer3D {
     }
     if (this.treeGroup) {
       this.scene.remove(this.treeGroup);
+      this.treeGroup.traverse(child => {
+        if (child.isBatchedMesh || child.isInstancedMesh) child.dispose();
+      });
     }
     if (this.tireGroup) {
       this.scene.remove(this.tireGroup);
@@ -6034,7 +6093,16 @@ export class Renderer3D {
 
     ctx.putImageData(imgData, 0, 0);
 
-    const tex = new THREE.CanvasTexture(canvas);
+    // Blur the atlas once at creation, rather than adding a per-frame blur pass.
+    const softened = document.createElement('canvas');
+    softened.width = size;
+    softened.height = size;
+    const softCtx = softened.getContext('2d');
+    softCtx.filter = 'blur(4px)';
+    softCtx.drawImage(canvas, 0, 0);
+    softCtx.filter = 'none';
+
+    const tex = new THREE.CanvasTexture(softened);
     tex.generateMipmaps = true;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
@@ -6091,7 +6159,7 @@ export class Renderer3D {
         if (dist > 0.49) discard;
 
         // Smooth circular boundary feathering
-        float feather = smoothstep(0.49, 0.18, dist);
+        float feather = 1.0 - smoothstep(0.10, 0.49, dist);
 
         // Individual particle random rotation
         vec2 pRot = vec2(
@@ -6114,7 +6182,7 @@ export class Renderer3D {
         vec2 finalUv = quadOffset + quadUv;
 
         vec4 texColor = texture2D(uSmokeTexture, finalUv);
-        float alpha = texColor.a * feather * vAlpha * 0.38;
+        float alpha = texColor.a * feather * vAlpha * 0.68;
         if (alpha < 0.003) discard;
 
         // Subtle realistic color gradation (warm vapor core to cool atmospheric haze)
@@ -6170,8 +6238,11 @@ export class Renderer3D {
       decayRate = 0.40 + Math.random() * 0.18; // ~1.8s to 2.4s
     }
 
+    // More visible plumes without increasing the capped particle pool or lifetime.
+    baseSize *= 1.50;
+    growth *= 1.15;
     const atlasVariant = Math.floor(Math.random() * 4);
-    const alphaVal = Math.min(0.24, 0.05 + intensity * 0.18);
+    const alphaVal = Math.min(0.46, 0.10 + intensity * 0.36);
     const px = x + (Math.random() - 0.5) * spread;
     const py = y + (Math.random() - 0.5) * spread;
     const pz = z + Math.random() * 0.06;
@@ -6312,8 +6383,8 @@ export class Renderer3D {
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(this.skidPosArr, 3));
-    geo.setAttribute('alpha', new THREE.BufferAttribute(this.skidAlphaArr, 1));
+    geo.setAttribute('position', new THREE.BufferAttribute(this.skidPosArr, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('alpha', new THREE.BufferAttribute(this.skidAlphaArr, 1).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('uv', new THREE.BufferAttribute(this.skidUvArr, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.setDrawRange(0, 0);
@@ -6351,6 +6422,7 @@ export class Renderer3D {
       depthWrite: false,
       depthTest: true,
       side: THREE.DoubleSide, // Essential for dynamic ribbon quads across winding turns
+      forceSinglePass: true, // Flat ribbons need both sides, but not two transparency passes.
       blending: THREE.NormalBlending,
       polygonOffset: true,
       polygonOffsetFactor: -6.0,
@@ -6484,6 +6556,14 @@ export class Renderer3D {
         this.carPrevTires.set(car, track);
       }
 
+      // Steering demand and brake input can saturate even with good grip. Smoke
+      // requires sustained, substantial sideways travel, not a saturated score.
+      const hardSkid = car.speed >= 80 && slipMag >= 0.22 &&
+        Math.abs(car.speed * Math.sin(slipMag)) >= 25;
+      if (!hardSkid) track.hardSkidSince = null;
+      else if (track.hardSkidSince == null || car.time < track.hardSkidSince) track.hardSkidSince = car.time;
+      const emitSkidSmoke = hardSkid && car.time - track.hardSkidSince >= 0.08;
+
       // Smooth attack/decay with fast recovery when grip is restored
       const prevRInt = track.smoothRearInt || 0;
       const rRate = targetRearInt > prevRInt ? 0.85 : 0.45;
@@ -6553,8 +6633,9 @@ export class Renderer3D {
             this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1);
             this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1);
 
-            // Display smoke strictly when car is actively oversteering
-            if (oversteerInt > SKID_THRESH) {
+            // Dense smoke only during a sustained heavy sideways skid.
+            const rearSmokeInt = targetRearInt;
+            if (emitSkidSmoke && rearSmokeInt > SKID_THRESH) {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
               if (camDist < 500) {
                 track.oversteerSmokeDist = (track.oversteerSmokeDist || 0) + dLR;
@@ -6567,15 +6648,15 @@ export class Renderer3D {
 
                   // Staggered asymmetrical emission:
                   if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, oversteerInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
+                    this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, rearSmokeInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
                   }
                   if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, oversteerInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
+                    this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, rearSmokeInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
                   }
-                  if (oversteerInt > 0.45 && Math.random() < 0.70) {
+                  if (rearSmokeInt > 0.45 && Math.random() < 0.70) {
                     const rcx = (rlx + rrx) * 0.5 + (Math.random() - 0.5) * 1.2;
                     const rcy = (rly + rry) * 0.5 + (Math.random() - 0.5) * 1.2;
-                    this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, oversteerInt, 0.9, 'billow');
+                    this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, rearSmokeInt, 0.9, 'billow');
                   }
                 }
               }
@@ -6614,8 +6695,9 @@ export class Renderer3D {
             this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1);
             this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1);
 
-            // Display smoke strictly when car is actively understeering
-            if (understeerInt > SKID_THRESH) {
+            // Steering/braking demand alone must not produce front smoke.
+            const frontSmokeInt = targetFrontInt;
+            if (emitSkidSmoke && frontSmokeInt > SKID_THRESH) {
               const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
               if (camDist < 500) {
                 track.understeerSmokeDist = (track.understeerSmokeDist || 0) + dLF;
@@ -6626,15 +6708,15 @@ export class Renderer3D {
                   const carVx = car.vx || 0;
                   const carVy = -(car.vy || 0);
                   if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, understeerInt, 0.3, 'auto');
+                    this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, frontSmokeInt, 0.3, 'auto');
                   }
                   if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, understeerInt, 0.3, 'auto');
+                    this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, frontSmokeInt, 0.3, 'auto');
                   }
-                  if (understeerInt > 0.45 && Math.random() < 0.60) {
+                  if (frontSmokeInt > 0.45 && Math.random() < 0.60) {
                     const fcx = (flx + frx) * 0.5 + (Math.random() - 0.5) * 1.0;
                     const fcy = (fly + fry) * 0.5 + (Math.random() - 0.5) * 1.0;
-                    this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, understeerInt, 0.8, 'wisp');
+                    this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, frontSmokeInt, 0.8, 'wisp');
                   }
                 }
               }
@@ -6681,12 +6763,19 @@ export class Renderer3D {
       const quadsAdded = this._frameSkidQuadsAdded || 0;
       const posAttr = this.skidMesh.geometry.attributes.position;
       const alphaAttr = this.skidMesh.geometry.attributes.alpha;
-      if (quadsAdded > 0 && startHead + quadsAdded <= this.maxSkidQuads) {
-        posAttr.updateRange = { offset: startHead * 4 * 3, count: quadsAdded * 4 * 3 };
-        alphaAttr.updateRange = { offset: startHead * 4, count: quadsAdded * 4 };
+      // Keep pending ranges until Three.js uploads them, including across skipped renders.
+      if (quadsAdded > 0 && quadsAdded < this.maxSkidQuads) {
+        const tailCount = Math.min(quadsAdded, this.maxSkidQuads - startHead);
+        posAttr.addUpdateRange(startHead * 12, tailCount * 12);
+        alphaAttr.addUpdateRange(startHead * 4, tailCount * 4);
+        const wrappedCount = quadsAdded - tailCount;
+        if (wrappedCount > 0) {
+          posAttr.addUpdateRange(0, wrappedCount * 12);
+          alphaAttr.addUpdateRange(0, wrappedCount * 4);
+        }
       } else {
-        posAttr.updateRange = { offset: 0, count: -1 };
-        alphaAttr.updateRange = { offset: 0, count: -1 };
+        posAttr.addUpdateRange(0, this.skidPosArr.length);
+        alphaAttr.addUpdateRange(0, this.skidAlphaArr.length);
       }
       posAttr.needsUpdate = true;
       alphaAttr.needsUpdate = true;
@@ -6886,6 +6975,11 @@ export class Renderer3D {
   }
 
   render(sim, opts, leader) {
+    const cameraNow = performance.now();
+    const cameraDt = opts.renderDt ?? (this._cameraFrameTime === undefined ? 1 / 60 : (cameraNow - this._cameraFrameTime) / 1000);
+    this._cameraFrameTime = cameraNow;
+    const frameScale = Math.max(0, Math.min(0.1, cameraDt)) * 60;
+    const cameraBlend = factor => 1 - Math.pow(1 - factor, frameScale);
     const isNewStart = (sim && (this.lastGen !== sim.generation || (sim.time < 0.15 && (this.lastSimTime || 0) > 1.0)));
     if (isNewStart && sim) {
       this.lastGen = sim.generation;
@@ -7149,14 +7243,49 @@ export class Renderer3D {
     this.activeCameraPreset = cameraPreset;
 
     // Dynamic Action Tracker (Focus where the live battle and action is across the grid)
-    const actionPair = this.findActionFocusPair(sim, rankedCars, focusCar, opts);
-    const p1 = actionPair.carA || focusCar;
-    const p2 = actionPair.carB;
-    this.focusedCar = p1;
+    let actionPair = this.findActionFocusPair(sim, rankedCars, focusCar, opts);
+    if (cameraPreset === 'onboard') {
+      const requestedCar = opts.manual && sim.player ? sim.player : opts.manualFocusCar;
+      const attached = this._onboardCar;
+      const attachedIsActive = attached && !attached.crashed && (attached.alive || attached.finished) &&
+        (sim.cars.includes(attached) || sim.player === attached);
+      if (isNewStart || !attachedIsActive || (requestedCar && requestedCar !== attached)) {
+        this._onboardCar = requestedCar || actionPair.carA || focusCar;
+      }
+      // A mounted view cannot hop between cars whenever quantized race progress
+      // swaps P1/P2 during braking or a side-by-side corner. Keep the chassis.
+      actionPair = { carA: this._onboardCar,
+        carB: rankedCars.find(car => car !== this._onboardCar) || null };
+    } else {
+      this._onboardCar = null;
+    }
+    this.focusedCar = actionPair.carA || focusCar;
+    const p1 = getRenderPose(this.focusedCar, opts.renderAlpha);
+    const p2 = getRenderPose(actionPair.carB, opts.renderAlpha);
 
     const p1X = p1 ? p1.x : 0;
     const p1Y = p1 ? -p1.y : 0;
     const p1Angle = p1 ? -p1.angle : 0;
+
+    // Carry close tracking cameras with the same displayed translation as the
+    // chassis. Smoothing then affects framing, rather than accumulating speed-
+    // and frame-rate-dependent lag behind a moving car.
+    const closeTracking = ['chase', 'action', 'action_rear'].includes(cameraPreset) &&
+      !(cameraPreset === 'chase' && hasFinisher && !opts.manual && p1?.finished);
+    const anchor = this._cameraTrackingAnchor;
+    if (closeTracking && !isNewStart && anchor?.car === this.focusedCar &&
+      anchor.preset === cameraPreset && !this._camTransition?.active) {
+      const dx = p1X - anchor.x, dy = p1Y - anchor.y;
+      if (Math.hypot(dx, dy) < 60) {
+        this.camera.position.x += dx;
+        this.camera.position.y += dy;
+        this.controls.target.x += dx;
+        this.controls.target.y += dy;
+        if (typeof this._chaseTargetX === 'number') this._chaseTargetX += dx;
+        if (typeof this._chaseTargetY === 'number') this._chaseTargetY += dy;
+      }
+    }
+    this._cameraTrackingAnchor = { car: this.focusedCar, preset: cameraPreset, x: p1X, y: p1Y };
 
     const p2Alive = p2 && (p2.alive || p2.finished) && !p2.crashed;
     const p2X = p2Alive ? p2.x : (p1X - Math.cos(p1Angle) * 22.0);
@@ -7223,7 +7352,7 @@ export class Renderer3D {
         let diffAngle = refAngle - this._actionAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionAngle += diffAngle * 0.032;
+        this._actionAngle += diffAngle * cameraBlend(0.032);
       }
       this._lastActionFocus = p1;
 
@@ -7261,7 +7390,7 @@ export class Renderer3D {
         let diffAngle = battleAngle - this._actionRearAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionRearAngle += diffAngle * 0.032;
+        this._actionRearAngle += diffAngle * cameraBlend(0.032);
       }
       this._lastActionRearFocus = p1;
 
@@ -7305,7 +7434,7 @@ export class Renderer3D {
       const targetCar = p1;
       const cosA = Math.cos(targetCar.angle);
       const sinA = Math.sin(targetCar.angle);
-      const targetElev = this.getTerrainHeight(targetCar.x, -targetCar.y);
+      const targetElev = p1Elev;
 
       destCamX = targetCar.x - cosA * 2.0;
       destCamY = -targetCar.y + sinA * 2.0;
@@ -7316,8 +7445,6 @@ export class Renderer3D {
       destTargetZ = 2.6 + targetElev;
 
       targetFov = 44;
-      camGlide = 0.12;
-      targetGlide = 0.12;
     } else if (cameraPreset === 'heli' && focusCar) {
       // CINEMATIC AERIAL PURSUIT HELICOPTER: High aerial sky tracker framing P1 and P2
       if (typeof this._heliAngle !== 'number' || typeof this._heliTargetX !== 'number') {
@@ -7328,10 +7455,10 @@ export class Renderer3D {
         let diffAngle = battleAngle - this._heliAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._heliAngle += diffAngle * 0.020;
+        this._heliAngle += diffAngle * cameraBlend(0.020);
 
-        this._heliTargetX += (p1X - this._heliTargetX) * 0.040;
-        this._heliTargetY += (p1Y - this._heliTargetY) * 0.040;
+        this._heliTargetX += (p1X - this._heliTargetX) * cameraBlend(0.040);
+        this._heliTargetY += (p1Y - this._heliTargetY) * cameraBlend(0.040);
       }
       this._lastHeliFocus = p1;
 
@@ -7366,13 +7493,14 @@ export class Renderer3D {
 
       destCamX = cx + tx * 80 + nx * 28;
       destCamY = cy + ty * 80 + ny * 28;
-      destCamZ = 10.5;
+      destCamZ = 48.0;
 
-      const incoming = (p1 && (p1.alive || p1.finished) && !p1.crashed)
+      const incomingCar = (p1 && (p1.alive || p1.finished) && !p1.crashed)
         ? p1
         : ((this._gantryTargetCar && (this._gantryTargetCar.alive || this._gantryTargetCar.finished) && !this._gantryTargetCar.crashed)
           ? this._gantryTargetCar
           : (leader && leader.alive ? leader : null));
+      const incoming = incomingCar === p1 ? p1 : getRenderPose(incomingCar, opts.renderAlpha);
       destTargetX = incoming ? incoming.x : cx - tx * 35;
       destTargetY = incoming ? -incoming.y : cy - ty * 35;
       destTargetZ = 3.2;
@@ -7392,7 +7520,7 @@ export class Renderer3D {
 
         destCamX = cx + tx * 80 + nx * 28;
         destCamY = cy + ty * 80 + ny * 28;
-        destCamZ = 10.5;
+        destCamZ = 48.0;
 
         destTargetX = p1.x;
         destTargetY = -p1.y;
@@ -7424,8 +7552,8 @@ export class Renderer3D {
           // Dynamic adaptive position following: smoothly scales with lag distance so the car never outruns the camera
           const posDist = Math.hypot(p1X - this._chaseTargetX, p1Y - this._chaseTargetY);
           const posFollowK = Math.min(0.25, 0.090 + Math.max(0, posDist - 5.0) * 0.008);
-          this._chaseTargetX += (p1X - this._chaseTargetX) * posFollowK;
-          this._chaseTargetY += (p1Y - this._chaseTargetY) * posFollowK;
+          this._chaseTargetX += (p1X - this._chaseTargetX) * cameraBlend(posFollowK);
+          this._chaseTargetY += (p1Y - this._chaseTargetY) * cameraBlend(posFollowK);
 
           let diffAngle = targetChaseHeading - this._chaseAngle;
           while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
@@ -7433,7 +7561,7 @@ export class Renderer3D {
 
           // Adaptive angular tracking: turns smoothly with the car, accelerating through sharp bends without sudden jerks
           const angleK = Math.min(0.20, 0.085 + Math.abs(diffAngle) * 0.065);
-          this._chaseAngle += diffAngle * angleK;
+          this._chaseAngle += diffAngle * cameraBlend(angleK);
         }
         this._lastFocusCar = p1;
 
@@ -7470,7 +7598,14 @@ export class Renderer3D {
     // viewing zone, zoom-out decays gracefully back to baseline.
     // -------------------------------------------------------------
     const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
-    if (focusCar && !isOrbitActive) {
+    const isOnboardActive = cameraPreset === 'onboard' && !!p1 && !isOrbitActive;
+    const nearPlane = isOnboardActive ? 0.2 : 5;
+    if (this.camera.near !== nearPlane) {
+      this.camera.near = nearPlane;
+      this.camera.updateProjectionMatrix();
+    }
+    if (focusCar && !isOrbitActive && !isOnboardActive) {
+      this.camera.updateMatrixWorld();
       if (!this._tempNdcVec) this._tempNdcVec = new THREE.Vector3();
       const carZ = (focusCar.crashed && focusCar.alive) ? this.getTerrainHeight(p1X, p1Y) : (1.0 + p1Elev);
       this._tempNdcVec.set(p1X, p1Y, carZ).project(this.camera);
@@ -7506,8 +7641,8 @@ export class Renderer3D {
 
       // Responsive zoom-out expansion (k=0.075), ultra-smooth gentle recovery (k=0.020)
       const kFov = (targetExtraFov > this._dynamicZoomOutFov) ? 0.075 : 0.020;
-      this._dynamicZoomOutFov += (targetExtraFov - this._dynamicZoomOutFov) * kFov;
-      this._dynamicZoomOutDist += (targetExtraDist - this._dynamicZoomOutDist) * kFov;
+      this._dynamicZoomOutFov += (targetExtraFov - this._dynamicZoomOutFov) * cameraBlend(kFov);
+      this._dynamicZoomOutDist += (targetExtraDist - this._dynamicZoomOutDist) * cameraBlend(kFov);
 
       // Apply temporary smooth zoom-out to FOV
       targetFov += this._dynamicZoomOutFov;
@@ -7540,7 +7675,13 @@ export class Renderer3D {
     // -------------------------------------------------------------
     const now = performance.now();
 
-    if (this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
+    if (isOnboardActive) {
+      // A mounted camera cannot glide independently of its chassis or frame a trailing P2.
+      this._camTransition = null;
+      this._dynamicZoomOutFov = 0;
+      this._dynamicZoomOutDist = 0;
+    }
+    if (!isOnboardActive && this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
       // Capture departing target and camera position
       const startCamPos = this.camera.position.clone();
       const startTarget = this.controls.target.clone();
@@ -7666,31 +7807,37 @@ export class Renderer3D {
       // In steady-state orbit mode, OrbitControls auto-rotates around target ONLY if follow is OFF
       this.controls.autoRotate = !opts.follow;
       this.controls.autoRotateSpeed = 0.55;
-      this.controls.target.x += (destTargetX - this.controls.target.x) * 0.050;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * 0.050;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * 0.050;
+      this.controls.target.x += (destTargetX - this.controls.target.x) * cameraBlend(0.050);
+      this.controls.target.y += (destTargetY - this.controls.target.y) * cameraBlend(0.050);
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * cameraBlend(0.050);
 
       if (Math.abs(this.camera.fov - targetFov) > 0.05) {
-        this.camera.fov += (targetFov - this.camera.fov) * 0.035;
+        this.camera.fov += (targetFov - this.camera.fov) * cameraBlend(0.035);
+        this.camera.updateProjectionMatrix();
+      }
+    } else if (isOnboardActive) {
+      this.controls.autoRotate = false;
+      this.camera.position.set(destCamX, destCamY, destCamZ);
+      this.controls.target.set(destTargetX, destTargetY, destTargetZ);
+      this.camera.lookAt(this.controls.target);
+      if (this.camera.fov !== targetFov) {
+        this.camera.fov = targetFov;
         this.camera.updateProjectionMatrix();
       }
     } else {
       // Normal steady-state smooth tracking
       this.controls.autoRotate = false;
-      this.camera.position.x += (destCamX - this.camera.position.x) * camGlide;
-      this.camera.position.y += (destCamY - this.camera.position.y) * camGlide;
-      this.camera.position.z += (destCamZ - this.camera.position.z) * camGlide;
+      this.camera.position.x += (destCamX - this.camera.position.x) * cameraBlend(camGlide);
+      this.camera.position.y += (destCamY - this.camera.position.y) * cameraBlend(camGlide);
+      this.camera.position.z += (destCamZ - this.camera.position.z) * cameraBlend(camGlide);
 
-      this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
-
-      // Always orient camera to look directly at target
-      this.camera.lookAt(this.controls.target.x, this.controls.target.y, this.controls.target.z);
+      this.controls.target.x += (destTargetX - this.controls.target.x) * cameraBlend(targetGlide);
+      this.controls.target.y += (destTargetY - this.controls.target.y) * cameraBlend(targetGlide);
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * cameraBlend(targetGlide);
 
       if (Math.abs(this.camera.fov - targetFov) > 0.02) {
         const fovLerp = (targetFov > this.camera.fov) ? 0.065 : 0.035;
-        this.camera.fov += (targetFov - this.camera.fov) * fovLerp;
+        this.camera.fov += (targetFov - this.camera.fov) * cameraBlend(fovLerp);
         this.camera.updateProjectionMatrix();
       }
 
@@ -7709,6 +7856,8 @@ export class Renderer3D {
           this.camera.position.z = minZ;
         }
       }
+      // Aim after the front-camera clearance guard has finalized its position.
+      this.camera.lookAt(this.controls.target);
     }
     if (isOrbitActive) {
       this.controls.update();
@@ -7724,15 +7873,16 @@ export class Renderer3D {
     // When the tracked car leaves the screen viewport for >3500ms during dynamic pursuit,
     // automatically recover camera angle / switch to Helicopter or Chase perspective.
     // Dynamic smooth zoom-out handles temporary drifts smoothly before any preset switch!
-    const checkCar = (this.focusedCar && (this.focusedCar.alive || this.focusedCar.finished))
+    const checkedCar = (this.focusedCar && (this.focusedCar.alive || this.focusedCar.finished))
       ? this.focusedCar
       : (focusCar && (focusCar.alive || focusCar.finished) ? focusCar : (leader || (rankedCars && rankedCars[0])));
+    const checkCar = getRenderPose(checkedCar, opts.renderAlpha);
 
     const isBroadcastPreset = this.activeCameraPreset === 'broadcast';
     const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
     const inSwitchGrace = (now - (this._lastPresetSwitchTime || 0)) < 7000;
 
-    if (this.isAutoDirector && checkCar && !isOrbitActive && !isBroadcastPreset && !isStartPhase && !inSwitchGrace) {
+    if (this.isAutoDirector && checkCar && !isOrbitActive && !isOnboardActive && !isBroadcastPreset && !isStartPhase && !inSwitchGrace) {
       if (!this._tempNdcVec) this._tempNdcVec = new THREE.Vector3();
       const carZ = (checkCar.crashed && checkCar.alive) ? this.getExactMeshHeight(checkCar.x, -checkCar.y) : 0.8;
       this._tempNdcVec.set(checkCar.x, -checkCar.y, carZ).project(this.camera);
@@ -7779,9 +7929,10 @@ export class Renderer3D {
       if (shouldShow) {
         mesh.visible = true;
 
-        const targetX = car.x;
-        const targetY = -car.y;
-        const targetAngle = -car.angle;
+        const pose = getRenderPose(car, opts.renderAlpha);
+        const targetX = pose.x;
+        const targetY = -pose.y;
+        const targetAngle = -pose.angle;
 
         const targetZ = (car.crashed && car.alive) ? this.getExactMeshHeight(targetX, targetY) : 0;
 
@@ -7793,16 +7944,7 @@ export class Renderer3D {
           mesh.userData.curPitch = 0;
           mesh.userData.curRoll = 0;
         } else {
-          const kPos = 0.60;
-          const kRot = 0.38;
-          mesh.userData.curX += (targetX - mesh.userData.curX) * kPos;
-          mesh.userData.curY += (targetY - mesh.userData.curY) * kPos;
-          mesh.userData.curZ += (targetZ - mesh.userData.curZ) * kPos;
-
-          let diff = targetAngle - mesh.userData.curAngle;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          mesh.userData.curAngle += diff * kRot;
+          mesh.userData.curZ += (targetZ - mesh.userData.curZ) * 0.60;
 
           // Terrain slope gradient & surface conformal rotation (only off-track hills have elevation)
           if (targetZ > 0.05) {
@@ -7843,7 +7985,11 @@ export class Renderer3D {
           }
         }
 
-        mesh.position.set(mesh.userData.curX, mesh.userData.curY, mesh.userData.curZ);
+        // Camera and body share the interpolated pose; a second easing filter adds jitter and lag.
+        mesh.userData.curX = targetX;
+        mesh.userData.curY = targetY;
+        mesh.userData.curAngle = targetAngle;
+        mesh.position.set(targetX, targetY, mesh.userData.curZ);
         mesh.rotation.order = 'ZYX';
         mesh.rotation.set(mesh.userData.curRoll, mesh.userData.curPitch, mesh.userData.curAngle);
 
@@ -7877,7 +8023,7 @@ export class Renderer3D {
 
     // Update Sensors / Rays on the leader
     if (leader && leader.alive && opts.sensors) {
-      this.updateRays(leader);
+      this.updateRays(getRenderPose(leader, opts.renderAlpha));
     } else {
       this.rayGroup.visible = false;
     }
@@ -7885,10 +8031,11 @@ export class Renderer3D {
     // Update Player Car (Manual drive mode)
     if (this.f1Loaded && sim.player && sim.player.alive) {
       this.playerCar.visible = true;
-      const targetX = sim.player.x;
-      const targetY = -sim.player.y;
+      const playerPose = getRenderPose(sim.player, opts.renderAlpha);
+      const targetX = playerPose.x;
+      const targetY = -playerPose.y;
       const targetZ = (sim.player.crashed) ? this.getExactMeshHeight(targetX, targetY) : 0;
-      const targetAngle = -sim.player.angle;
+      const targetAngle = -playerPose.angle;
 
       if (typeof this.playerCar.userData.curX !== 'number' || Math.hypot(targetX - this.playerCar.userData.curX, targetY - this.playerCar.userData.curY) > 60) {
         this.playerCar.userData.curX = targetX;
@@ -7898,16 +8045,7 @@ export class Renderer3D {
         this.playerCar.userData.curPitch = 0;
         this.playerCar.userData.curRoll = 0;
       } else {
-        const kPos = 0.65;
-        const kRot = 0.42;
-        this.playerCar.userData.curX += (targetX - this.playerCar.userData.curX) * kPos;
-        this.playerCar.userData.curY += (targetY - this.playerCar.userData.curY) * kPos;
-        this.playerCar.userData.curZ += (targetZ - this.playerCar.userData.curZ) * kPos;
-
-        let diff = targetAngle - this.playerCar.userData.curAngle;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.playerCar.userData.curAngle += diff * kRot;
+        this.playerCar.userData.curZ += (targetZ - this.playerCar.userData.curZ) * 0.65;
 
         // Terrain slope gradient & surface conformal rotation (only off-track hills have elevation)
         if (targetZ > 0.05) {
@@ -7947,7 +8085,10 @@ export class Renderer3D {
         }
       }
 
-      this.playerCar.position.set(this.playerCar.userData.curX, this.playerCar.userData.curY, this.playerCar.userData.curZ);
+      this.playerCar.userData.curX = targetX;
+      this.playerCar.userData.curY = targetY;
+      this.playerCar.userData.curAngle = targetAngle;
+      this.playerCar.position.set(targetX, targetY, this.playerCar.userData.curZ);
       this.playerCar.rotation.order = 'ZYX';
       this.playerCar.rotation.set(this.playerCar.userData.curRoll, this.playerCar.userData.curPitch, this.playerCar.userData.curAngle);
 
@@ -7981,16 +8122,7 @@ export class Renderer3D {
     const showRecordGhost = (opts.recordGhost !== false) && (sim && sim.bestLapEver && sim.bestLapEver < 60);
     if (this.recordGhostMesh) {
       if (showRecordGhost && sim.getRecordGhostState) {
-        const leaderCar = leader || (sim.cars && sim.cars[0]);
-        const startDelay = CONFIG.generation?.startDelay || 2.0;
-        let lapElapsed = 0;
-        if (leaderCar) {
-          const raw = leaderCar.time - leaderCar.lapStart;
-          lapElapsed = leaderCar.time < startDelay ? 0 : raw;
-        } else {
-          lapElapsed = sim.time < startDelay ? 0 : sim.time;
-        }
-        const ghostState = sim.getRecordGhostState(lapElapsed);
+        const ghostState = sim.getRecordGhostRenderState(opts.renderAlpha);
         if (ghostState) {
           this.recordGhostMesh.visible = true;
           this.recordGhostMesh.position.set(ghostState.x, -ghostState.y, 0.12);
@@ -8034,6 +8166,22 @@ export class Renderer3D {
     }
 
     this.renderer.render(this.scene, this.camera);
+    if (opts.motionDebug && isOnboardActive) {
+      const debug = this._motionDebug || (this._motionDebug = { since: cameraNow, switches: 0, peakCorrection: 0, worstFrame: 0 });
+      if (debug.focus && debug.focus !== this.focusedCar) debug.switches++;
+      debug.focus = this.focusedCar;
+      debug.worstFrame = Math.max(debug.worstFrame, cameraDt * 1000);
+      for (const car of rankedCars) debug.peakCorrection = Math.max(debug.peakCorrection, car.motionCorrection || 0);
+      if (cameraNow - debug.since >= 1000) {
+        const near = rankedCars.filter(car => car !== this.focusedCar && Math.hypot(car.x - p1X, -car.y - p1Y) < 180)
+          .map(car => ({ car: car.carNumber, idx: car.idx, speed: +car.speed.toFixed(1),
+            correction: +(car.motionCorrection || 0).toFixed(2), steer: +car.steer.toFixed(2),
+            throttle: +car.throttle.toFixed(2), heading: +(car.headingDiff || 0).toFixed(2) }));
+        console.info('[MOTION] ' + JSON.stringify({ focus: this.focusedCar?.carNumber, idx: p1?.idx,
+          switches: debug.switches, correction: +debug.peakCorrection.toFixed(2), gap: +debug.worstFrame.toFixed(1), near }));
+        debug.since = cameraNow; debug.switches = 0; debug.peakCorrection = 0; debug.worstFrame = 0;
+      }
+    }
   }
 
   updateRays(car) {

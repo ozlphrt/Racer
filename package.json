@@ -1,6 +1,6 @@
 {
   "name": "ai-racer",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Neuroevolution sandbox: cars learn to stay on track and race fast.",
   "type": "module",
@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test:headless": "node scripts/headless-train.js"
+    "test:headless": "node scripts/headless-train.js",
+    "test:regression": "node --test scripts/regression.test.js",
+    "bundle:brains": "node scripts/bundle-captured-presets.js"
   },
   "devDependencies": {
     "vite": "^8.3.2"

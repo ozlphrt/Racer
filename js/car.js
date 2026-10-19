@@ -1,5 +1,6 @@
 import { CONFIG } from './config.js';
 import { clamp } from './math.js';
+import { CrashApproachRecorder, analyzeApproach } from './crashApproach.js';
 
 export const RAY_ANGLES = CONFIG.sensors.angles.map((a) => (a * Math.PI) / 180);
 
@@ -50,6 +51,12 @@ export class Car {
     this.x = t.cx[sampleIdx] + nx * latOffset;
     this.y = t.cy[sampleIdx] + ny * latOffset;
     this.angle = Math.atan2(ty, tx);
+    this.previousX = this.x;
+    this.previousY = this.y;
+    this.previousAngle = this.angle;
+    this.beforePreviousX = this.x;
+    this.beforePreviousY = this.y;
+    this.beforePreviousAngle = this.angle;
     this.idx = sampleIdx;
     this.totalIdx = sampleIdx - t.N; // Passing finish line index 0 brings totalIdx to 0
     this.maxIdx = this.totalIdx;
@@ -59,10 +66,15 @@ export class Car {
     this.wheelSpin = 0;
     this.brakeLock = 0;
     this.contacts = 0;
+    this.lastCarContactTime = null;
+    this.crashDiagnostic = null;
+    if (!this.crashApproach) this.crashApproach = new CrashApproachRecorder();
+    else this.crashApproach.reset();
     this.collisionPenalty = 0;
     this.offTrackTimer = 0;
     this.offTrackPenalty = 0;
     this.speed = 0;
+    this.topSpeed = 0;
     this.steer = 0;
     this.targetSteer = 0;
     this.throttle = 0;
@@ -80,6 +92,8 @@ export class Car {
     this.deathTimer = 0;
     this.spinRate = 0;
     this.yawRate = 0;
+    this.wrongWayRecoveryActive = false;
+    this.recoveryTurnDirection = 0;
     this.laps = 0;
     this.lapTimes = [];
     this.lapStart = 0;
@@ -96,8 +110,8 @@ export class Car {
     const t = this.track;
     const L = CONFIG.sensors.length;
     const colConfig = CONFIG.collision || {};
-    const warmup = colConfig.warmupTime || 30;
-    const leadTime = colConfig.separationLeadTime || 4;
+    const warmup = colConfig.warmupTime ?? 30;
+    const leadTime = colConfig.separationLeadTime ?? 4;
     const colEnabled = Boolean(colConfig.enabled) && (this.time >= (warmup - leadTime));
     const colRad = colConfig.radius || 13.5;
     const colRadSq = colRad * colRad;
@@ -166,12 +180,26 @@ export class Car {
     this.inputs[RAY_ANGLES.length] = (this.speed / CONFIG.car.maxSpeed) * Math.max(-1, Math.min(1, forwardFactor));
   }
 
-  die(reason) {
+  die(reason, crashCause = 'unknown') {
     if (reason === 'finished') {
       this.finished = true;
       this.finishTime = this.time;
       this.deathReason = 'finished';
       return;
+    }
+    if (reason === 'crash' && !this.crashed) {
+      const index = this.track.nearestIndex(this.x, this.y, this.idx);
+      this.crashDiagnostic = {
+        x: this.x, y: this.y, speed: this.speed, progress: index / this.track.N,
+        lap: this.laps + 1, cause: crashCause,
+        recentContact: Number.isFinite(this.lastCarContactTime) && this.time - this.lastCarContactTime <= 1,
+      };
+      if (index / this.track.N < 1 / 12) {
+        this.crashApproach.record(this, true);
+        const approach = this.crashApproach.snapshot(this.time);
+        this.crashDiagnostic.approach = approach;
+        this.crashDiagnostic.approachSummary = analyzeApproach(approach, this.time, CONFIG.generation.startDelay || 2, this.laps + 1);
+      }
     }
     this.crashed = true;
     this.deathReason = reason;
@@ -193,8 +221,18 @@ export class Car {
     while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
     this.headingDiff = headingDiff;
 
-    // A car is heading in the wrong way if angled > 72° (0.40π rad) away from forward track tangent
-    const isWrongWay = Math.abs(headingDiff) > Math.PI * 0.40;
+    // Enter recovery beyond 72 degrees, but remain in recovery until aligned
+    // within 54 degrees. A single threshold flips between braking and recovery
+    // every tick when a sliding car straddles that heading in a tight corner.
+    const headingError = Math.abs(headingDiff);
+    const isWrongWay = this.wrongWayRecoveryActive
+      ? headingError > Math.PI * 0.30
+      : headingError > Math.PI * 0.40;
+    if (isWrongWay && !this.wrongWayRecoveryActive) {
+      this.recoveryTurnDirection = Math.sign(headingDiff) || 1;
+    }
+    this.wrongWayRecoveryActive = isWrongWay;
+    if (!isWrongWay) this.recoveryTurnDirection = 0;
 
     // If car has crossed finish line: smooth F1 in-lap cooldown cruise around the track
     if (this.finished) {
@@ -257,6 +295,7 @@ export class Car {
       this.steer = 0;
       this.targetThrottle = 0;
       this.targetSteer = 0;
+      this.crashApproach.record(this);
       this.sense();
       return;
     }
@@ -268,8 +307,7 @@ export class Car {
     } else if (this.brain) {
       if (isWrongWay) {
         // Car is pointed in the wrong direction: actively turn around to face forward along the track!
-        const turnDir = Math.sign(headingDiff) || 1;
-        this.steer = turnDir;
+        this.steer = this.recoveryTurnDirection;
         this.throttle = 0.8;
       } else {
         const out = this.brain.forward(this.inputs);
@@ -366,6 +404,7 @@ export class Car {
     this.vx = vFwdRot * cos - vLatFinal * sin;
     this.vy = vFwdRot * sin + vLatFinal * cos;
     this.speed = Math.hypot(this.vx, this.vy);
+    this.topSpeed = Math.max(this.topSpeed, this.speed);
     this.slipAngle = Math.atan2(vLatFinal, Math.max(10, vFwdRot));
 
     this.x += this.vx * dt;
@@ -393,6 +432,7 @@ export class Car {
     if (d > t.N / 2) d -= t.N;
     else if (d < -t.N / 2) d += t.N;
     this.idx = ni;
+    this.crashApproach.record(this);
     this.totalIdx += d;
     if (this.totalIdx > this.maxIdx) {
       this.maxIdx = this.totalIdx;
@@ -441,7 +481,7 @@ export class Car {
 
     // Wall & Runoff collision handling:
     if (this.isDeepOffTrack(cos, sin)) {
-      this.die('crash');
+      this.die('crash', 'off-track');
       return;
     } else if (this.isOffTrack(cos, sin)) {
       // In grass runoff zone: apply tire drag deceleration, off-track penalty, and recovery timer
@@ -452,7 +492,7 @@ export class Car {
       this.vy *= grassDrag;
       this.speed = Math.hypot(this.vx, this.vy);
       if (this.offTrackTimer > 1.8) {
-        this.die('crash');
+        this.die('crash', 'runoff');
         return;
       }
     } else if (this.offTrackTimer > 0) {
@@ -496,12 +536,13 @@ export class Car {
   get fitness() {
     const f = CONFIG.fitness;
     const g = CONFIG.generation;
+    const raceTime = this.finished && Number.isFinite(this.finishTime) ? this.finishTime : this.time;
 
     // 1. Distance Progress along track
     let s = this.maxIdx * this.track.spacing;
 
     // 2. Continuous Average Speed Pace Reward (rewards sustained high velocity)
-    const avgSpeed = (this.maxIdx * this.track.spacing) / Math.max(1, this.time);
+    const avgSpeed = (this.maxIdx * this.track.spacing) / Math.max(1, raceTime);
     s += avgSpeed * 7.5;
 
     // 3. Lap Completion Bonus
@@ -538,7 +579,7 @@ export class Car {
     if (this.finished || this.laps >= (g.maxLaps || 5)) {
       s += f.fullRaceBonus || 30000;
       // High speed reward for completing the entire 5 laps quickly
-      const timeRemaining = Math.max(0, (g.timeLimit || 85) - this.time);
+      const timeRemaining = Math.max(0, (g.timeLimit || 85) - raceTime);
       s += timeRemaining * 200;
     }
 

@@ -356,7 +356,7 @@ export class TireBarrierSystem {
 
                 // Retires / crashes the car upon violent tyre barrier collision
                 if (car.alive && !car.crashed) {
-                  car.die('crash');
+                  car.die('crash', 'tire-barrier');
                 }
 
                 // Car absorbs barrier impact energy and decelerates

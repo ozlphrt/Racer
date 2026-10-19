@@ -50,9 +50,10 @@ export const CONFIG = {
   },
 
   generation: {
-    timeLimit: 85, // sim seconds (ample time to complete full 5-lap races)
+    timeLimit: 110, // sim seconds: 22 seconds per lap for a five-lap race
     startDelay: 2.0, // seconds for F1 starting lights sequence (red -> green launch)
     maxLaps: 5, // a car "finishes" after this many laps
+    finishWindow: 15, // seconds for healthy trailing cars after the first finisher
     stallTime: 7.0, // seconds without new progress → eliminated (ample time to overtake traffic)
     backwardsTolerance: 80, // track samples a car may fall behind before elimination (allows 180° turnaround recovery)
     startGracePeriod: 5.0, // seconds at generation start where stall elimination is suppressed
@@ -60,7 +61,7 @@ export const CONFIG = {
 
   fitness: {
     lapBonus: 4500, // Large reward per completed lap
-    fullRaceBonus: 30000, // Massive milestone bonus for completing all 5 laps
+    fullRaceBonus: 30000, // Milestone bonus for completing the selected race distance
     targetLapTime: 8.54, // Benchmark target lap time matching historic 8.54s record; exponentially rewards sub-9.0s pace
     crashPenalty: 600, // Strict penalty for crashing into walls/runoff (rewards staying on track)
     contactPenalty: 50, // Penalty per contact after grace period (penalizes collisions)

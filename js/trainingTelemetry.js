@@ -1,3 +1,5 @@
+import { trainingStatus } from './trainingStatus.js';
+
 /**
  * Neural Training Telemetry & Diagnostic Engine
  * Analyzes evolutionary trajectory, detects plateaus, pace breakthroughs,
@@ -1701,15 +1703,6 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
   const bestLapEver = sim.bestLapEver || Infinity;
   const recentGensCount = recentSlice.length;
 
-  // Calculate fitness growth rate over recent window
-  let fitnessGrowthRate = 0;
-  if (firstOfRecent && firstOfRecent.best > 0) {
-    fitnessGrowthRate = ((latest.best - firstOfRecent.best) / firstOfRecent.best) * 100;
-  }
-
-  // Check if new best lap occurred in the last 15 gens
-  const recentLapImprovement = recentSlice.slice(-15).some(r => r.bestLap && r.bestLap <= bestLapEver + 0.05);
-
   // Multi-Factor Composite AI Quality Model (0 - 100 Score)
   // Evaluates real-time swarm competency instead of generous all-time fluke laps
   
@@ -1806,7 +1799,6 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
     if (sim.allTimeBest.generation) peakGen = sim.allTimeBest.generation;
   }
   const maxAllTimeFit = Math.max(peakFit, sim?.allTimeBest?.fitness || 0, latest.best || 0);
-  const isMasterPolicy = maxAllTimeFit >= 80000 || (bestLapEver < 60 && bestLapEver <= 10.5);
 
   const isEliteMaster = (bestLapEver <= 10.5 || straightnessScore >= 88 || maxAllTimeFit >= 80000);
   const compositeQ = Math.round(
@@ -1851,37 +1843,7 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
 
   qualityText = `${qualityGrade} · ${qualityTier}`;
 
-  if (recentLapImprovement && bestLapEver < 999) {
-    statusText = 'PACE BREAKTHROUGH';
-    statusClass = 'status-breakthrough';
-    message = `Lap record broken: ${bestLapEver.toFixed(2)}s! Racing line optimization producing faster apex speeds.`;
-  } else if (fitnessGrowthRate > 12 && recentGensCount >= 10) {
-    statusText = 'RAPID CONVERGENCE';
-    statusClass = 'status-improving';
-    message = `Fitness surged +${fitnessGrowthRate.toFixed(1)}% over last ${recentGensCount} gens at ${currentGenRate || '–'} gen/s. High training throughput.`;
-  } else if (currentFinPct >= 70) {
-    statusText = 'HIGH CONSISTENCY GRID';
-    statusClass = 'status-stable';
-    message = `${currentFinPct}% of grid completing clean laps (${latest.finishers}/${latest.population || 20} cars). Neural steering has stabilized.`;
-  } else if (fitnessGrowthRate < 1.2 && recentGensCount >= 25 && n > 35) {
-    if (isMasterPolicy) {
-      statusText = 'MASTER RACER CONVERGED';
-      statusClass = 'status-stable';
-      message = `Swarm has achieved near-ceiling race fitness (${fmtNum(maxAllTimeFit)}) with ${bestLapEver < 60 ? bestLapEver.toFixed(2) + 's' : 'sub-11s'} pace. Operating at peak circuit optimization.`;
-    } else {
-      statusText = 'CONVERGENCE PLATEAU';
-      statusClass = 'status-plateau';
-      message = `Fitness growth slowed to <1.2% over last ${recentGensCount} gens. Model is fine-tuning weights and exploring mutation branches.`;
-    }
-  } else if (latest.generation < 15 || currentFinPct < 15) {
-    statusText = 'EXPLORATORY ADAPTATION';
-    statusClass = 'status-exploring';
-    message = 'Discovering track boundaries, braking thresholds, and apex markers through genetic crossover.';
-  } else {
-    statusText = 'STEADY EVOLUTION';
-    statusClass = 'status-improving';
-    message = `Steady generational progression (+${latest.fitnessDeltaPct ? latest.fitnessDeltaPct.toFixed(1) : '0'}% fitness). Neural policy converging.`;
-  }
+  ({ statusText, statusClass, message } = trainingStatus(history, bestLapEver));
 
   // Driving Milestones based on competency score
   let milestoneName = 'Track Discovery';
