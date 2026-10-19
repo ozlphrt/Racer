@@ -986,6 +986,26 @@ test('a failed preview releases the queue so another car can render', async (t) 
   assert.equal(preview.busy, false);
 });
 
+test('lap-2 ghost starts at the actual line crossing without replaying countdown or grid approach', () => {
+  const sim = new Simulation(track(), CONFIG);
+  const car = sim.cars[0];
+  car.laps = 1;
+  car.firstLapGhostStart = { t: 3, x: 100, y: 20, angle: 0.3, speed: 200 };
+  const samples = Array.from({ length: 15 }, (_, t) => ({ t, x: t * 20, y: 20, angle: 0.3, speed: 200 }));
+  sim.time = 14;
+  sim.handleLapComplete(car, 14, samples);
+  sim.updateRaceGhost(car);
+  assert.equal(sim.raceGhostActiveLap, 2);
+  assert.equal(sim.raceGhostLap, 11);
+  assert.equal(sim.getRecordGhostRenderState(1).x, 100);
+  assert.equal(sim.raceGhostTelemetry[0].t, 0);
+  sim.time += 0.1;
+  assert.notEqual(sim.getRecordGhostRenderState(1).x, 100, 'ghost moves immediately rather than waiting for the countdown');
+  assert.equal(car.firstLapGhostStart.t, 3, 'source telemetry is not mutated');
+  car.reset();
+  assert.equal(car.firstLapGhostStart, null);
+});
+
 test('race ghost selects completed laps at leader lap boundaries and never switches mid-lap', () => {
   const sim = new Simulation(track(), CONFIG);
   sim.bestLapEver = 8.54;

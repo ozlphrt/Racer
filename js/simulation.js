@@ -327,19 +327,33 @@ export class Simulation {
   }
 
   handleLapComplete(car, lapDuration, samples) {
-    if (!Number.isFinite(lapDuration) || lapDuration <= 5 || lapDuration >= 60) return;
+    if (!Number.isFinite(lapDuration) || lapDuration <= 0) return;
+
+    // Lap 1 includes countdown/grid travel in race timing. A lap-2 ghost must
+    // replay the actual circuit from the first line crossing, not the launch.
+    const lineStart = car?.laps === 1 ? car.firstLapGhostStart : null;
+    let replaySamples = samples;
+    let replayDuration = lapDuration;
+    if (lineStart && Number.isFinite(lineStart.t) && lineStart.t >= 0 && lineStart.t < lapDuration && Array.isArray(samples)) {
+      replayDuration = lapDuration - lineStart.t;
+      replaySamples = [{ ...lineStart, t: 0 }, ...samples.filter(s => s.t > lineStart.t)
+        .map(s => ({ ...s, t: s.t - lineStart.t }))];
+    }
 
     // Collect completed laps now; select playback only at P1's next lap boundary.
-    if (Number.isInteger(car?.laps) && car.laps > 0 && Array.isArray(samples) && samples.length > 5 &&
-      samples.every((s, i) => Number.isFinite(s.t) && s.t >= 0 && s.t <= lapDuration + 0.1 &&
+    if (Number.isInteger(car?.laps) && car.laps > 0 && replayDuration > 5 && replayDuration < 60 &&
+      Array.isArray(replaySamples) && replaySamples.length > 5 &&
+      replaySamples.every((s, i) => Number.isFinite(s.t) && s.t >= 0 && s.t <= replayDuration + 0.1 &&
         Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.angle) && Number.isFinite(s.speed) &&
-        (i === 0 || s.t >= samples[i - 1].t))) {
-      const candidate = { duration: lapDuration, samples: [...samples],
+        (i === 0 || s.t >= replaySamples[i - 1].t))) {
+      const candidate = { duration: replayDuration, samples: [...replaySamples],
         source: { generation: this.generation, carNumber: car.carNumber, lap: car.laps } };
       this.raceLastCompleted.set(car, candidate);
       const previous = this.raceLapBests.get(car.laps);
-      if (!previous || lapDuration < previous.duration - 0.01) this.raceLapBests.set(car.laps, candidate);
+      if (!previous || replayDuration < previous.duration - 0.01) this.raceLapBests.set(car.laps, candidate);
     }
+
+    if (lapDuration <= 5 || lapDuration >= 60) return;
 
     const prevOverallRecord = this.bestLapEver;
     const isOverallRecord = lapDuration < this.bestLapEver;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.5 — 2026-10-20
+
+- Record the first start/finish-line crossing and trim countdown/grid travel from the first-lap ghost replay.
+- Start the lap-2 ghost at that crossing immediately, using actual circuit samples and their elapsed times.
+- Preserve race timing and historical records. Verify immediate lap-2 movement and 65 passing regression checks.
+
 ## 1.5.4 — 2026-10-20
 
 - Start the ghost at P1's lap crossings: lap 2 replays P1's first lap; subsequent laps select the best completed lap from earlier laps in this race.

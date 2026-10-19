@@ -98,6 +98,7 @@ export class Car {
     this.lapTimes = [];
     this.lapStart = 0;
     this.currentLapSamples = [];
+    this.firstLapGhostStart = null;
     this.lastLapSamples = [];
     this.bestLapSamples = [];
     this._sampleTimer = 0;
@@ -433,7 +434,12 @@ export class Car {
     else if (d < -t.N / 2) d += t.N;
     this.idx = ni;
     this.crashApproach.record(this);
+    const previousTotalIdx = this.totalIdx;
     this.totalIdx += d;
+    if (this.laps === 0 && previousTotalIdx < 0 && this.totalIdx >= 0) {
+      this.firstLapGhostStart = { t: this.time - this.lapStart,
+        x: this.x, y: this.y, angle: this.angle, speed: this.speed };
+    }
     if (this.totalIdx > this.maxIdx) {
       this.maxIdx = this.totalIdx;
       this.stall = 0;
