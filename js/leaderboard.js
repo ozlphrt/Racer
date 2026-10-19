@@ -1,4 +1,4 @@
-import { TEAM_PALETTE } from './renderer3d.js';
+import { TEAM_PALETTE, getCarNumber } from './renderer3d.js';
 import { carSideviewRenderer } from './carSideviewRenderer.js';
 
 function toHexColor(hexNum, defaultHex = '#38bdf8') {
@@ -164,10 +164,10 @@ export class LeaderboardTower {
     if (!meta) {
       const isPlayer = car === sim.player || car.manual;
       const carIdx = sim.cars ? sim.cars.indexOf(car) : 0;
-      const teamIdx = isPlayer ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (carIdx % TEAM_PALETTE.length));
+      const teamIdx = isPlayer ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (Math.floor(carIdx / 2) % TEAM_PALETTE.length));
 
-      const carNum = isPlayer ? 7 : (carIdx + 1);
-      const displayName = isPlayer ? 'YOU' : (car.genLabel ? `${car.genLabel} · #${carNum}` : `#${carNum}`);
+      const carNum = isPlayer ? 7 : (car.carNumber || (carIdx >= 0 ? getCarNumber(carIdx) : 1));
+      const displayName = isPlayer ? 'YOU' : (car.genLabel ? `${car.genLabel} · #${carNum}` : `Car #${carNum}`);
       const svgHtml = generateCarSideviewSvg(teamIdx, isPlayer, carNum);
 
       // Create row DOM: [Rank] [Sideview SVG] [Name] [Status/Gap]

@@ -3,6 +3,7 @@ import { NeuralNetwork } from './neuralNetwork.js';
 import { evolve, seedPopulation } from './genetics.js';
 import { TireBarrierSystem } from './tireBarriers.js';
 import { audio } from './audio.js';
+import { getCarNumber } from './renderer3d.js';
 
 /** Runs generations of AI cars (plus an optional manual player car). DOM-free. */
 export class Simulation {
@@ -204,9 +205,60 @@ export class Simulation {
     this.startGeneration(seedPopulation(genome, this.gaOptions));
   }
 
+  generateGridSlots(count) {
+    if (count <= 1) return [0];
+
+    const mode = this.config.gridOrder || 'qualifying';
+
+    if (mode === 'random') {
+      // Complete lottery grid draw
+      const arr = Array.from({ length: count }, (_, i) => i);
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    if (mode === 'reverse8') {
+      // F2 Sprint style: Top 8 reversed, rest in order
+      const slots = new Array(count);
+      for (let i = 0; i < count; i++) {
+        slots[i] = i < 8 ? (7 - i) : i;
+      }
+      return slots;
+    }
+
+    // Default 'qualifying': Dynamic Q3/Q2/Q1 shootout.
+    // Top 8 fastest brains contest Pole and the top 4 rows (Q3) with qualifying variance.
+    // Midfield cars contest rows 5-7 (Q2), and backmarkers fill the rear (Q1).
+    const slots = new Array(count);
+    const shuffleSection = (start, end) => {
+      const indices = [];
+      for (let i = start; i < end && i < count; i++) indices.push(i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      for (let i = 0; i < indices.length; i++) {
+        slots[start + i] = indices[i];
+      }
+    };
+    shuffleSection(0, 8);
+    shuffleSection(8, 15);
+    shuffleSection(15, count);
+    return slots;
+  }
+
   startGeneration(genomes, metaList = null) {
+    const gridSlots = this.generateGridSlots(genomes.length);
+
     this.cars = genomes.map((g, idx) => {
-      const c = new Car(this.track, new NeuralNetwork(this.layers, g), idx);
+      const slot = gridSlots[idx];
+      const c = new Car(this.track, new NeuralNetwork(this.layers, g), slot);
+      c.carIndex = idx;
+      c.carNumber = getCarNumber(idx, false);
+      c.teamIdx = Math.floor(idx / 2) % 10;
       c.collisionAlwaysOn = false;
       c.launchDelay = 0;
       c.driverBias = 0;
@@ -234,6 +286,9 @@ export class Simulation {
   setManual(on) {
     this.player = on ? new Car(this.track, null, 0) : null;
     if (this.player) {
+      this.player.carIndex = 99;
+      this.player.carNumber = 7;
+      this.player.teamIdx = 1;
       this.player.onLapComplete = (car, lapDuration, samples) => {
         this.handleLapComplete(car, lapDuration, samples);
       };

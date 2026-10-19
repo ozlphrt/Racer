@@ -1,5 +1,5 @@
 import { generateCarSideviewSvg } from './leaderboard.js';
-import { TEAM_PALETTE } from './renderer3d.js';
+import { TEAM_PALETTE, getCarNumber } from './renderer3d.js';
 
 export class EliminationModalManager {
   constructor(containerEl, { onSelectCar = null, onRestart = null } = {}) {
@@ -22,9 +22,10 @@ export class EliminationModalManager {
 
     const isPlayer = car === sim.player || car.manual;
     const carIdx = (sim.cars && sim.cars.indexOf(car) >= 0) ? sim.cars.indexOf(car) : (car.gridSlot ?? 0);
-    const carNumber = isPlayer ? 'YOU' : `#${carIdx + 1}`;
-    const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
-    const carSvg = generateCarSideviewSvg(teamIdx, isPlayer);
+    const num = isPlayer ? 7 : (car.carNumber || getCarNumber(carIdx));
+    const carNumber = isPlayer ? 'YOU' : `#${num}`;
+    const teamIdx = isPlayer ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (Math.floor(carIdx / 2) % TEAM_PALETTE.length));
+    const carSvg = generateCarSideviewSvg(teamIdx, isPlayer, num);
 
     let reasonText = 'OFF TRACK';
     if (reason === 'stalled') reasonText = 'STALLED';

@@ -14,6 +14,9 @@ export class Car {
     this.brain = brain;
     this.manual = !brain;
     this.gridSlot = gridSlot;
+    this.carIndex = 0;
+    this.carNumber = 1;
+    this.teamIdx = 0;
     this.rayDist = new Float32Array(RAY_ANGLES.length);
     this.inputs = new Float32Array(RAY_ANGLES.length + 1);
     this.rayWindow = Math.ceil(CONFIG.sensors.length / track.spacing) + 3;

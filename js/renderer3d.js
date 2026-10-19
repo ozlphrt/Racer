@@ -17,6 +17,28 @@ export const F1_DECAL_CONFIG = {
   right: { posX: 4.3,   posY: 2.0,   posZ: 1.84, scaleX: 3.0,  scaleY: 2.3,  rotX: -90, rotY: 180, rotZ: 0 }
 };
 
+// Authentic F1 Racing Numbers (Decoupled from positions & grid slots)
+export const F1_CAR_NUMBERS = [
+  44, 63, // Team 0 (Silver Arrows / Black & Gold)
+  16, 55, // Team 1 (Scuderia Ferrari Rosso Corsa)
+  1,  11, // Team 2 (Red Bull Championship)
+  4,  81, // Team 3 (McLaren Papaya)
+  14, 18, // Team 4 (Aston Martin Emerald)
+  10, 31, // Team 5 (Alpine Sport)
+  23, 2,  // Team 6 (Williams Racing)
+  3,  22, // Team 7 (Visa Cash App RB)
+  77, 24, // Team 8 (Kick Sauber)
+  20, 27, // Team 9 (Haas F1 Team)
+];
+
+export function getCarNumber(carIdx, isPlayer = false) {
+  if (isPlayer) return 7;
+  if (typeof carIdx === 'number' && carIdx >= 0 && carIdx < F1_CAR_NUMBERS.length) {
+    return F1_CAR_NUMBERS[carIdx];
+  }
+  return typeof carIdx === 'number' ? (carIdx + 1) : 1;
+}
+
 export const TEAM_PALETTE = [
   // --- MULTI-COLOR LIVERIES (2 to 4 Vivid Contrasting Colors) ---
   // 1. Monza Carbon/Volt/Crimson (3-Color): Matte Carbon + Volt Lime + Crimson Red
@@ -3056,6 +3078,8 @@ export class Renderer3D {
     if (currentLeader) {
       if (currentLeader.manual) {
         leaderTag = 'PLAYER';
+      } else if (currentLeader.carNumber) {
+        leaderTag = `CAR #${currentLeader.carNumber}`;
       } else if (typeof currentLeader.idx === 'number') {
         leaderTag = `CAR #${currentLeader.idx + 1}`;
       }
@@ -3126,7 +3150,7 @@ export class Renderer3D {
       } else if (sim?.cars) {
         const matchingCar = sim.cars.find((c) => c.bestLap && Math.abs(c.bestLap - raceBest) < 0.02);
         if (matchingCar) {
-          bestLapHolder = `CAR #${matchingCar.idx + 1}`;
+          bestLapHolder = `CAR #${matchingCar.carNumber || (matchingCar.idx + 1)}`;
         }
       }
       if (!bestLapHolder) bestLapHolder = leaderTag || 'P1';
@@ -3242,7 +3266,8 @@ export class Renderer3D {
     if (!Number.isFinite(lapDuration) || lapDuration <= 0) return;
     this._recordCelebrationUntil = performance.now() + (recordType === 'race' ? 6500 : 8500);
     this._recordLapDuration = lapDuration;
-    this._recordCarName = car ? (car.manual ? 'PLAYER' : `CAR #${car.idx + 1}`) : 'P1';
+    const num = car ? (car.manual ? 7 : (car.carNumber || (typeof car.idx === 'number' ? car.idx + 1 : 1))) : 1;
+    this._recordCarName = car ? (car.manual ? 'PLAYER' : `CAR #${num}`) : 'P1';
     this._recordType = recordType;
     this._lastLapPlateKey = '';
   }
@@ -3394,7 +3419,7 @@ export class Renderer3D {
     group.add(contactShadow);
 
     // Primary, Secondary, Accent, & Quad color palette (1 to 4 colors per team)
-    const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
+    const teamIdx = isPlayer ? 1 : (Math.floor(carIdx / 2) % TEAM_PALETTE.length);
     const team = TEAM_PALETTE[teamIdx];
     const carColor = isPlayer ? 0x00e626 : (color || team.hex);
     const secColor = isPlayer ? 0xfacc15 : (team.secHex || carColor);
@@ -3909,7 +3934,7 @@ export class Renderer3D {
     this.carPool = [];
     const pop = CONFIG.ga.population;
     for (let i = 0; i < pop; i++) {
-      const carNumber = i + 1;
+      const carNumber = getCarNumber(i, false);
       const carMesh = this.createCarMesh(null, false, i, carNumber);
       carMesh.visible = false;
       const badge = this.createBadgeSprite();
@@ -3992,7 +4017,7 @@ export class Renderer3D {
     this.swapCarMesh(this.playerCar, template, C.player, true, 0, 7);
 
     for (let i = 0; i < this.carPool.length; i++) {
-      const carNumber = i + 1;
+      const carNumber = getCarNumber(i, false);
       this.swapCarMesh(this.carPool[i], template, null, false, i, carNumber);
     }
 
@@ -4138,7 +4163,7 @@ export class Renderer3D {
   }
 
   createF1CarMesh(template, color, isPlayer = false, carIdx = 0, carNumber = 1) {
-    const teamIdx = isPlayer ? 1 : (carIdx % TEAM_PALETTE.length);
+    const teamIdx = isPlayer ? 1 : (Math.floor(carIdx / 2) % TEAM_PALETTE.length);
     const tm = isPlayer
       ? { hex: 0x00e626, secHex: 0xfacc15, accHex: 0xffffff, quadHex: 0x00e626 }
       : TEAM_PALETTE[teamIdx];

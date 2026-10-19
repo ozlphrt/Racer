@@ -4,6 +4,7 @@ export const CONFIG = {
   budgetMs: 12, // max simulation time per animation frame (keeps UI responsive)
 
   gridBox: true, // F1 2x2 staggered starting grid formation and visual grid box markings
+  gridOrder: 'qualifying', // Starting grid mode: 'qualifying' (Q3/Q2/Q1 dynamic qualifying shootout), 'reverse8' (F2 sprint), or 'random' (lottery)
 
   world: { margin: 60 },
 

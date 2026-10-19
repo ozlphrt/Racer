@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { Track, TRACK_PRESETS } from './track.js';
 import { Simulation } from './simulation.js';
 import { Renderer } from './renderer.js';
-import { Renderer3D, TEAM_PALETTE } from './renderer3d.js';
+import { Renderer3D, TEAM_PALETTE, getCarNumber } from './renderer3d.js';
 import { NetworkViz } from './networkViz.js';
 import { FitnessChart, compact } from './chart.js';
 import { drawSparkline, analyzeTrainingProgress, renderAllTileGraphics } from './trainingTelemetry.js';
@@ -61,7 +61,7 @@ let focusedFollowCar = null;
 const leaderboard = new LeaderboardTower($('leaderboard-tower'), (car) => {
   focusedFollowCar = car;
   const carIdx = sim.cars ? sim.cars.indexOf(car) : -1;
-  const carNum = car.manual ? 7 : (carIdx >= 0 ? carIdx + 1 : 1);
+  const carNum = car.manual ? 7 : (car.carNumber || (carIdx >= 0 ? getCarNumber(carIdx) : 1));
   toast(`🎥 Camera locked on Car #${carNum}`, 'info');
 });
 
@@ -70,7 +70,7 @@ const eliminationModals = new EliminationModalManager($('elimination-stack'), {
     focusedFollowCar = car;
     setToggle('follow', true, false);
     const carIdx = sim.cars ? sim.cars.indexOf(car) : -1;
-    const carNum = car.manual ? 7 : (carIdx >= 0 ? carIdx + 1 : 1);
+    const carNum = car.manual ? 7 : (car.carNumber || (carIdx >= 0 ? getCarNumber(carIdx) : 1));
     toast(`🎥 Camera tracking Car #${carNum}`, 'info');
   },
   onRestart: () => {
@@ -330,7 +330,8 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
   const lapBox = document.querySelector('.hud-item.hud-lap-box');
 
   const isRaceFastest = recordType === 'race';
-  const carName = car ? (car.manual ? 'PLAYER' : `CAR #${car.idx + 1}`) : 'P1';
+  const carNum = car ? (car.manual ? 7 : (car.carNumber || (typeof car.idx === 'number' ? car.idx + 1 : 1))) : 1;
+  const carName = car ? (car.manual ? 'PLAYER' : `CAR #${carNum}`) : 'P1';
   const genText = `GEN ${sim?.generation || ''}`;
 
   if (timeEl) timeEl.textContent = `${lapDuration.toFixed(2)}s`;
@@ -399,7 +400,8 @@ function showRecordCelebration(lapDuration, car, prevRecord, recordType = 'overa
 sim.onNewBestLap = (lapDuration, car, prevRecord, recordType = 'overall') => {
   if (hyperRunning) return;
   pulse('stat-best-lap-box');
-  const carName = car ? (car.manual ? 'Player' : `Car #${car.idx + 1}`) : 'Car';
+  const bestNum = car ? (car.manual ? 7 : (car.carNumber || (typeof car.idx === 'number' ? car.idx + 1 : 1))) : 1;
+  const carName = car ? (car.manual ? 'Player' : `Car #${bestNum}`) : 'Car';
   const timeTxt = Number.isFinite(lapDuration) ? `${lapDuration.toFixed(2)}s` : '';
   if (recordType === 'race') {
     toast(`⚡ Fastest Lap of the Race: ${carName} (${timeTxt})`, 'info');
@@ -1301,7 +1303,7 @@ function switchTargetCar(direction) {
     updateHud(targetCar);
 
     const carIdx = sim.cars.indexOf(targetCar);
-    const carNum = targetCar.carNumber || (typeof targetCar.gridSlot === 'number' ? targetCar.gridSlot + 1 : (carIdx >= 0 ? carIdx + 1 : 1));
+    const carNum = targetCar.carNumber || (carIdx >= 0 ? getCarNumber(carIdx) : 1);
     const rank = nextIdx + 1;
     toast(`🎥 Camera tracking Car #${carNum} (P.${rank})`, 'info');
   }
@@ -3113,8 +3115,9 @@ function updateHud(leader) {
 
     // Car Decal Number & Team Livery Side View
     const carIdx = (sim.cars && car) ? sim.cars.indexOf(car) : 0;
-    const carNum = isPlayerCar ? 7 : (car.carNumber || (typeof car.gridSlot === 'number' ? car.gridSlot + 1 : (carIdx >= 0 ? carIdx + 1 : 1)));
-    const teamIdx = isPlayerCar ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (carIdx >= 0 ? carIdx % (TEAM_PALETTE?.length || 10) : 0));
+    const carNum = isPlayerCar ? 7 : (car.carNumber || (carIdx >= 0 ? getCarNumber(carIdx) : 1));
+    const teamIdx = isPlayerCar ? 1 : (car.teamIdx !== undefined ? car.teamIdx : (carIdx >= 0 ? Math.floor(carIdx / 2) % (TEAM_PALETTE?.length || 10) : 0));
+
 
     const numBadgeEl = $('leader-number-badge');
     if (numBadgeEl) {
