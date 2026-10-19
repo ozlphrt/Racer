@@ -585,6 +585,7 @@ function setMaxLaps(laps, showToast = true) {
 }
 
 function setToggle(key, on, showToast = true) {
+  const changed = state[key] !== on;
   state[key] = on;
   $(`toggle-${key}`) && ($(`toggle-${key}`).checked = on);
   if (key === 'ghosts') {
@@ -600,10 +601,12 @@ function setToggle(key, on, showToast = true) {
         setCameraPreset('chase', false);
       }
     } else {
-      setCameraPreset('orbit', false);
+      if (state.cameraPreset !== 'orbit') {
+        setCameraPreset('orbit', false);
+      }
     }
     updateCameraPill();
-    if (showToast) {
+    if (showToast && changed) {
       flashCameraNameBadge(on ? '🎥 Follow Leader: ON (Chase Cam)' : '🌐 Follow: OFF (Free Orbit)', on);
       toast(on ? '🎥 Follow Leader: ON (Chase Cam tracking P1)' : '🌐 Follow Leader: OFF (Circuit Orbit Overview)', 'info');
     }
@@ -1156,9 +1159,9 @@ function setCameraPreset(preset, showToast = true) {
     set3DView(true);
   }
   if (preset !== 'orbit') {
-    setToggle('follow', true, false);
+    if (!state.follow) setToggle('follow', true, false);
   } else {
-    setToggle('follow', false, false);
+    if (state.follow) setToggle('follow', false, false);
   }
 
   document.querySelectorAll('.btn-cam-preset').forEach((btn) => {
