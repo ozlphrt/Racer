@@ -986,6 +986,32 @@ test('a failed preview releases the queue so another car can render', async (t) 
   assert.equal(preview.busy, false);
 });
 
+test('race ghost ignores historical records and refreshes only from laps driven in the current race', () => {
+  const sim = new Simulation(track(), CONFIG);
+  sim.bestLapEver = 8.54;
+  sim.isRealCarTelemetry = true;
+  sim.recordLapTelemetry = telemetry();
+  assert.equal(sim.getRecordGhostState(2), null);
+  const current = telemetry().map(s => ({ ...s, x: s.x + 50 }));
+  sim.handleLapComplete(sim.cars[0], 12, current);
+  assert.equal(sim.raceGhostLap, 12);
+  assert.equal(sim.bestLapEver, 8.54, 'race ghost refresh does not discard the historical record');
+  assert.notEqual(sim.raceGhostTelemetry, current);
+  assert.deepEqual(sim.raceGhostTelemetry, current);
+  sim.handleLapComplete(sim.cars[0], 13, telemetry());
+  assert.deepEqual(sim.raceGhostTelemetry, current, 'slower laps cannot replace the current race ghost');
+  sim.handleLapComplete(sim.cars[0], 11, null);
+  assert.equal(sim.raceGhostLap, 12, 'an unrecorded lap cannot supply an invented trajectory');
+  const faster = current.map(s => ({ ...s, t: s.t * 0.9 }));
+  sim.handleLapComplete(sim.cars[0], 11, faster);
+  assert.equal(sim.raceGhostLap, 11);
+  sim.startGeneration(sim.cars.map(car => car.brain.genome));
+  assert.equal(sim.raceGhostLap, Infinity);
+  assert.equal(sim.raceGhostTelemetry, null);
+  assert.equal(sim.getRecordGhostState(1), null, 'new races do not inherit the preceding ghost');
+  assert.equal(sim.bestLapEver, 8.54);
+});
+
 test('record ghost appears after a lap becomes available and reports when it leaves the camera view', () => {
   const renderer = Object.create(Renderer3D.prototype);
   renderer.recordGhostMesh = new THREE.Group();
@@ -996,11 +1022,11 @@ test('record ghost appears after a lap becomes available and reports when it lea
   renderer.camera.lookAt(0, 0, 0);
   renderer.camera.updateMatrixWorld(true);
   let pose = { x: 10, y: 20, angle: 0.4 };
-  const sim = { bestLapEver: Infinity, getRecordGhostRenderState: () => pose };
+  const sim = { bestLapEver: 8.54, raceGhostLap: Infinity, getRecordGhostRenderState: () => pose };
   renderer.updateRecordGhost(sim, { recordGhost: true });
   assert.equal(renderer.recordGhostMesh.visible, false);
   assert.equal(renderer.recordGhostStatus, 'waiting');
-  sim.bestLapEver = 10.93;
+  sim.raceGhostLap = 10.93;
   renderer.updateRecordGhost(sim, { recordGhost: true });
   assert.equal(renderer.recordGhostMesh.visible, true);
   assert.equal(renderer.recordGhostStatus, 'visible');
@@ -1039,8 +1065,9 @@ test('record ghost and cars share smooth display time at 30, 60, 120 and 144 FPS
     const sim = Object.create(Simulation.prototype);
     sim.config = { dt: 1 / 60, generation: { startDelay: 0 } };
     sim.time = 2;
-    sim.bestLapEver = 12;
-    sim.recordLapTelemetry = Array.from({ length: 13 }, (_, t) => ({ t, x: t * 100, y: 0, angle: 0, speed: 100 }));
+    sim.bestLapEver = 8.54;
+    sim.raceGhostLap = 12;
+    sim.raceGhostTelemetry = Array.from({ length: 13 }, (_, t) => ({ t, x: t * 100, y: 0, angle: 0, speed: 100 }));
     const car = { x: 200, y: 0, angle: 0, previousX: 200 - sim.config.dt * 100, previousY: 0, previousAngle: 0 };
     const clock = new FixedStepClock(sim.config.dt);
     let previousX;
@@ -1066,8 +1093,8 @@ test('record ghost and cars share smooth display time at 30, 60, 120 and 144 FPS
 
 test('record ghost interpolates across the last sample and lap seam without holding still', () => {
   const sim = Object.create(Simulation.prototype);
-  sim.bestLapEver = 12;
-  sim.recordLapTelemetry = Array.from({ length: 12 }, (_, t) => ({
+  sim.raceGhostLap = 12;
+  sim.raceGhostTelemetry = Array.from({ length: 12 }, (_, t) => ({
     t, x: Math.cos(t * Math.PI / 6), y: Math.sin(t * Math.PI / 6), angle: t * Math.PI / 6, speed: 100,
   }));
   const a = sim.getRecordGhostState(11.2), b = sim.getRecordGhostState(11.8);

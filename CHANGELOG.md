@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.2 — 2026-10-20
+
+- Clear ghost playback at every race start and restart; wait for an actual lap in the current race.
+- Replay the fastest recorded lap from that race independently of historical record times and saved trajectories.
+- Remove ideal centreline ghost generation and label playback as Race Ghost in both 2D and 3D.
+- Preserve historical records and captured brains. Validate the race ghost lifecycle with 64 regression checks.
+
 ## 1.5.1 — 2026-10-20
 
 - Make the record ghost easier to see with a brighter cyan body and a readable marker above the car.

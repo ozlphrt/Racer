@@ -580,7 +580,7 @@ function setGridBox(on, showToast = true) {
 function updateRecordGhostControl() {
   const badge = $('settings-record-ghost-badge');
   if (badge) {
-    const ready = Number.isFinite(sim.bestLapEver) && sim.bestLapEver > 0 && sim.bestLapEver < 60;
+    const ready = Number.isFinite(sim.raceGhostLap) && sim.raceGhostLap > 5 && sim.raceGhostLap < 60;
     const outside = state.view3d && renderer3d?.recordGhostStatus === 'outside-view';
     const label = !state.recordGhost ? 'OFF' : !ready ? 'WAITING FOR LAP' : outside ? 'ON · OUT OF VIEW' : 'ON';
     if (badge.textContent !== label) badge.textContent = label;
@@ -594,7 +594,7 @@ function setRecordGhost(on, showToast = true) {
   updateRecordGhostControl();
 
   if (showToast) {
-    toast(on ? '⚡ Record Ghost ON (Benchmark lap car visible)' : '⚡ Record Ghost OFF');
+    toast(on ? '⚡ Race Ghost ON · uses the fastest lap recorded in this race' : '⚡ Race Ghost OFF');
   }
 }
 

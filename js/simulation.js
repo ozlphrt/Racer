@@ -49,6 +49,8 @@ export class Simulation {
     this.prevBestLapEver = null;
     this.playerBestLap = Infinity;
     this.raceBestLap = Infinity;
+    this.raceGhostLap = Infinity;
+    this.raceGhostTelemetry = null;
     this.recordLapTelemetry = null;
     this.isRealCarTelemetry = false;
     this.deathEvents = [];
@@ -296,6 +298,8 @@ export class Simulation {
     this.checkeredFlagTimer = null;
     this.aliveCount = this.cars.length;
     this.raceBestLap = Infinity;
+    this.raceGhostLap = Infinity;
+    this.raceGhostTelemetry = null;
     this.deathEvents = [];
     this.tireBarriers?.reset();
   }
@@ -314,6 +318,16 @@ export class Simulation {
 
   handleLapComplete(car, lapDuration, samples) {
     if (!Number.isFinite(lapDuration) || lapDuration <= 5 || lapDuration >= 60) return;
+
+    // Playback uses only a lap actually driven in this race, independently of
+    // historical records, imported brains, or synthetic centerline trajectories.
+    if (lapDuration < this.raceGhostLap && Array.isArray(samples) && samples.length > 5 &&
+      samples.every((s, i) => Number.isFinite(s.t) && s.t >= 0 && s.t <= lapDuration + 0.1 &&
+        Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.angle) && Number.isFinite(s.speed) &&
+        (i === 0 || s.t >= samples[i - 1].t))) {
+      this.raceGhostLap = lapDuration;
+      this.raceGhostTelemetry = [...samples];
+    }
 
     const prevOverallRecord = this.bestLapEver;
     const isOverallRecord = lapDuration < this.bestLapEver;
@@ -873,36 +887,14 @@ export class Simulation {
   }
 
   /**
-   * Returns array of high-resolution trajectory points for the record lap.
-   * If real telemetry was not recorded yet, synthesizes an ideal trajectory from track geometry.
+   * Returns genuinely recorded historical telemetry without inventing a trajectory.
+   * Race ghost playback deliberately uses raceGhostTelemetry instead.
    */
   getRecordLapTelemetry() {
-    if (this.recordLapTelemetry && this.recordLapTelemetry.length > 10) {
+    if (this.isRealCarTelemetry && this.recordLapTelemetry && this.recordLapTelemetry.length > 10) {
       return this.recordLapTelemetry;
     }
-    const t = this.track;
-    if (!t || !t.cx || t.cx.length === 0) return null;
-    const dur = (Number.isFinite(this.bestLapEver) && this.bestLapEver > 5 && this.bestLapEver < 60)
-      ? this.bestLapEver
-      : 9.50;
-
-    const samples = [];
-    const count = Math.min(260, t.N || 200);
-    const avgSpeed = (t.length || 2400) / dur;
-    for (let i = 0; i < count; i++) {
-      const idx = Math.floor((i / count) * t.N);
-      const frac = i / count;
-      samples.push({
-        t: frac * dur,
-        x: t.cx[idx],
-        y: t.cy[idx],
-        angle: Math.atan2(t.ty[idx], t.tx[idx]),
-        speed: avgSpeed,
-      });
-    }
-    this.recordLapTelemetry = samples;
-    this.isRealCarTelemetry = false;
-    return samples;
+    return null;
   }
 
   /** Use the same display time as interpolated cars, independent of camera/leader changes. */
@@ -915,11 +907,9 @@ export class Simulation {
 
   /** Computes the interpolated record pose, including the seam between laps. */
   getRecordGhostState(lapElapsed) {
-    const dur = (Number.isFinite(this.bestLapEver) && this.bestLapEver > 0 && this.bestLapEver < 60)
-      ? this.bestLapEver
-      : 8.54;
-    const samples = this.getRecordLapTelemetry();
-    if (!samples || samples.length === 0) return null;
+    const dur = this.raceGhostLap;
+    const samples = this.raceGhostTelemetry;
+    if (!Number.isFinite(dur) || dur <= 5 || dur >= 60 || !samples || samples.length < 2) return null;
 
     const clampedTime = ((lapElapsed % dur) + dur) % dur;
     const first = samples[0], last = samples[samples.length - 1];

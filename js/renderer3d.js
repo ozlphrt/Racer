@@ -4061,7 +4061,7 @@ export class Renderer3D {
   updateRecordGhost(sim, opts) {
     const mesh = this.recordGhostMesh;
     if (!mesh) return;
-    const hasRecord = Number.isFinite(sim?.bestLapEver) && sim.bestLapEver > 0 && sim.bestLapEver < 60;
+    const hasRecord = Number.isFinite(sim?.raceGhostLap) && sim.raceGhostLap > 5 && sim.raceGhostLap < 60;
     this.recordGhostStatus = opts.recordGhost === false ? 'off' : hasRecord ? 'ready' : 'waiting';
     mesh.visible = false;
     if (this.recordGhostStatus !== 'ready') return;
@@ -4074,7 +4074,7 @@ export class Renderer3D {
     mesh.position.set(pose.x, -pose.y, 0.12);
     mesh.rotation.order = 'ZYX';
     mesh.rotation.set(0, 0, -pose.angle);
-    this.updateRecordGhostBadgeText(`⚡ RECORD GHOST · ${sim.bestLapEver.toFixed(2)}s`);
+    this.updateRecordGhostBadgeText(`⚡ RACE GHOST · ${sim.raceGhostLap.toFixed(2)}s`);
     if (mesh.userData.badgeSprite) mesh.userData.badgeSprite.visible = true;
     if (!this._ghostNdc) this._ghostNdc = new THREE.Vector3();
     this._ghostNdc.set(pose.x, -pose.y, 2).project(this.camera);
@@ -4082,7 +4082,7 @@ export class Renderer3D {
       this._ghostNdc.z >= -1 && this._ghostNdc.z <= 1 ? 'visible' : 'outside-view';
   }
 
-  createRecordGhostBadgeSprite(text = '⚡ RECORD GHOST') {
+  createRecordGhostBadgeSprite(text = '⚡ RACE GHOST') {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 64;
@@ -4207,7 +4207,7 @@ export class Renderer3D {
       this.recordGhostMesh.add(ghostSub);
     }
 
-    const badge = this.createRecordGhostBadgeSprite('⚡ RECORD GHOST');
+    const badge = this.createRecordGhostBadgeSprite('⚡ RACE GHOST');
     this.recordGhostMesh.userData.badgeSprite = badge;
     this.recordGhostMesh.add(badge);
   }

@@ -425,10 +425,10 @@ export class Renderer {
     this.drawGhosts(sim.cars, leader, carRankMap, visibleSet);
 
     // Draw Holographic Circuit Record Ghost Car
-    if (opts.recordGhost !== false && sim && sim.bestLapEver && sim.bestLapEver < 60 && sim.getRecordGhostState) {
+    if (opts.recordGhost !== false && sim && Number.isFinite(sim.raceGhostLap) && sim.raceGhostLap < 60 && sim.getRecordGhostState) {
       const ghostState = sim.getRecordGhostRenderState(opts.renderAlpha);
       if (ghostState) {
-        this.drawRecordGhost(ghostState, sim.bestLapEver);
+        this.drawRecordGhost(ghostState, sim.raceGhostLap);
       }
     }
 
@@ -860,7 +860,7 @@ export class Renderer {
 
     ctx.save();
     ctx.font = 'bold 9px "JetBrains Mono", monospace';
-    const txt = `⚡ REC ${bestLap.toFixed(2)}s`;
+    const txt = `⚡ RACE ${bestLap.toFixed(2)}s`;
     const tw = ctx.measureText(txt).width;
     const pad = 4;
     const bx = ghost.x - tw / 2 - pad;
