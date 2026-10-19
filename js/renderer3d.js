@@ -6680,14 +6680,14 @@ export class Renderer3D {
     this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
-    this._autoPreset = 'chase';
+    this._autoPreset = 'follow';
     this._lastPresetSwitchTime = performance.now();
-    this._autoNextSwitch = performance.now() + 24000;
+    this._autoNextSwitch = performance.now() + 36000;
     this._lastGantryCutTime = null;
     this._lastGantryCutLap = null;
     this._gantryEntryLap = null;
     this._gantryCrossedLineTime = null;
-    this._lastActivePreset = 'chase';
+    this._lastActivePreset = 'follow';
     this._camTransition = null;
     this._currentActionPair = null;
     this._dynamicZoomOutFov = 0;
@@ -6931,12 +6931,12 @@ export class Renderer3D {
 
       const isStartLaunchPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
 
-      // STRICT LOCK AT START OF GAME / RACE LAUNCH: Use Chase Cam directly tracking P1
+      // START OF GAME / RACE LAUNCH: Use Broadcast Follow directly tracking P1 and the grid
       if (isStartLaunchPhase) {
-        if (this._autoPreset !== 'chase') {
-          this._autoPreset = 'chase';
+        if (this._autoPreset !== 'follow') {
+          this._autoPreset = 'follow';
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 24000;
+          this._autoNextSwitch = now + 34000;
         }
       }
 
@@ -7012,11 +7012,12 @@ export class Renderer3D {
         const emergencyFallback = (now - (this._lastGantryCutTime || now)) >= 35000 || (carCrashed && (now - (this._lastGantryCutTime || now)) >= 4000);
 
         if (hasCrossedLineAndHeld || emergencyFallback) {
-          // Transition from start/finish gantry to pursuit helicopter / action rear / chase
+          // Transition from start/finish gantry back to Broadcast Follow (70%) or Heli/Chase
           const postGantryPool = [
-            { preset: 'heli', weight: 45 },
-            { preset: 'action_rear', weight: 35 },
-            { preset: 'chase', weight: 20 },
+            { preset: 'follow', weight: 70 },
+            { preset: 'heli', weight: 12 },
+            { preset: 'chase', weight: 10 },
+            { preset: 'action_rear', weight: 8 },
           ];
           let rnd = Math.random() * 100;
           let chosen = postGantryPool[0].preset;
@@ -7029,7 +7030,10 @@ export class Renderer3D {
           }
           this._autoPreset = chosen;
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 26000 + Math.random() * 10000;
+          const postDuration = chosen === 'follow'
+            ? Math.max(30000, 36000 + Math.random() * 12000)
+            : (chosen === 'heli' ? 18000 + Math.random() * 6000 : 20000 + Math.random() * 6000);
+          this._autoNextSwitch = now + postDuration;
           this._gantryCrossedLineTime = null;
           this._gantryEntryLap = null;
           this._gantryEntryIdx = null;
@@ -7041,54 +7045,76 @@ export class Renderer3D {
         } else if (!this._autoPreset || isStartLaunchPhase) {
           this._autoPreset = 'follow';
           this._lastPresetSwitchTime = now;
-          this._autoNextSwitch = now + 24000;
+          this._autoNextSwitch = now + 34000;
         } else {
-          // Dynamic cinematic preset sequencing (picks natural, comfortable transitions)
-          let weightedPool;
-          if (this._autoPreset === 'heli') {
-            weightedPool = [
-              { preset: 'chase', weight: 45 },
-              { preset: 'action_rear', weight: 35 },
-              { preset: 'follow', weight: 20 },
-            ];
-          } else if (this._autoPreset === 'action_rear' || this._autoPreset === 'chase') {
-            weightedPool = [
-              { preset: 'chase', weight: 40 },
-              { preset: 'heli', weight: 35 },
-              { preset: 'action_rear', weight: 25 },
-            ];
+          // Dynamic cinematic preset sequencing calibrated for:
+          // - Broadcast Follow >= 60% of total airtime
+          // - Helicopter Chase ~10% of total airtime
+          // - The rest (~30%) split amongst other cameras (Chase, Action Rear, Action Front, Onboard)
+          let chosen = 'follow';
+          if (this._autoPreset !== 'follow') {
+            // Cut back to Broadcast Follow 80% of the time from any specialty shot
+            if (Math.random() < 0.80) {
+              chosen = 'follow';
+            } else {
+              const specialtyPool = [
+                { preset: 'heli', weight: 30 },
+                { preset: 'chase', weight: 32 },
+                { preset: 'action_rear', weight: 22 },
+                { preset: 'action', weight: 10 },
+                { preset: 'onboard', weight: 6 },
+              ].filter((item) => item.preset !== this._autoPreset);
+              const totalWeight = specialtyPool.reduce((sum, item) => sum + item.weight, 0);
+              let rnd = Math.random() * totalWeight;
+              chosen = specialtyPool[0]?.preset || 'follow';
+              for (const item of specialtyPool) {
+                if (rnd < item.weight) {
+                  chosen = item.preset;
+                  break;
+                }
+                rnd -= item.weight;
+              }
+            }
           } else {
-            weightedPool = [
-              { preset: 'chase', weight: 50 },
-              { preset: 'heli', weight: 30 },
-              { preset: 'action_rear', weight: 20 },
+            // Currently in 'follow' (Broadcast Follow).
+            // Cut to a specialty camera:
+            // Helicopter takes ~26% of specialty cuts (giving ~10% of overall airtime)
+            // The rest are split across chase, action_rear, action, onboard.
+            const specialtyPool = [
+              { preset: 'heli', weight: 26 },        // ~10% overall airtime
+              { preset: 'chase', weight: 28 },       // ~10-11% overall airtime
+              { preset: 'action_rear', weight: 22 }, // ~8-9% overall airtime
+              { preset: 'action', weight: 14 },      // ~5-6% overall airtime
+              { preset: 'onboard', weight: 10 },     // ~4% overall airtime
             ];
+            let rnd = Math.random() * 100;
+            chosen = specialtyPool[0].preset;
+            for (const item of specialtyPool) {
+              if (rnd < item.weight) {
+                chosen = item.preset;
+                break;
+              }
+              rnd -= item.weight;
+            }
           }
 
-          const eligible = weightedPool.filter((item) => item.preset !== this._autoPreset);
-          const totalWeight = eligible.reduce((sum, item) => sum + item.weight, 0);
-          let rnd = Math.random() * totalWeight;
-          let chosen = eligible[0]?.preset || 'heli';
-          for (const item of eligible) {
-            if (rnd < item.weight) {
-              chosen = item.preset;
-              break;
-            }
-            rnd -= item.weight;
-          }
           this._autoPreset = chosen;
           this._lastPresetSwitchTime = now;
 
-          // Dynamic shot duration per camera archetype (Relaxed TV broadcast pacing, minimum 24.0s strictly enforced)
+          // Dynamic shot duration per camera archetype:
+          // Broadcast Follow gets expansive, relaxed TV pacing (36s - 48s)
+          // Specialty shots get punchy, exciting pacing (18s - 26s)
           let duration;
-          if (this._autoPreset === 'onboard') {
-            duration = Math.max(14000, 16000 + Math.random() * 6000); // 16s - 22s
-          } else if (this._autoPreset === 'orbit' || this._autoPreset === 'heli') {
-            duration = Math.max(28000, 42000 + Math.random() * 16000); // 42s - 58s (sweeping panoramic)
+          if (this._autoPreset === 'follow') {
+            duration = Math.max(32000, 36000 + Math.random() * 12000); // 36s - 48s (ensures >= 60% total airtime)
+          } else if (this._autoPreset === 'heli') {
+            duration = Math.max(16000, 18000 + Math.random() * 6000);  // 18s - 24s (cinematic aerial pursuit)
+          } else if (this._autoPreset === 'onboard') {
+            duration = Math.max(14000, 16000 + Math.random() * 4000);  // 16s - 20s
           } else if (this._autoPreset === 'action_rear') {
-            duration = Math.max(24000, 34000 + Math.random() * 12000); // 34s - 46s (intense battle)
+            duration = Math.max(18000, 20000 + Math.random() * 6000);  // 20s - 26s
           } else {
-            duration = Math.max(24000, 35000 + Math.random() * 12000); // 35s - 47s (standard follow/action)
+            duration = Math.max(18000, 20000 + Math.random() * 6000);  // 20s - 26s
           }
           this._autoNextSwitch = now + duration;
         }
