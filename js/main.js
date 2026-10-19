@@ -135,7 +135,7 @@ const state = {
   manual: false,
   autosave: true,
   audio: true,
-  cameraPreset: 'auto',
+  cameraPreset: 'chase',
 };
 const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
 
@@ -248,8 +248,9 @@ function setSimulationMode(mode) {
   if (renderer3d) renderer3d.updateSkidmarks(sim);
 
   if (isRace) {
-    // Camera is at follow mode as default at the start of each race
+    // Camera is at chase follow mode by default at the start of each race
     setToggle('follow', true, false);
+    setCameraPreset('chase', false);
     if (state.view3d && renderer3d) {
       renderer3d.resetCamera(true);
     }
@@ -281,9 +282,10 @@ sim.onGeneration = () => {
   leaderboard.reset();
   eliminationModals.clear();
 
-  // Camera is at follow mode as default at the start of each race
+  // Camera is at chase follow mode by default at the start of each race
   if (sim.mode === 'race') {
     setToggle('follow', true, false);
+    setCameraPreset('chase', false);
   }
   if (state.view3d && renderer3d && state.follow) {
     renderer3d.resetCamera(true);
@@ -591,13 +593,17 @@ function setToggle(key, on, showToast = true) {
     try {
       localStorage.setItem('ai-racer:follow', String(on));
     } catch (_) {}
-    if (on && state.cameraPreset === 'orbit') {
-      setCameraPreset('auto', false);
+    if (on) {
+      if (state.cameraPreset === 'orbit' || !state.cameraPreset) {
+        setCameraPreset('chase', false);
+      }
+    } else {
+      setCameraPreset('orbit', false);
     }
     updateCameraPill();
     if (showToast) {
-      flashCameraNameBadge(on ? '🎥 Follow Leader: ON' : '🌐 Follow: OFF (Overview)', on);
-      toast(on ? '🎥 Follow Leader: ON' : '🌐 Follow Leader: OFF (Circuit Overview)', 'info');
+      flashCameraNameBadge(on ? '🎥 Follow Leader: ON (Chase Cam)' : '🌐 Follow: OFF (Free Orbit)', on);
+      toast(on ? '🎥 Follow Leader: ON (Chase Cam tracking P1)' : '🌐 Follow Leader: OFF (Circuit Orbit Overview)', 'info');
     }
   }
 }
@@ -620,6 +626,7 @@ function restartCurrentGen() {
   eliminationModals.clear();
   if (sim.mode === 'race') {
     setToggle('follow', true, false);
+    setCameraPreset('chase', false);
   }
   if (sim.cars && sim.cars.length > 0) {
     sim.startGeneration(sim.cars.map((c) => c.brain.genome));

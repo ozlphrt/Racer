@@ -6449,14 +6449,14 @@ export class Renderer3D {
     this._lastActionRearFocus = null;
     this._heliAngle = null;
     this._lastHeliFocus = null;
-    this._autoPreset = 'follow';
+    this._autoPreset = 'chase';
     this._lastPresetSwitchTime = performance.now();
     this._autoNextSwitch = performance.now() + 24000;
     this._lastGantryCutTime = null;
     this._lastGantryCutLap = null;
     this._gantryEntryLap = null;
     this._gantryCrossedLineTime = null;
-    this._lastActivePreset = 'follow';
+    this._lastActivePreset = 'chase';
     this._camTransition = null;
     this._currentActionPair = null;
     this._dynamicZoomOutFov = 0;
@@ -6466,16 +6466,17 @@ export class Renderer3D {
     const startY = t.cy ? -t.cy[0] : 0;
     const tx = t.tx ? t.tx[0] : 1;
     const ty = t.ty ? -t.ty[0] : 0;
-    const nx = -ty;
-    const ny = tx;
 
     if (followMode) {
-      // Canonical broadcast follow perspective placed behind the start grid looking down straight
-      this.controls.target.set(startX, startY, 3.5);
-      const camX = startX - tx * 190 + nx * 75;
-      const camY = startY - ty * 190 + ny * 75;
-      const camZ = 95;
+      // True Chase Camera perspective directly behind the start grid looking down the straight at P1
+      this.controls.target.set(startX + tx * 12.0, startY + ty * 12.0, 2.4);
+      const camX = startX - tx * 72.0;
+      const camY = startY - ty * 72.0;
+      const camZ = 24.0;
       this.camera.position.set(camX, camY, camZ);
+      this.camera.fov = 58;
+      this.camera.updateProjectionMatrix();
+      this.controls.autoRotate = false;
       this.controls.update();
       return;
     }
@@ -6699,10 +6700,10 @@ export class Renderer3D {
 
       const isStartLaunchPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
 
-      // STRICT LOCK AT START OF GAME / RACE LAUNCH: Use Broadcast Follow camera
+      // STRICT LOCK AT START OF GAME / RACE LAUNCH: Use Chase Cam directly tracking P1
       if (isStartLaunchPhase) {
-        if (this._autoPreset !== 'follow') {
-          this._autoPreset = 'follow';
+        if (this._autoPreset !== 'chase') {
+          this._autoPreset = 'chase';
           this._lastPresetSwitchTime = now;
           this._autoNextSwitch = now + 24000;
         }
@@ -6815,31 +6816,21 @@ export class Renderer3D {
           let weightedPool;
           if (this._autoPreset === 'heli') {
             weightedPool = [
-              { preset: 'action_rear', weight: 40 },
-              { preset: 'orbit', weight: 35 },
-              { preset: 'follow', weight: 15 },
-              { preset: 'chase', weight: 10 },
+              { preset: 'chase', weight: 45 },
+              { preset: 'action_rear', weight: 35 },
+              { preset: 'follow', weight: 20 },
             ];
           } else if (this._autoPreset === 'action_rear' || this._autoPreset === 'chase') {
             weightedPool = [
-              { preset: 'heli', weight: 45 },
-              { preset: 'orbit', weight: 30 },
-              { preset: 'follow', weight: 15 },
-              { preset: 'action', weight: 10 },
-            ];
-          } else if (this._autoPreset === 'orbit') {
-            weightedPool = [
-              { preset: 'heli', weight: 40 },
-              { preset: 'action_rear', weight: 35 },
-              { preset: 'follow', weight: 15 },
-              { preset: 'chase', weight: 10 },
+              { preset: 'chase', weight: 40 },
+              { preset: 'heli', weight: 35 },
+              { preset: 'action_rear', weight: 25 },
             ];
           } else {
             weightedPool = [
-              { preset: 'heli', weight: 35 },
-              { preset: 'orbit', weight: 25 },
-              { preset: 'action_rear', weight: 25 },
-              { preset: 'follow', weight: 15 },
+              { preset: 'chase', weight: 50 },
+              { preset: 'heli', weight: 30 },
+              { preset: 'action_rear', weight: 20 },
             ];
           }
 
@@ -7375,8 +7366,8 @@ export class Renderer3D {
         this._camTransition.active = false;
       }
     } else if (isOrbitActive) {
-      // In steady-state orbit mode, OrbitControls auto-rotates around target
-      this.controls.autoRotate = true;
+      // In steady-state orbit mode, OrbitControls auto-rotates around target ONLY if follow is OFF
+      this.controls.autoRotate = !opts.follow;
       this.controls.autoRotateSpeed = 0.55;
       this.controls.target.x += (destTargetX - this.controls.target.x) * 0.050;
       this.controls.target.y += (destTargetY - this.controls.target.y) * 0.050;
