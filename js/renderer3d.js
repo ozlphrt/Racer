@@ -6440,6 +6440,8 @@ export class Renderer3D {
 
   resetCamera(followMode = true) {
     this._chaseAngle = null;
+    this._chaseTargetX = null;
+    this._chaseTargetY = null;
     this._lastFocusCar = null;
     this._actionAngle = null;
     this._lastActionFocus = null;
@@ -7132,7 +7134,9 @@ export class Renderer3D {
           this._chaseTargetX = p1X;
           this._chaseTargetY = p1Y;
         } else {
-          const posFollowK = 0.042;
+          // Dynamic adaptive position following: smoothly scales with lag distance so the car never outruns the camera
+          const posDist = Math.hypot(p1X - this._chaseTargetX, p1Y - this._chaseTargetY);
+          const posFollowK = Math.min(0.18, 0.080 + Math.max(0, posDist - 8.0) * 0.006);
           this._chaseTargetX += (p1X - this._chaseTargetX) * posFollowK;
           this._chaseTargetY += (p1Y - this._chaseTargetY) * posFollowK;
 
@@ -7140,27 +7144,33 @@ export class Renderer3D {
           while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
           while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
 
-          this._chaseAngle += diffAngle * 0.028;
+          // Adaptive angular tracking: turns smoothly with the car, accelerating through sharp bends without sudden jerks
+          const angleK = Math.min(0.12, 0.062 + Math.abs(diffAngle) * 0.045);
+          this._chaseAngle += diffAngle * angleK;
         }
         this._lastFocusCar = p1;
 
         const cosA = Math.cos(this._chaseAngle);
         const sinA = Math.sin(this._chaseAngle);
 
-        const distBehind = Math.max(38.0, Math.min(190.0, p1p2Dist + 32.0));
-        const heightAbove = Math.max(13.0, Math.min(42.0, 13.0 + p1p2Dist * 0.16));
+        // Generous, breathable chase camera distance and elevated vantage point
+        const speedBonus = Math.min(18.0, (p1.speed || 0) * 0.12);
+        const distBehind = Math.max(68.0, Math.min(210.0, 66.0 + speedBonus + p1p2Dist * 0.45));
+        const heightAbove = Math.max(22.0, Math.min(56.0, 22.0 + speedBonus * 0.35 + p1p2Dist * 0.15));
         destCamX = this._chaseTargetX - cosA * distBehind;
         destCamY = this._chaseTargetY - sinA * distBehind;
         destCamZ = heightAbove + battleElev;
 
-        const lookAhead = 4.0;
+        // Look-ahead framing: look ahead of P1 along travel direction so car is positioned in lower-center third of screen
+        const lookAhead = 12.0;
         destTargetX = p1X + cosA * lookAhead;
         destTargetY = p1Y + sinA * lookAhead;
-        destTargetZ = 1.8 + p1Elev;
+        destTargetZ = 2.4 + p1Elev;
 
-        targetFov = Math.max(44, Math.min(68, 44 + (p1p2Dist / 100.0) * 18));
-        camGlide = 0.040;
-        targetGlide = 0.048;
+        // Wide, cinematic FOV: prevents claustrophobic framing and gives ample screen margins
+        targetFov = Math.max(54, Math.min(74, 54 + (p1p2Dist / 80.0) * 16));
+        camGlide = 0.075;
+        targetGlide = 0.085;
       }
     }
 
