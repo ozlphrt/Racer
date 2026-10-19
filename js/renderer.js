@@ -1117,7 +1117,7 @@ export class Renderer {
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
     const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
-    const maxSkidSegments = 180000;
+    const maxSkidSegments = 16000;
 
     for (let i = 0; i < allCars.length; i++) {
       const car = allCars[i];
@@ -1232,14 +1232,49 @@ export class Renderer {
     ctx.save();
     ctx.lineWidth = 1.8;
     ctx.lineCap = 'round';
+
+    // Batch paths into 3 alpha buckets to collapse thousands of individual stroke() calls into 3 GPU draws
+    const b1 = []; // Light rub-in
+    const b2 = []; // Medium slide
+    const b3 = []; // Heavy lockup/burnout
+
     for (let i = 0; i < this.skidmarks.length; i++) {
       const s = this.skidmarks[i];
-      ctx.strokeStyle = `rgba(32, 36, 44, ${s.alpha})`;
+      if (s.alpha <= 0.10) b1.push(s);
+      else if (s.alpha <= 0.20) b2.push(s);
+      else b3.push(s);
+    }
+
+    if (b1.length > 0) {
+      ctx.strokeStyle = 'rgba(32, 36, 44, 0.08)';
       ctx.beginPath();
-      ctx.moveTo(s.x0, s.y0);
-      ctx.lineTo(s.x1, s.y1);
+      for (let i = 0; i < b1.length; i++) {
+        ctx.moveTo(b1[i].x0, b1[i].y0);
+        ctx.lineTo(b1[i].x1, b1[i].y1);
+      }
       ctx.stroke();
     }
+
+    if (b2.length > 0) {
+      ctx.strokeStyle = 'rgba(32, 36, 44, 0.16)';
+      ctx.beginPath();
+      for (let i = 0; i < b2.length; i++) {
+        ctx.moveTo(b2[i].x0, b2[i].y0);
+        ctx.lineTo(b2[i].x1, b2[i].y1);
+      }
+      ctx.stroke();
+    }
+
+    if (b3.length > 0) {
+      ctx.strokeStyle = 'rgba(32, 36, 44, 0.28)';
+      ctx.beginPath();
+      for (let i = 0; i < b3.length; i++) {
+        ctx.moveTo(b3[i].x0, b3[i].y0);
+        ctx.lineTo(b3[i].x1, b3[i].y1);
+      }
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
