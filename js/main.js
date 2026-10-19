@@ -248,9 +248,11 @@ function setSimulationMode(mode) {
   if (renderer3d) renderer3d.updateSkidmarks(sim);
 
   if (isRace) {
-    // Camera is at chase follow mode by default at the start of each race
+    // Camera starts in broadcast auto mode by default at the start of each race
     setToggle('follow', true, false);
-    setCameraPreset('chase', false);
+    if (!state.cameraPreset || state.cameraPreset === 'orbit') {
+      setCameraPreset('auto', false);
+    }
     if (state.view3d && renderer3d) {
       renderer3d.resetCamera(true);
     }
@@ -282,10 +284,12 @@ sim.onGeneration = () => {
   leaderboard.reset();
   eliminationModals.clear();
 
-  // Camera is at chase follow mode by default at the start of each race
+  // Camera starts in broadcast auto mode by default at the start of each race
   if (sim.mode === 'race') {
     setToggle('follow', true, false);
-    setCameraPreset('chase', false);
+    if (!state.cameraPreset || state.cameraPreset === 'orbit') {
+      setCameraPreset('auto', false);
+    }
   }
   if (state.view3d && renderer3d && state.follow) {
     renderer3d.resetCamera(true);
@@ -598,7 +602,7 @@ function setToggle(key, on, showToast = true) {
     } catch (_) {}
     if (on) {
       if (state.cameraPreset === 'orbit' || !state.cameraPreset) {
-        setCameraPreset('chase', false);
+        setCameraPreset('auto', false);
       }
     } else {
       if (state.cameraPreset !== 'orbit') {
@@ -607,8 +611,8 @@ function setToggle(key, on, showToast = true) {
     }
     updateCameraPill();
     if (showToast && changed) {
-      flashCameraNameBadge(on ? '🎥 Follow Leader: ON (Chase Cam)' : '🌐 Follow: OFF (Free Orbit)', on);
-      toast(on ? '🎥 Follow Leader: ON (Chase Cam tracking P1)' : '🌐 Follow Leader: OFF (Circuit Orbit Overview)', 'info');
+      flashCameraNameBadge(on ? '🎥 Follow Leader: ON (Broadcast)' : '🌐 Follow: OFF (Free Orbit)', on);
+      toast(on ? '🎥 Follow Leader: ON (Broadcast Director tracking P1)' : '🌐 Follow Leader: OFF (Circuit Orbit Overview)', 'info');
     }
   }
 }
@@ -631,7 +635,9 @@ function restartCurrentGen() {
   eliminationModals.clear();
   if (sim.mode === 'race') {
     setToggle('follow', true, false);
-    setCameraPreset('chase', false);
+    if (!state.cameraPreset || state.cameraPreset === 'orbit') {
+      setCameraPreset('auto', false);
+    }
   }
   if (sim.cars && sim.cars.length > 0) {
     sim.startGeneration(sim.cars.map((c) => c.brain.genome));
@@ -1150,10 +1156,13 @@ function updateCameraPill() {
 
 function setCameraPreset(preset, showToast = true) {
   state.cameraPreset = preset;
+  try {
+    localStorage.setItem('ai-racer:cameraPreset', preset);
+  } catch (_) {}
   if (renderer3d) {
     renderer3d._lastPresetSwitchTime = performance.now();
-    renderer3d._autoPreset = preset;
-    renderer3d._autoNextSwitch = performance.now() + 20000;
+    renderer3d._autoPreset = (preset === 'auto') ? 'follow' : preset;
+    renderer3d._autoNextSwitch = performance.now() + 34000;
   }
   if (!state.view3d) {
     set3DView(true);
@@ -3390,6 +3399,8 @@ setGridBox(savedGridBox !== null ? savedGridBox !== 'false' : true, false);
 const savedLaps = localStorage.getItem('ai-racer:maxLaps');
 setMaxLaps(savedLaps !== null ? parseInt(savedLaps, 10) : (CONFIG.generation?.maxLaps || 5), false);
 
+const savedCamPreset = localStorage.getItem('ai-racer:cameraPreset');
+state.cameraPreset = savedCamPreset || 'auto';
 setCameraPreset(state.cameraPreset, false);
 renderGenPresetsRibbon();
 updateHud(sim.leader);
