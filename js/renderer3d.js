@@ -1291,6 +1291,42 @@ export class Renderer3D {
     return Math.max(-0.08, elevation);
   }
 
+  getExactMeshHeight(worldX, worldY) {
+    if (!this.terrainMesh || !this.terrainMesh.geometry || !this.terrainMesh.geometry.attributes.position) {
+      return this.getTerrainHeight(worldX, worldY);
+    }
+    const pos = this.terrainMesh.geometry.attributes.position.array;
+    const w = 24000;
+    const segs = 160;
+    const gridX1 = segs + 1;
+    const seg = w / segs;
+
+    // Convert worldX, worldY into grid cell coordinates
+    const u = Math.max(0, Math.min(segs - 1e-6, (worldX + w / 2) / seg));
+    const v = Math.max(0, Math.min(segs - 1e-6, (w / 2 - worldY) / seg));
+
+    const col = Math.floor(u);
+    const row = Math.floor(v);
+    const fx = u - col;
+    const fy = v - row;
+
+    const a = row * gridX1 + col;
+    const b = (row + 1) * gridX1 + col;
+    const c = (row + 1) * gridX1 + (col + 1);
+    const d = row * gridX1 + (col + 1);
+
+    const za = pos[a * 3 + 2];
+    const zb = pos[b * 3 + 2];
+    const zc = pos[c * 3 + 2];
+    const zd = pos[d * 3 + 2];
+
+    if (fx + fy <= 1) {
+      return za * (1 - fx - fy) + zd * fx + zb * fy;
+    } else {
+      return zc * (fx + fy - 1) + zb * (1 - fx) + zd * (1 - fy);
+    }
+  }
+
   setupTerrain() {
     if (this.terrainMesh) {
       this.scene.remove(this.terrainMesh);
@@ -4198,7 +4234,7 @@ export class Renderer3D {
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
 
       // In Three.js world space, the point is at (x, -y).
-      const groundZ = this.getTerrainHeight(x, -y);
+      const groundZ = this.getExactMeshHeight(x, -y);
 
       // Trees should ONLY grow where the terrain starts (above ground zero, Z > 0.2m)
       if (groundZ <= 0.2) continue;
@@ -4369,10 +4405,11 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedPines[i];
         const trunkH = (r * 0.85 + 4.5) * heightMult;
         const trunkR = Math.max(1.0, r * 0.12);
+        const rootSink = Math.min(1.4, Math.max(0.6, trunkR * 0.45));
 
         // Trunk
-        dummy.position.set(x, -y, groundZ + trunkH / 2);
-        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.position.set(x, -y, groundZ - rootSink + (trunkH + rootSink) / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH + rootSink);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
         pineTrunkInst.setMatrixAt(i, dummy.matrix);
@@ -4462,10 +4499,11 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedOaks[i];
         const trunkH = (r * 0.70 + 4.0) * heightMult;
         const trunkR = Math.max(1.3, r * 0.16);
+        const rootSink = Math.min(1.6, Math.max(0.7, trunkR * 0.45));
 
         // Trunk
-        dummy.position.set(x, -y, groundZ + trunkH / 2);
-        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.position.set(x, -y, groundZ - rootSink + (trunkH + rootSink) / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH + rootSink);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
         oakTrunkInst.setMatrixAt(i, dummy.matrix);
@@ -4553,10 +4591,11 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedCedars[i];
         const trunkH = (r * 0.80 + 4.2) * heightMult;
         const trunkR = Math.max(1.2, r * 0.15);
+        const rootSink = Math.min(1.5, Math.max(0.6, trunkR * 0.45));
 
         // Sturdy Cedar Trunk
-        dummy.position.set(x, -y, groundZ + trunkH / 2);
-        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.position.set(x, -y, groundZ - rootSink + (trunkH + rootSink) / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH + rootSink);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
         cedarTrunkInst.setMatrixAt(i, dummy.matrix);
@@ -4632,10 +4671,11 @@ export class Renderer3D {
         const { x, y, r, yaw, leanX, leanY, heightMult, hue, sat, lit, groundZ } = placedBirches[i];
         const trunkH = (r * 0.95 + 4.5) * heightMult;
         const trunkR = Math.max(0.95, r * 0.12);
+        const rootSink = Math.min(1.2, Math.max(0.5, trunkR * 0.40));
 
         // Trunk
-        dummy.position.set(x, -y, groundZ + trunkH / 2);
-        dummy.scale.set(trunkR, trunkR, trunkH);
+        dummy.position.set(x, -y, groundZ - rootSink + (trunkH + rootSink) / 2);
+        dummy.scale.set(trunkR, trunkR, trunkH + rootSink);
         dummy.rotation.set(leanX, leanY, yaw);
         dummy.updateMatrix();
         birchTrunkInst.setMatrixAt(i, dummy.matrix);
@@ -5227,7 +5267,7 @@ export class Renderer3D {
       if (minDistToTrack < minSafeTrackClearance) continue; // Completely remove rocks near track / runoff
 
       // In Three.js world space, the point is at (x, -y)
-      const groundZ = this.getTerrainHeight(x, -y);
+      const groundZ = this.getExactMeshHeight(x, -y);
       if (groundZ <= 0.8) continue; // Rocks only sit naturally up on elevated hills and mountains
 
       // Exclude water bodies
@@ -6844,8 +6884,8 @@ export class Renderer3D {
     const p1p2Dist = p2Alive ? Math.hypot(p1X - p2X, p1Y - p2Y) : 22.0;
 
     // Terrain elevation at P1 and battle midpoint (active on-track cars are flat at Z=0)
-    const p1Elev = (p1 && !p1.crashed && p1.alive) ? 0 : this.getTerrainHeight(p1X, p1Y);
-    const p2Elev = (p2Alive && !p2.crashed) ? 0 : (p2Alive ? this.getTerrainHeight(p2X, p2Y) : p1Elev);
+    const p1Elev = (p1 && !p1.crashed && p1.alive) ? 0 : this.getExactMeshHeight(p1X, p1Y);
+    const p2Elev = (p2Alive && !p2.crashed) ? 0 : (p2Alive ? this.getExactMeshHeight(p2X, p2Y) : p1Elev);
     const battleElev = p2Alive ? (p1Elev + p2Elev) * 0.5 : p1Elev;
 
     // Smooth track corridor reference angle (never twitches on car steering or drifts)
@@ -7303,7 +7343,7 @@ export class Renderer3D {
       }
 
       // Strict terrain elevation guard: camera never clips through hills or mounds
-      const groundElev = this.getTerrainHeight(curX, curY);
+      const groundElev = this.getExactMeshHeight(curX, curY);
       if (curZ < groundElev + 2.5) {
         curZ = groundElev + 2.5;
       }
@@ -7387,7 +7427,7 @@ export class Renderer3D {
 
     if (this.isAutoDirector && checkCar && !isOrbitActive && !isBroadcastPreset && !isStartPhase && !inSwitchGrace) {
       if (!this._tempNdcVec) this._tempNdcVec = new THREE.Vector3();
-      const carZ = (checkCar.crashed && checkCar.alive) ? this.getTerrainHeight(checkCar.x, -checkCar.y) : 0.8;
+      const carZ = (checkCar.crashed && checkCar.alive) ? this.getExactMeshHeight(checkCar.x, -checkCar.y) : 0.8;
       this._tempNdcVec.set(checkCar.x, -checkCar.y, carZ).project(this.camera);
 
       const isBehindCam = this._tempNdcVec.z > 1.0 || this._tempNdcVec.z < -1.0;
@@ -7436,7 +7476,7 @@ export class Renderer3D {
         const targetY = -car.y;
         const targetAngle = -car.angle;
 
-        const targetZ = (car.crashed && car.alive) ? this.getTerrainHeight(targetX, targetY) : 0;
+        const targetZ = (car.crashed && car.alive) ? this.getExactMeshHeight(targetX, targetY) : 0;
 
         if (typeof mesh.userData.curX !== 'number' || Math.hypot(targetX - mesh.userData.curX, targetY - mesh.userData.curY) > 60) {
           mesh.userData.curX = targetX;
@@ -7540,7 +7580,7 @@ export class Renderer3D {
       this.playerCar.visible = true;
       const targetX = sim.player.x;
       const targetY = -sim.player.y;
-      const targetZ = (sim.player.crashed) ? this.getTerrainHeight(targetX, targetY) : 0;
+      const targetZ = (sim.player.crashed) ? this.getExactMeshHeight(targetX, targetY) : 0;
       const targetAngle = -sim.player.angle;
 
       if (typeof this.playerCar.userData.curX !== 'number' || Math.hypot(targetX - this.playerCar.userData.curX, targetY - this.playerCar.userData.curY) > 60) {
