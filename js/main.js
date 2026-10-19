@@ -1854,7 +1854,8 @@ function updateHyperControlsUi() {
     if (progState) progState.textContent = 'SIMULATION STANDBY';
     if (progBadge) progBadge.textContent = 'STANDBY';
     if (targetInfo) {
-      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · CONTINUOUS EVOLUTION`;
+      const modeDesc = hyperLaps === 1 ? '1-LAP SPRINT' : (hyperLaps === 2 ? '2-LAP FLYING BENCHMARK' : `${hyperLaps}-LAP FULL GP`);
+      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · ${modeDesc}`;
     }
     if (barFill) {
       barFill.classList.remove('is-active');
@@ -1980,6 +1981,7 @@ function openHyperModal() {
     hyperChart?.resize();
     hyperChart?.draw(sim.history, sim.bestLapEver);
   });
+  setHyperLaps(hyperLaps);
   updateHyperControlsUi();
   updateHyperTelemetryUi(hyperRunning ? undefined : '0');
 
@@ -2149,6 +2151,64 @@ let prevTimeLimit = 85;
 let prevTireBarriers = null;
 let headlessPostFinishTimer = null;
 
+let hyperLaps = 2; // Default to 2 Laps: Lap 1 Launch + Lap 2 Flying Benchmark (Matches Live GP)
+try {
+  const savedHyperLaps = localStorage.getItem('ai-racer:hyperLaps');
+  if (savedHyperLaps) {
+    hyperLaps = Math.max(1, parseInt(savedHyperLaps, 10) || 2);
+  }
+} catch (_) {}
+
+function setHyperLaps(laps) {
+  hyperLaps = Math.max(1, parseInt(laps, 10) || 2);
+  try {
+    localStorage.setItem('ai-racer:hyperLaps', String(hyperLaps));
+  } catch (_) {}
+
+  document.querySelectorAll('#hub-lap-chips .hub-lap-chip').forEach((btn) => {
+    const isCur = Number(btn.getAttribute('data-laps')) === hyperLaps;
+    btn.classList.toggle('active', isCur);
+    btn.setAttribute('aria-checked', String(isCur));
+  });
+
+  const hintEl = $('hub-lap-hint');
+  if (hintEl) {
+    if (hyperLaps === 1) {
+      hintEl.textContent = '1-Lap Sprint (Standing Start from Grid · Max Throughput ~8 gen/s)';
+    } else if (hyperLaps === 2) {
+      hintEl.textContent = 'Lap 1 Launch + Lap 2 Flying Benchmark (Matches Live GP · ~4.7 gen/s)';
+    } else {
+      hintEl.textContent = `${hyperLaps}-Lap Full Race Distance (Complete Grand Prix Simulation · ~1.7 gen/s)`;
+    }
+  }
+
+  const targetInfo = $('hyper-target-info');
+  if (targetInfo) {
+    const modeDesc = hyperLaps === 1 ? '1-LAP SPRINT' : (hyperLaps === 2 ? '2-LAP FLYING BENCHMARK' : `${hyperLaps}-LAP FULL GP`);
+    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · ${modeDesc}`;
+  }
+
+  if (hyperRunning && CONFIG.generation) {
+    CONFIG.generation.maxLaps = hyperLaps;
+    CONFIG.generation.timeLimit = hyperLaps === 1 ? 26 : (hyperLaps === 2 ? 50 : (hyperLaps * 22));
+  }
+}
+
+document.querySelectorAll('#hub-lap-chips .hub-lap-chip').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const laps = Number(btn.getAttribute('data-laps')) || 2;
+    setHyperLaps(laps);
+    toast(
+      laps === 1
+        ? '⚡ 1-Lap Sprint: Max evolutionary throughput (~8 gen/s)'
+        : (laps === 2
+          ? '🎯 2-Lap Flying Benchmark: Lap 1 Launch + Lap 2 Flying Lap (Matches Live GP)'
+          : `🏁 ${laps}-Lap Full Race: Complete Grand Prix endurance parity`),
+      'info'
+    );
+  });
+});
+
 function startHyperTraining() {
   hyperRunning = true;
   state.hyperRunning = true;
@@ -2162,8 +2222,8 @@ function startHyperTraining() {
 
   if (CONFIG.generation) {
     CONFIG.generation.startDelay = 0.0001; // Bypass 120 stationary start ticks in headless mode
-    CONFIG.generation.maxLaps = 1; // 1-Lap Flying Sprint: maximum evolutionary throughput (~6.5–8.0 gen/s)
-    CONFIG.generation.timeLimit = 24; // Strict safety cutoff for 1 lap
+    CONFIG.generation.maxLaps = hyperLaps; // 1-Lap sprint, 2-Lap Flying Benchmark (default), or 5-Lap GP
+    CONFIG.generation.timeLimit = hyperLaps === 1 ? 26 : (hyperLaps === 2 ? 50 : (hyperLaps * 22));
   }
   sim.tireBarriers = null; // Bypass off-track tire physics during headless run
 
@@ -2184,7 +2244,8 @@ function startHyperTraining() {
 
   const targetInfo = $('hyper-target-info');
   if (targetInfo) {
-    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · CONTINUOUS EVOLUTION`;
+    const modeDesc = hyperLaps === 1 ? '1-LAP SPRINT' : (hyperLaps === 2 ? '2-LAP FLYING BENCHMARK' : `${hyperLaps}-LAP FULL GP`);
+    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · ${modeDesc}`;
   }
 
   if (hyperRunningView) hyperRunningView.hidden = false;

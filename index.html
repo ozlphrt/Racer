@@ -772,6 +772,35 @@
         <div class="hub-pane active" id="hub-pane-train">
           <!-- Fast-Forward Continuous Simulation Dashboard -->
           <div class="hyper-running" id="hyper-running-view">
+            <!-- Hub Simulation Distance & Benchmark Mode Selector -->
+            <div class="hub-lap-selector-wrap">
+              <div class="hub-lap-selector-header">
+                <div class="hub-lap-title-group">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <span class="hub-lap-title">GENERATION BENCHMARK MODE</span>
+                </div>
+                <span class="hub-lap-hint" id="hub-lap-hint">Lap 1 Launch + Lap 2 Flying Benchmark (Matches Live GP)</span>
+              </div>
+              <div class="hub-lap-chips" id="hub-lap-chips" role="radiogroup" aria-label="Simulation Lap Distance">
+                <button class="hub-lap-chip" data-laps="1" type="button" role="radio" aria-checked="false" title="1-Lap Sprint (~8.0 gen/s) · Standing start from grid">
+                  <span class="chip-main">1 Lap</span>
+                  <span class="chip-meta">Sprint · ~8 gen/s</span>
+                </button>
+                <button class="hub-lap-chip active" data-laps="2" type="button" role="radio" aria-checked="true" title="2-Lap Flying Benchmark (~4.7 gen/s) · Lap 1 Launch + Lap 2 Flying Lap (Matches Live GP)">
+                  <span class="chip-badge">RECOMMENDED</span>
+                  <span class="chip-main">2 Laps</span>
+                  <span class="chip-meta">Flying Benchmark · ~4.7 gen/s</span>
+                </button>
+                <button class="hub-lap-chip" data-laps="5" type="button" role="radio" aria-checked="false" title="5-Lap Full Grand Prix (~1.7 gen/s) · Full race distance parity">
+                  <span class="chip-main">5 Laps</span>
+                  <span class="chip-meta">Full GP · ~1.7 gen/s</span>
+                </button>
+              </div>
+            </div>
+
             <div class="hyper-progress-wrap">
               <div class="hyper-progress-labels">
                 <div class="prog-label-left">
