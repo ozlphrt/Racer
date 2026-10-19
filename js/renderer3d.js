@@ -6422,15 +6422,11 @@ export class Renderer3D {
       const posAttr = this.skidMesh.geometry.attributes.position;
       const alphaAttr = this.skidMesh.geometry.attributes.alpha;
       if (quadsAdded > 0 && startHead + quadsAdded <= this.maxSkidQuads) {
-        posAttr.updateRange.offset = startHead * 4 * 3;
-        posAttr.updateRange.count = quadsAdded * 4 * 3;
-        alphaAttr.updateRange.offset = startHead * 4;
-        alphaAttr.updateRange.count = quadsAdded * 4;
+        posAttr.updateRange = { offset: startHead * 4 * 3, count: quadsAdded * 4 * 3 };
+        alphaAttr.updateRange = { offset: startHead * 4, count: quadsAdded * 4 };
       } else {
-        posAttr.updateRange.offset = 0;
-        posAttr.updateRange.count = -1;
-        alphaAttr.updateRange.offset = 0;
-        alphaAttr.updateRange.count = -1;
+        posAttr.updateRange = { offset: 0, count: -1 };
+        alphaAttr.updateRange = { offset: 0, count: -1 };
       }
       posAttr.needsUpdate = true;
       alphaAttr.needsUpdate = true;
