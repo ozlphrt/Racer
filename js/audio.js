@@ -692,6 +692,53 @@ export class SpatialAudioEngine {
   playSuccess() {
     // Optional success chime
   }
+
+  playRecordFanfare() {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+    try {
+      const now = this.ctx.currentTime;
+      const master = this.masterGain;
+
+      // Ascending triumphant major fanfare: C5 (523Hz), E5 (659Hz), G5 (784Hz), C6 (1046Hz)
+      const notes = [
+        { f: 523.25, t: 0.00, dur: 0.35, gain: 0.28 },
+        { f: 659.25, t: 0.08, dur: 0.35, gain: 0.32 },
+        { f: 783.99, t: 0.16, dur: 0.40, gain: 0.36 },
+        { f: 1046.50, t: 0.24, dur: 0.85, gain: 0.45 },
+      ];
+
+      for (const n of notes) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.f, now + n.t);
+
+        gain.gain.setValueAtTime(0.0001, now + n.t);
+        gain.gain.linearRampToValueAtTime(n.gain, now + n.t + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + n.t + n.dur);
+
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(now + n.t);
+        osc.stop(now + n.t + n.dur + 0.05);
+
+        // Radiant crystal harmonic sparkle (2nd octave shimmer)
+        const shimmer = this.ctx.createOscillator();
+        const shimGain = this.ctx.createGain();
+        shimmer.type = 'sine';
+        shimmer.frequency.setValueAtTime(n.f * 2, now + n.t);
+
+        shimGain.gain.setValueAtTime(0.0001, now + n.t);
+        shimGain.gain.linearRampToValueAtTime(n.gain * 0.35, now + n.t + 0.01);
+        shimGain.gain.exponentialRampToValueAtTime(0.0001, now + n.t + n.dur * 0.7);
+
+        shimmer.connect(shimGain);
+        shimGain.connect(master);
+        shimmer.start(now + n.t);
+        shimmer.stop(now + n.t + n.dur * 0.7 + 0.05);
+      }
+    } catch {}
+  }
 }
 
 export const audio = new SpatialAudioEngine();

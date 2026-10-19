@@ -242,16 +242,18 @@ export class Simulation {
     if (!Number.isFinite(lapDuration) || lapDuration <= 5 || lapDuration >= 60) return;
 
     // Check if this lap beats the current all-time best, or if we need to replace synthetic fallback
+    const prevRecord = this.bestLapEver;
     const isNewCircuitRecord = lapDuration < this.bestLapEver;
     const isReplacingSynthetic = !this.isRealCarTelemetry;
 
     if (isNewCircuitRecord || isReplacingSynthetic) {
+      this.prevBestLapEver = Number.isFinite(prevRecord) && prevRecord < 100 ? prevRecord : null;
       this.bestLapEver = lapDuration;
       this.isRealCarTelemetry = true;
       if (samples && samples.length > 5) {
         this.recordLapTelemetry = [...samples];
       }
-      this.onNewBestLap?.(lapDuration, car);
+      this.onNewBestLap?.(lapDuration, car, this.prevBestLapEver);
     }
   }
 
@@ -626,6 +628,8 @@ export class Simulation {
       const isBetterThanRecord = genBestLap < this.bestLapEver;
       const shouldUpdate = isBetterThanRecord || !this.isRealCarTelemetry;
       if (shouldUpdate) {
+        const prevRec = this.bestLapEver;
+        this.prevBestLapEver = Number.isFinite(prevRec) && prevRec < 100 ? prevRec : null;
         this.bestLapEver = genBestLap;
         this.isRealCarTelemetry = true;
         const fastestCar = this.cars.find(
@@ -641,7 +645,7 @@ export class Simulation {
             this.recordLapTelemetry = [...samples];
           }
         }
-        this.onNewBestLap?.(genBestLap, fastestCar);
+        this.onNewBestLap?.(genBestLap, fastestCar, this.prevBestLapEver);
       }
     }
 

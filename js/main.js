@@ -299,12 +299,72 @@ sim.onNewBest = (best) => {
   persistState();
 };
 
-sim.onNewBestLap = (lapDuration, car) => {
+let recordCelebrationTimeout = null;
+
+function showRecordCelebration(lapDuration, car, prevRecord) {
+  const overlay = $('record-celebration-overlay');
+  const timeEl = $('record-overlay-time');
+  const deltaEl = $('record-overlay-delta');
+  const carEl = $('record-overlay-car');
+  const genEl = $('record-overlay-gen');
+  const lapBox = document.querySelector('.hud-item.hud-lap-box');
+
+  const carName = car ? (car.manual ? 'PLAYER' : `CAR #${car.idx + 1}`) : 'P1';
+  const genText = `GEN ${sim?.generation || ''}`;
+
+  if (timeEl) timeEl.textContent = `${lapDuration.toFixed(2)}s`;
+  if (carEl) carEl.textContent = carName;
+  if (genEl) genEl.textContent = genText;
+
+  if (deltaEl) {
+    if (prevRecord && Number.isFinite(prevRecord) && prevRecord > lapDuration) {
+      const diff = lapDuration - prevRecord;
+      deltaEl.textContent = `${diff.toFixed(2)}s`;
+      deltaEl.hidden = false;
+    } else {
+      deltaEl.textContent = '★ RECORD';
+      deltaEl.hidden = false;
+    }
+  }
+
+  // Flash top HUD lap box with glowing purple/gold pulse
+  if (lapBox) {
+    lapBox.classList.remove('is-record-flash');
+    void lapBox.offsetWidth; // Force reflow
+    lapBox.classList.add('is-record-flash');
+  }
+
+  // Activate 3D arch celebration (overhead scoreboard + F1 LED pods strobe)
+  if (renderer3d && typeof renderer3d.triggerRecordCelebration === 'function') {
+    renderer3d.triggerRecordCelebration(lapDuration, car);
+  }
+
+  // Play triumphant audio fanfare
+  audio?.playRecordFanfare?.();
+
+  // Show large broadcast overlay on main screen
+  if (overlay) {
+    overlay.classList.remove('is-active');
+    void overlay.offsetWidth; // Force reflow for re-animation
+    overlay.classList.add('is-active');
+    overlay.setAttribute('aria-hidden', 'false');
+
+    if (recordCelebrationTimeout) clearTimeout(recordCelebrationTimeout);
+    recordCelebrationTimeout = setTimeout(() => {
+      overlay.classList.remove('is-active');
+      overlay.setAttribute('aria-hidden', 'true');
+      if (lapBox) lapBox.classList.remove('is-record-flash');
+    }, 4500);
+  }
+}
+
+sim.onNewBestLap = (lapDuration, car, prevRecord) => {
   if (hyperRunning) return;
   pulse('stat-best-lap-box');
   const carName = car ? (car.manual ? 'Player' : `Car #${car.idx + 1}`) : 'New Record';
   const timeTxt = Number.isFinite(lapDuration) ? `${lapDuration.toFixed(2)}s` : '';
-  toast(`⚡ Ghost Refreshed: ${carName} (${timeTxt})`, 'success');
+  toast(`⚡ All-Time Circuit Record Broken: ${carName} (${timeTxt})`, 'success');
+  showRecordCelebration(lapDuration, car, prevRecord);
   persistState();
 };
 

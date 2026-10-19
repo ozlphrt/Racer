@@ -2536,6 +2536,7 @@ export class Renderer3D {
       roughness: 0.15,
       metalness: 0.05,
     });
+    this.lapPlateDisplayMat = displayMat;
 
     // Front Display (Facing incoming cars upstream)
     const frontDisplayGeo = new THREE.PlaneGeometry(plateWidth - 0.6, plateHeight - 0.6);
@@ -2660,6 +2661,31 @@ export class Renderer3D {
 
     const startDelay = CONFIG.generation?.startDelay || 2.0;
     const t = sim ? sim.time : startDelay;
+
+    if (this._recordCelebrationUntil && performance.now() < this._recordCelebrationUntil) {
+      // High-energy celebration strobe sequence across the 5 lights
+      const tNow = performance.now();
+      const strobeIdx = Math.floor((tNow / 110) % 5);
+      for (let i = 0; i < 5; i++) {
+        const mat = this.gantryLedMats[i];
+        if (mat) {
+          if (i === strobeIdx) {
+            mat.color.setHex(0xffffff);
+            mat.emissive.setHex(0xffffff);
+            mat.emissiveIntensity = 6.0;
+          } else if (Math.abs(i - strobeIdx) === 1) {
+            mat.color.setHex(0xc084fc);
+            mat.emissive.setHex(0xa855f7);
+            mat.emissiveIntensity = 4.0;
+          } else {
+            mat.color.setHex(0xfbbf24);
+            mat.emissive.setHex(0xf59e0b);
+            mat.emissiveIntensity = 2.0;
+          }
+        }
+      }
+      return;
+    }
 
     if (t < startDelay) {
       // Red lights countdown phase (0s to 2.0s)
@@ -2807,12 +2833,32 @@ export class Renderer3D {
     // Number of laps remaining to complete in the race (e.g. 5 on Lap 1, 1 on Final Lap, 0 at Finish)
     const lapsRemaining = Math.max(0, maxLaps - lapsDone);
 
+    const nowMs = performance.now();
+    const isCelebratingRecord = this._recordCelebrationUntil && nowMs < this._recordCelebrationUntil;
+
     let mainText = `${lapsRemaining} LAPS TO GO`;
-    let subText = `LAP ${currentLap} OF ${maxLaps} Â· LEADER P1`;
+    let subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
     let color = '#38bdf8'; // Electric Cyan
     let isFinal = false;
 
-    if (simTime < startDelay) {
+    if (isCelebratingRecord) {
+      const recTimeStr = (this._recordLapDuration && Number.isFinite(this._recordLapDuration))
+        ? `${this._recordLapDuration.toFixed(2)}s`
+        : 'RECORD';
+      mainText = `★ ${recTimeStr} RECORD ★`;
+      const carTag = this._recordCarName || 'P1';
+      subText = `CIRCUIT LAP RECORD · ${carTag} · ALL-TIME FASTEST`;
+      color = '#c084fc'; // F1 Neon Record Purple
+      isFinal = true;
+
+      if (this.lapPlateDisplayMat) {
+        this.lapPlateDisplayMat.emissiveIntensity = 1.7 + 0.6 * Math.sin(nowMs * 0.008);
+      }
+    } else {
+      if (this.lapPlateDisplayMat && this.lapPlateDisplayMat.emissiveIntensity !== 1.4) {
+        this.lapPlateDisplayMat.emissiveIntensity = 1.4;
+      }
+      if (simTime < startDelay) {
       mainText = 'START COUNTDOWN';
       subText = 'WATCH 5 RED LIGHTS Â· HOLD GRID';
       color = '#ef4444'; // Red
@@ -2851,15 +2897,24 @@ export class Renderer3D {
       color = '#38bdf8'; // Electric Cyan
     } else {
       mainText = 'RACE ON';
-      subText = `LAP 1 OF ${maxLaps} Â· GREEN FLAG`;
+      subText = `LAP 1 OF ${maxLaps} · GREEN FLAG`;
       color = '#38bdf8'; // Electric Cyan
     }
+  }
 
-    const stateKey = `${mainText}|${subText}|${color}|${isFinal}`;
-    if (stateKey !== this._lastLapPlateKey) {
-      this._lastLapPlateKey = stateKey;
-      this.updateLapPlateTexture(mainText, subText, color, isFinal);
-    }
+  const stateKey = `${mainText}|${subText}|${color}|${isFinal}`;
+  if (stateKey !== this._lastLapPlateKey) {
+    this._lastLapPlateKey = stateKey;
+    this.updateLapPlateTexture(mainText, subText, color, isFinal);
+  }
+}
+
+  triggerRecordCelebration(lapDuration, car) {
+    if (!Number.isFinite(lapDuration) || lapDuration <= 0) return;
+    this._recordCelebrationUntil = performance.now() + 8500;
+    this._recordLapDuration = lapDuration;
+    this._recordCarName = car ? (car.manual ? 'PLAYER' : `CAR #${car.idx + 1}`) : 'P1';
+    this._lastLapPlateKey = '';
   }
 
   createTarmacCheckeredTexture() {
