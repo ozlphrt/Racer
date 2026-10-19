@@ -7116,23 +7116,37 @@ export class Renderer3D {
         camGlide = 0.040;
         targetGlide = 0.050;
       } else if (p1) {
+        const carAngle3D = -p1.angle;
+        // Blend actual car heading with smooth corridor tangent so it tracks the car's true heading smoothly
+        let targetChaseHeading = carAngle3D;
+        if (p1.speed > 10 && t && t.tx && t.ty && t.N && p1.idx !== undefined) {
+          const p1Idx = ((Math.floor(p1.idx) % t.N) + t.N) % t.N;
+          if (typeof t.tx[p1Idx] === 'number' && typeof t.ty[p1Idx] === 'number') {
+            const trackHeading = Math.atan2(-t.ty[p1Idx], t.tx[p1Idx]);
+            let diffH = trackHeading - carAngle3D;
+            while (diffH > Math.PI) diffH -= Math.PI * 2;
+            while (diffH < -Math.PI) diffH += Math.PI * 2;
+            targetChaseHeading = carAngle3D + diffH * 0.25;
+          }
+        }
+
         if (typeof this._chaseAngle !== 'number' || typeof this._chaseTargetX !== 'number') {
-          this._chaseAngle = battleAngle;
+          this._chaseAngle = targetChaseHeading;
           this._chaseTargetX = p1X;
           this._chaseTargetY = p1Y;
         } else {
           // Dynamic adaptive position following: smoothly scales with lag distance so the car never outruns the camera
           const posDist = Math.hypot(p1X - this._chaseTargetX, p1Y - this._chaseTargetY);
-          const posFollowK = Math.min(0.18, 0.080 + Math.max(0, posDist - 8.0) * 0.006);
+          const posFollowK = Math.min(0.25, 0.090 + Math.max(0, posDist - 5.0) * 0.008);
           this._chaseTargetX += (p1X - this._chaseTargetX) * posFollowK;
           this._chaseTargetY += (p1Y - this._chaseTargetY) * posFollowK;
 
-          let diffAngle = battleAngle - this._chaseAngle;
+          let diffAngle = targetChaseHeading - this._chaseAngle;
           while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
           while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
 
           // Adaptive angular tracking: turns smoothly with the car, accelerating through sharp bends without sudden jerks
-          const angleK = Math.min(0.12, 0.062 + Math.abs(diffAngle) * 0.045);
+          const angleK = Math.min(0.20, 0.085 + Math.abs(diffAngle) * 0.065);
           this._chaseAngle += diffAngle * angleK;
         }
         this._lastFocusCar = p1;
@@ -7149,15 +7163,15 @@ export class Renderer3D {
         destCamZ = heightAbove + battleElev;
 
         // Look-ahead framing: look ahead of P1 along travel direction so car is positioned in lower-center third of screen
-        const lookAhead = 12.0;
+        const lookAhead = 14.0;
         destTargetX = p1X + cosA * lookAhead;
         destTargetY = p1Y + sinA * lookAhead;
         destTargetZ = 2.4 + p1Elev;
 
         // Wide, cinematic FOV: prevents claustrophobic framing and gives ample screen margins
         targetFov = Math.max(54, Math.min(74, 54 + (p1p2Dist / 80.0) * 16));
-        camGlide = 0.075;
-        targetGlide = 0.085;
+        camGlide = 0.085;
+        targetGlide = 0.095;
       }
     }
 
@@ -7355,6 +7369,7 @@ export class Renderer3D {
 
       this.camera.position.set(curX, curY, curZ);
       this.controls.target.set(curTargetX, curTargetY, curTargetZ);
+      this.camera.lookAt(curTargetX, curTargetY, curTargetZ);
       this.camera.fov = curFov;
       this.camera.updateProjectionMatrix();
 
@@ -7383,6 +7398,9 @@ export class Renderer3D {
       this.controls.target.x += (destTargetX - this.controls.target.x) * targetGlide;
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
+
+      // Always orient camera to look directly at target
+      this.camera.lookAt(this.controls.target.x, this.controls.target.y, this.controls.target.z);
 
       if (Math.abs(this.camera.fov - targetFov) > 0.02) {
         const fovLerp = (targetFov > this.camera.fov) ? 0.065 : 0.035;
