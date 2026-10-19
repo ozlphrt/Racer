@@ -2643,7 +2643,7 @@ export class Renderer3D {
     gantryGroup.add(backDisplay);
 
     this._lastLapPlateKey = '';
-    this.updateLapPlateTexture('4 LAPS TO GO', 'LAP 1 OF 5 Â· LEADER P1', '#38bdf8', false);
+    this.updateLapPlate(null, null);
 
     this.decorGroup.add(gantryGroup);
     this.setupStartingGridBoxes();
@@ -2825,11 +2825,33 @@ export class Renderer3D {
     }
   }
 
-  updateLapPlateTexture(mainText, subText, accentColor = '#38bdf8', isFinal = false) {
+  updateLapPlateTexture(dataOrMain, subText, accentColor = '#38bdf8', isFinal = false) {
     if (!this.lapPlateCtx) return;
     const ctx = this.lapPlateCtx;
     const w = 1024;
     const h = 320;
+
+    let data;
+    if (dataOrMain && typeof dataOrMain === 'object') {
+      data = dataOrMain;
+    } else {
+      data = {
+        lapsMain: dataOrMain || '5 LAPS',
+        lapsSub: subText || 'TO GO',
+        lapsLabel: 'LAPS TO GO',
+        lapsColor: accentColor,
+        bestMain: '--.--s',
+        bestSub: 'CIRCUIT RECORD',
+        bestLabel: 'BEST LAP',
+        bestColor: accentColor,
+        topHeaderLeft: 'GRAND PRIX',
+        topHeaderCenter: subText || 'LAP 1 OF 5',
+        topHeaderRight: 'LIVE',
+        accentColor: accentColor,
+        isFinal: isFinal,
+        isCelebrating: false,
+      };
+    }
 
     ctx.clearRect(0, 0, w, h);
 
@@ -2843,22 +2865,24 @@ export class Renderer3D {
       ctx.fillRect(0, y, w, 4);
     }
 
+    const mainBorderColor = data.accentColor || '#38bdf8';
+
     // Outer neon glow border
     ctx.lineWidth = 10;
-    ctx.strokeStyle = accentColor;
+    ctx.strokeStyle = mainBorderColor;
     ctx.strokeRect(5, 5, w - 10, h - 10);
 
     // Inner bevel border
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
     ctx.strokeRect(16, 16, w - 32, h - 32);
 
-    if (isFinal) {
-      // Checkered pattern side accents for Final Lap / Chequered Flag
-      const chSize = 24;
-      const chRows = Math.floor((h - 32) / chSize);
+    // Checkered pattern side accents when in Final Lap or Chequered Flag
+    if (data.isFinal) {
+      const chSize = 20;
+      const chRows = Math.floor((h - 40) / chSize);
       for (let r = 0; r < chRows; r++) {
-        for (let c = 0; c < 4; c++) {
+        for (let c = 0; c < 2; c++) {
           ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#090d16';
           ctx.fillRect(20 + c * chSize, 20 + r * chSize, chSize, chSize);
           ctx.fillRect(w - 20 - (c + 1) * chSize, 20 + r * chSize, chSize, chSize);
@@ -2866,32 +2890,141 @@ export class Renderer3D {
       }
     }
 
-    // Top Header Tag (e.g. "LAP 2 OF 5 Â· LEADER P1" or "RACE FINISHED")
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.font = '800 36px "Outfit", "Segoe UI", system-ui, sans-serif';
-    ctx.fillStyle = accentColor;
-    ctx.shadowColor = accentColor;
-    ctx.shadowBlur = 10;
-    ctx.fillText(subText.toUpperCase(), w / 2, 32);
-    ctx.shadowBlur = 0;
-
-    // Glowing Divider Line
-    ctx.strokeStyle = accentColor;
-    ctx.lineWidth = 3;
+    // -------------------------------------------------------------
+    // TOP STATUS BANNER (y = 22 .. 68)
+    // -------------------------------------------------------------
+    const topBarY = 22;
+    const topBarH = 46;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
     ctx.beginPath();
-    ctx.moveTo(w * 0.16, 88);
-    ctx.lineTo(w * 0.84, 88);
+    ctx.roundRect(64, topBarY, w - 128, topBarH, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Main Digital Text (e.g. "3 LAPS TO GO", "FINAL LAP", "CHEQUERED FLAG")
+    // Top Header Left (e.g. "LEADER: P1" or "START GRID")
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = '900 112px "JetBrains Mono", "Outfit", Impact, system-ui, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = accentColor;
-    ctx.shadowBlur = 24;
-    ctx.fillText(mainText, w / 2, 196);
+    ctx.font = '800 20px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText((data.topHeaderLeft || 'GRAND PRIX').toUpperCase(), 84, topBarY + topBarH * 0.5);
+
+    // Top Header Center (e.g. "LAP 2 OF 5")
+    ctx.textAlign = 'center';
+    ctx.font = '900 26px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = mainBorderColor;
+    ctx.shadowColor = mainBorderColor;
+    ctx.shadowBlur = 12;
+    ctx.fillText((data.topHeaderCenter || 'LAP 1 OF 5').toUpperCase(), w * 0.5, topBarY + topBarH * 0.5);
     ctx.shadowBlur = 0;
+
+    // Top Header Right (e.g. "● LIVE TIMING" or "★ RECORD PACE")
+    ctx.textAlign = 'right';
+    ctx.font = '800 20px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = data.isCelebrating ? '#facc15' : '#38bdf8';
+    ctx.fillText((data.topHeaderRight || '● LIVE').toUpperCase(), w - 84, topBarY + topBarH * 0.5);
+
+    // Horizontal Divider Line below Top Banner
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(64, 76);
+    ctx.lineTo(w - 64, 76);
+    ctx.stroke();
+
+    // -------------------------------------------------------------
+    // CENTER VERTICAL DIVIDER (x = 512, y = 82 .. 300)
+    // -------------------------------------------------------------
+    const centerGrad = ctx.createLinearGradient(512, 82, 512, 300);
+    centerGrad.addColorStop(0, 'rgba(56, 189, 248, 0.1)');
+    centerGrad.addColorStop(0.5, mainBorderColor);
+    centerGrad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
+    ctx.strokeStyle = centerGrad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(512, 82);
+    ctx.lineTo(512, 300);
+    ctx.stroke();
+
+    // Subtle neon connector dots
+    ctx.fillStyle = mainBorderColor;
+    ctx.beginPath();
+    ctx.arc(512, 82, 3.5, 0, Math.PI * 2);
+    ctx.arc(512, 300, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // -------------------------------------------------------------
+    // LEFT HALF: LAPS TO GO (Center x = 276)
+    // -------------------------------------------------------------
+    const leftCenterX = 276;
+    const lapsColor = data.lapsColor || '#38bdf8';
+
+    // Left Category Header
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '800 20px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = lapsColor;
+    ctx.shadowColor = lapsColor;
+    ctx.shadowBlur = 8;
+    ctx.fillText((data.lapsLabel || 'LAPS TO GO').toUpperCase(), leftCenterX, 88);
+    ctx.shadowBlur = 0;
+
+    // Left Primary Large Digits (Dynamic Font Size)
+    ctx.textBaseline = 'middle';
+    const lapsText = String(data.lapsMain || '5 LAPS');
+    let lapsFontSize = 84;
+    if (lapsText.length > 9) lapsFontSize = 54;
+    else if (lapsText.length > 6) lapsFontSize = 66;
+
+    ctx.font = `900 ${lapsFontSize}px "JetBrains Mono", "Outfit", Impact, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = lapsColor;
+    ctx.shadowBlur = 20;
+    ctx.fillText(lapsText, leftCenterX, 184);
+    ctx.shadowBlur = 0;
+
+    // Left Subtext
+    ctx.textBaseline = 'bottom';
+    ctx.font = '700 22px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText((data.lapsSub || 'TO GO').toUpperCase(), leftCenterX, 292);
+
+    // -------------------------------------------------------------
+    // RIGHT HALF: BEST LAP (Center x = 748)
+    // -------------------------------------------------------------
+    const rightCenterX = 748;
+    const bestColor = data.bestColor || '#38bdf8';
+
+    // Right Category Header
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '800 20px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = bestColor;
+    ctx.shadowColor = bestColor;
+    ctx.shadowBlur = 8;
+    ctx.fillText((data.bestLabel || 'BEST LAP').toUpperCase(), rightCenterX, 88);
+    ctx.shadowBlur = 0;
+
+    // Right Primary Large Digits (Dynamic Font Size)
+    ctx.textBaseline = 'middle';
+    const bestText = String(data.bestMain || '--.--s');
+    let bestFontSize = 84;
+    if (bestText.length > 9) bestFontSize = 56;
+    else if (bestText.length > 6) bestFontSize = 68;
+
+    ctx.font = `900 ${bestFontSize}px "JetBrains Mono", "Outfit", Impact, monospace`;
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = bestColor;
+    ctx.shadowBlur = data.isCelebrating ? 28 : 20;
+    ctx.fillText(bestText, rightCenterX, 184);
+    ctx.shadowBlur = 0;
+
+    // Right Subtext
+    ctx.textBaseline = 'bottom';
+    ctx.font = '700 22px "Outfit", "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = data.isCelebrating ? '#f8fafc' : '#94a3b8';
+    ctx.fillText((data.bestSub || 'CIRCUIT RECORD').toUpperCase(), rightCenterX, 292);
 
     if (this.lapPlateTexture) {
       this.lapPlateTexture.needsUpdate = true;
@@ -2919,89 +3052,191 @@ export class Renderer3D {
     // Number of laps remaining to complete in the race (e.g. 5 on Lap 1, 1 on Final Lap, 0 at Finish)
     const lapsRemaining = Math.max(0, maxLaps - lapsDone);
 
-    const nowMs = performance.now();
-    const isCelebratingRecord = this._recordCelebrationUntil && nowMs < this._recordCelebrationUntil;
+    let leaderTag = 'P1';
+    if (currentLeader) {
+      if (currentLeader.manual) {
+        leaderTag = 'PLAYER';
+      } else if (typeof currentLeader.idx === 'number') {
+        leaderTag = `CAR #${currentLeader.idx + 1}`;
+      }
+    }
 
-    let mainText = `${lapsRemaining} LAPS TO GO`;
-    let subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
-    let color = '#38bdf8'; // Electric Cyan
+    // 1. Determine Laps To Go Panel Data
+    let lapsLabel = 'RACE DISTANCE';
+    let lapsMain = `${lapsRemaining} LAPS`;
+    let lapsSub = 'TO GO';
+    let lapsColor = '#38bdf8'; // Cyan
     let isFinal = false;
 
-    if (isCelebratingRecord) {
-      const isRace = this._recordType === 'race';
-      const recTimeStr = (this._recordLapDuration && Number.isFinite(this._recordLapDuration))
-        ? `${this._recordLapDuration.toFixed(2)}s`
-        : 'FASTEST';
-      const carTag = this._recordCarName || 'P1';
-
-      if (isRace) {
-        mainText = `★ ${recTimeStr} RACE BEST ★`;
-        subText = `FASTEST LAP IN RACE · ${carTag} · SESSION LEADER`;
-        color = '#38bdf8'; // Electric Cyan / Mint
-      } else {
-        mainText = `★ ${recTimeStr} RECORD ★`;
-        subText = `CIRCUIT LAP RECORD · ${carTag} · ALL-TIME FASTEST`;
-        color = '#c084fc'; // F1 Neon Record Purple
-      }
+    if (simTime < startDelay) {
+      lapsLabel = 'START GRID';
+      lapsMain = `${maxLaps} LAPS`;
+      lapsSub = 'COUNTDOWN · HOLD GRID';
+      lapsColor = '#ef4444'; // Red
+      isFinal = false;
+    } else if (simTime < startDelay + 2.8) {
+      lapsLabel = 'RACE START';
+      lapsMain = `${maxLaps} LAPS`;
+      lapsSub = 'GREEN LIGHTS · GO!';
+      lapsColor = '#22c55e'; // Green
       isFinal = true;
+    } else if (isFinished || lapsDone >= maxLaps || (sim?.checkeredFlagTimer !== null && sim?.checkeredFlagTimer > 0)) {
+      lapsLabel = 'RACE FINISH';
+      lapsMain = 'CHEQUERED';
+      const rem = (sim?.checkeredFlagTimer !== null && sim?.checkeredFlagTimer > 0)
+        ? `${Math.ceil(sim.checkeredFlagTimer)}s WINDOW`
+        : 'WINNER FINISHED';
+      lapsSub = `FLAG · ${rem}`;
+      lapsColor = '#fbbf24'; // Radiant Gold
+      isFinal = true;
+    } else if (lapsRemaining === 1) {
+      lapsLabel = 'FINAL LAP';
+      lapsMain = 'FINAL LAP';
+      lapsSub = `1 LAP TO GO · ${leaderTag}`;
+      lapsColor = '#fbbf24'; // Radiant Gold
+      isFinal = true;
+    } else if (lapsRemaining === 2) {
+      lapsLabel = 'LAPS TO GO';
+      lapsMain = '2 LAPS';
+      lapsSub = 'NEXT IS FINAL LAP';
+      lapsColor = '#f472b6'; // Magenta
+    } else {
+      lapsLabel = 'LAPS TO GO';
+      lapsMain = `${lapsRemaining} LAPS`;
+      lapsSub = `LAP ${currentLap} OF ${maxLaps}`;
+      lapsColor = '#38bdf8'; // Cyan
+    }
+
+    // 2. Determine Best Lap Data
+    const raceBest = (sim?.raceBestLap && Number.isFinite(sim.raceBestLap) && sim.raceBestLap > 5 && sim.raceBestLap < 99)
+      ? sim.raceBestLap
+      : null;
+    const allTimeRecord = (sim?.bestLapEver && Number.isFinite(sim.bestLapEver) && sim.bestLapEver > 5 && sim.bestLapEver < 99)
+      ? sim.bestLapEver
+      : null;
+
+    let bestLapTime = null;
+    let bestLapHolder = null;
+    let isRecord = false;
+
+    if (raceBest !== null) {
+      bestLapTime = raceBest;
+      if (sim?.player && sim.player.bestLap && Math.abs(sim.player.bestLap - raceBest) < 0.02) {
+        bestLapHolder = 'PLAYER';
+      } else if (sim?.cars) {
+        const matchingCar = sim.cars.find((c) => c.bestLap && Math.abs(c.bestLap - raceBest) < 0.02);
+        if (matchingCar) {
+          bestLapHolder = `CAR #${matchingCar.idx + 1}`;
+        }
+      }
+      if (!bestLapHolder) bestLapHolder = leaderTag || 'P1';
+
+      if (allTimeRecord !== null && raceBest <= allTimeRecord + 0.005) {
+        isRecord = true;
+      }
+    } else if (allTimeRecord !== null) {
+      bestLapTime = allTimeRecord;
+      bestLapHolder = 'RECORD';
+      isRecord = true;
+    }
+
+    const nowMs = performance.now();
+    const isCelebrating = Boolean(this._recordCelebrationUntil && nowMs < this._recordCelebrationUntil);
+
+    let bestLabel = 'BEST LAP';
+    let bestMain = '--.--s';
+    let bestSub = 'AWAITING LAP 1';
+    let bestColor = '#38bdf8';
+
+    if (isCelebrating) {
+      const isRaceCelebration = this._recordType === 'race';
+      const recTime = (this._recordLapDuration && Number.isFinite(this._recordLapDuration))
+        ? `${this._recordLapDuration.toFixed(2)}s`
+        : (bestLapTime ? `${bestLapTime.toFixed(2)}s` : '--.--s');
+      const recCar = this._recordCarName || bestLapHolder || 'P1';
+
+      bestMain = recTime;
+      if (isRaceCelebration) {
+        bestLabel = '★ RACE FASTEST ★';
+        bestSub = `${recCar} · SESSION BEST`;
+        bestColor = '#38bdf8';
+      } else {
+        bestLabel = '👑 CIRCUIT RECORD 👑';
+        bestSub = `${recCar} · ALL-TIME FASTEST`;
+        bestColor = '#c084fc';
+      }
 
       if (this.lapPlateDisplayMat) {
-        this.lapPlateDisplayMat.emissiveIntensity = 1.7 + 0.6 * Math.sin(nowMs * (isRace ? 0.012 : 0.008));
+        this.lapPlateDisplayMat.emissiveIntensity = 1.7 + 0.6 * Math.sin(nowMs * (isRaceCelebration ? 0.012 : 0.008));
       }
     } else {
       if (this.lapPlateDisplayMat && this.lapPlateDisplayMat.emissiveIntensity !== 1.4) {
         this.lapPlateDisplayMat.emissiveIntensity = 1.4;
       }
-      if (simTime < startDelay) {
-      mainText = 'START COUNTDOWN';
-      subText = 'WATCH 5 RED LIGHTS Â· HOLD GRID';
-      color = '#ef4444'; // Red
-      isFinal = false;
+
+      if (bestLapTime !== null) {
+        bestMain = `${bestLapTime.toFixed(2)}s`;
+        if (isRecord) {
+          bestLabel = '👑 CIRCUIT RECORD';
+          bestSub = raceBest !== null ? `${bestLapHolder} · FASTEST EVER` : 'CIRCUIT BENCHMARK';
+          bestColor = '#c084fc'; // Purple
+        } else {
+          bestLabel = '⚡ RACE BEST';
+          bestSub = `${bestLapHolder} · SESSION BEST`;
+          bestColor = '#38bdf8'; // Cyan
+        }
+      } else {
+        bestLabel = 'BEST LAP';
+        bestMain = '--.--s';
+        bestSub = 'AWAITING FIRST LAP';
+        bestColor = '#64748b';
+      }
+    }
+
+    // 3. Top Header Data
+    let topHeaderLeft = `🏎️ LEADER: ${leaderTag}`;
+    let topHeaderCenter = `LAP ${currentLap} OF ${maxLaps}`;
+    let topHeaderRight = isCelebrating
+      ? (this._recordType === 'race' ? '⚡ FASTEST LAP' : '👑 NEW RECORD')
+      : (isFinal ? '🏁 CHEQUERED' : '● LIVE TIMING');
+
+    if (simTime < startDelay) {
+      topHeaderLeft = '🏁 FORMATION';
+      topHeaderCenter = `GRID READY · ${maxLaps} LAPS`;
+      topHeaderRight = '🔴 COUNTDOWN';
     } else if (simTime < startDelay + 2.8) {
-      mainText = 'GO GO GO!';
-      subText = 'GREEN LIGHTS Â· RACE ON';
-      color = '#22c55e'; // Bright Green
-      isFinal = true;
-    } else if (isFinished || lapsDone >= maxLaps || (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 0)) {
-      mainText = 'CHEQUERED FLAG';
-      const rem = (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 0)
-        ? `${Math.ceil(sim.checkeredFlagTimer)}s FINISH WINDOW`
-        : 'RACE WINNER';
-      subText = `FINISH Â· ${rem}`;
-      color = '#fbbf24'; // Radiant Gold
-      isFinal = true;
-    } else if (lapsRemaining === 1) {
-      // 1 lap to go IS the Final Lap (driving lap 5 of 5)
-      mainText = 'FINAL LAP';
-      subText = `LAP ${maxLaps} OF ${maxLaps} Â· 1 LAP TO GO`;
-      color = '#fbbf24'; // Radiant Gold
-      isFinal = true;
-    } else if (lapsRemaining === 2) {
-      // 2 laps to go (driving lap 4 of 5)
-      mainText = '2 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} Â· NEXT IS FINAL LAP`;
-      color = '#f472b6'; // Hot Pink / Magenta
-    } else if (lapsRemaining === 3) {
-      mainText = '3 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} Â· RACE LEADER`;
-      color = '#38bdf8'; // Electric Cyan
-    } else if (lapsRemaining === 4) {
-      mainText = '4 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} Â· LEADER P1`;
-      color = '#38bdf8'; // Electric Cyan
-    } else {
-      mainText = 'RACE ON';
-      subText = `LAP 1 OF ${maxLaps} · GREEN FLAG`;
-      color = '#38bdf8'; // Electric Cyan
+      topHeaderLeft = '🟢 GREEN LIGHTS';
+      topHeaderCenter = `RACE ON · LAP 1/${maxLaps}`;
+      topHeaderRight = '⚡ LAUNCH';
+    }
+
+    const accentColor = isCelebrating
+      ? (this._recordType === 'race' ? '#38bdf8' : '#c084fc')
+      : (isFinal ? '#fbbf24' : (simTime < startDelay ? '#ef4444' : (lapsColor || '#38bdf8')));
+
+    const animTick = isCelebrating ? Math.floor(nowMs / 120) : 0;
+    const stateKey = `${lapsMain}|${lapsSub}|${lapsLabel}|${lapsColor}|${bestMain}|${bestSub}|${bestLabel}|${bestColor}|${topHeaderLeft}|${topHeaderCenter}|${topHeaderRight}|${accentColor}|${isFinal}|${animTick}`;
+
+    if (stateKey !== this._lastLapPlateKey) {
+      this._lastLapPlateKey = stateKey;
+      this.updateLapPlateTexture({
+        lapsMain,
+        lapsSub,
+        lapsLabel,
+        lapsColor,
+        bestMain,
+        bestSub,
+        bestLabel,
+        bestColor,
+        topHeaderLeft,
+        topHeaderCenter,
+        topHeaderRight,
+        accentColor,
+        isFinal,
+        isCelebrating,
+      });
     }
   }
-
-  const stateKey = `${mainText}|${subText}|${color}|${isFinal}`;
-  if (stateKey !== this._lastLapPlateKey) {
-    this._lastLapPlateKey = stateKey;
-    this.updateLapPlateTexture(mainText, subText, color, isFinal);
-  }
-}
 
   triggerRecordCelebration(lapDuration, car, recordType = 'overall') {
     if (!Number.isFinite(lapDuration) || lapDuration <= 0) return;
