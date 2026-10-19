@@ -25,9 +25,18 @@ export class Car {
     const t = this.track;
     this.gridSlot = gridSlot;
 
-    // All cars spawn at the exact same starting spot on the track centerline
-    const distBack = 16;
-    const latOffset = 0;
+    // Position car based on Grid Box setting: staggered 2x2 F1 grid formation vs single centerline
+    const useGrid = Boolean(CONFIG.gridBox ?? true);
+    let distBack = 16;
+    let latOffset = 0;
+
+    if (useGrid) {
+      const row = Math.floor(gridSlot / 2);
+      const col = gridSlot % 2; // 0 = inside/pole, 1 = outside
+      // Generous F1 row spacing (34 units) and stagger (17 units) so 26-unit cars have clean clearance without touching
+      distBack = 20 + row * 34 + (col === 1 ? 17 : 0);
+      latOffset = (col === 0 ? -1 : 1) * ((t.width || 84) * 0.22);
+    }
 
     const sampleIdx = t.wrap(Math.round(t.N - distBack / t.spacing));
     const tx = t.tx[sampleIdx];
@@ -69,6 +78,10 @@ export class Car {
     this.laps = 0;
     this.lapTimes = [];
     this.lapStart = 0;
+    this.currentLapSamples = [];
+    this.lastLapSamples = [];
+    this.bestLapSamples = [];
+    this._sampleTimer = 0;
     this.time = 0;
     this.stall = 0;
     this.sense();
@@ -79,7 +92,7 @@ export class Car {
     const L = CONFIG.sensors.length;
     const colConfig = CONFIG.collision || {};
     const warmup = colConfig.warmupTime || 30;
-    const leadTime = colConfig.separationLeadTime || 25;
+    const leadTime = colConfig.separationLeadTime || 4;
     const colEnabled = Boolean(colConfig.enabled) && (this.time >= (warmup - leadTime));
     const colRad = colConfig.radius || 13.5;
     const colRadSq = colRad * colRad;
@@ -310,6 +323,22 @@ export class Car {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
+    // Record lap trajectory samples at ~25Hz for high-definition ghost replay
+    if (this.alive && !this.crashed) {
+      this._sampleTimer = (this._sampleTimer || 0) + dt;
+      if (this._sampleTimer >= 0.04) {
+        this._sampleTimer = 0;
+        if (!this.currentLapSamples) this.currentLapSamples = [];
+        this.currentLapSamples.push({
+          t: this.time - this.lapStart,
+          x: this.x,
+          y: this.y,
+          angle: this.angle,
+          speed: this.speed,
+        });
+      }
+    }
+
     // Progress along the track
     const ni = t.nearestIndex(this.x, this.y, this.idx);
     let d = ni - this.idx;
@@ -322,8 +351,36 @@ export class Car {
       this.stall = 0;
       if (this.maxIdx >= (this.laps + 1) * t.N) {
         this.laps++;
-        this.lapTimes.push(this.time - this.lapStart);
+        const lapDuration = this.time - this.lapStart;
+        this.lapTimes.push(lapDuration);
+        const isBestLapForCar = this.lapTimes.length === 1 || lapDuration <= Math.min(...this.lapTimes);
+        
+        if (!this.currentLapSamples) this.currentLapSamples = [];
+        this.currentLapSamples.push({
+          t: lapDuration,
+          x: this.x,
+          y: this.y,
+          angle: this.angle,
+          speed: this.speed,
+        });
+
+        if (isBestLapForCar && this.currentLapSamples.length > 5) {
+          this.bestLapSamples = [...this.currentLapSamples];
+        }
+        this.lastLapSamples = [...this.currentLapSamples];
+        const completedSamples = this.lastLapSamples;
+        this.currentLapSamples = [];
         this.lapStart = this.time;
+
+        this.currentLapSamples.push({
+          t: 0,
+          x: this.x,
+          y: this.y,
+          angle: this.angle,
+          speed: this.speed,
+        });
+
+        this.onLapComplete?.(this, lapDuration, completedSamples);
         if (this.laps >= g.maxLaps) {
           this.finished = true;
           this.die('finished');
@@ -402,11 +459,18 @@ export class Car {
     // 3. Lap Completion Bonus
     s += this.laps * (f.lapBonus || 4500);
 
-    // 4. Lap Speed Multiplier (exponentially rewards fast lap times)
+    // 4. Lap Speed Multiplier (exponentially rewards fast lap times to break through conservative plateaus)
     for (const lt of this.lapTimes) {
       if (lt > 0) {
-        const speedRatio = (f.targetLapTime || 10.0) / lt;
-        s += (f.lapBonus || 4500) * Math.pow(speedRatio, 1.35);
+        const target = f.targetLapTime || 8.54;
+        const speedRatio = Math.max(0.5, target / lt);
+        s += (f.lapBonus || 4500) * Math.pow(speedRatio, 3.2);
+
+        // Sub-9.4s Hot-Lap Breakthrough Bonus: heavily rewards pushing towards the 8.54s record
+        if (lt < 9.4) {
+          const paceDelta = Math.max(0, 9.4 - lt);
+          s += Math.pow(paceDelta * 4.5, 2.2) * 1800;
+        }
       }
     }
 

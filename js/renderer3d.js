@@ -290,7 +290,7 @@ export const TEAM_PALETTE = [
 const C = {
   grass: 0x244222,
   asphalt: 0x242832,
-  kerbRed: 0xdc2626,
+  kerbRed: 0x8f282b,
   kerbWhite: 0xf8fafc,
   edgeLine: 0xffffff,
   leader: 0xffea00, // Vibrant electric racing yellow
@@ -315,9 +315,8 @@ export class Renderer3D {
     this.camera.up.set(0, 0, 1); // Z is the vertical altitude axis in our world
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.w, this.h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.0));
+    this.renderer.shadowMap.enabled = false; // Disables redundant shadow depth pass (cars use dedicated high-res AO contact shadows)
 
     // 2. OrbitControls with smooth auto spin
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -589,7 +588,7 @@ export class Renderer3D {
 
     // Bright, crisp warm golden-white afternoon sunlight
     this.dirLight = new THREE.DirectionalLight(0xfff6e8, 2.05);
-    this.dirLight.castShadow = true;
+    this.dirLight.castShadow = false;
     this.dirLight.shadow.mapSize.width = 1024;
     this.dirLight.shadow.mapSize.height = 1024;
     this.dirLight.shadow.camera.near = 100;
@@ -611,14 +610,14 @@ export class Renderer3D {
     const b = this.track.bounds;
     const cx = b.cx;
     const cy = -b.cy;
-    const spanX = (b.maxX - b.minX) * 0.6;
-    const spanY = (b.maxY - b.minY) * 0.6;
-    const span = Math.max(spanX, spanY) + 300;
+    const spanX = (b.maxX - b.minX) * 0.52;
+    const spanY = (b.maxY - b.minY) * 0.52;
+    const span = Math.max(spanX, spanY) + 60;
 
     // Pleasant afternoon sun angle (~40 deg above horizon) from South-West
     // Generates distinct angled shadows revealing terrain relief, barriers, and cars,
     // while keeping the track and landscape bright, clear, and vibrant (not dark dusk).
-    const sunDistance = span * 1.9;
+    const sunDistance = span * 1.85;
     const sunAngle = 2.10; // South-West azimuth (~120 degrees)
     const sunX = cx + Math.cos(sunAngle) * sunDistance;
     const sunY = cy + Math.sin(sunAngle) * sunDistance;
@@ -631,7 +630,8 @@ export class Renderer3D {
       this.skyMat.uniforms.uSunDir.value.set(sunX - cx, sunY - cy, sunZ).normalize();
     }
 
-    const d = span * 1.35;
+    // Tightened shadow frustum concentrates 2048x2048 shadow map directly onto the circuit and cars
+    const d = span * 1.08;
     this.dirLight.shadow.camera.near = 100;
     this.dirLight.shadow.camera.far = sunDistance * 2.6;
     this.dirLight.shadow.camera.left = -d;
@@ -649,14 +649,49 @@ export class Renderer3D {
     if (tx >= b.minX - margin && tx <= b.maxX + margin &&
         ty >= b.minY - margin && ty <= b.maxY + margin) {
       let minDSq = Infinity;
+      let bestK = 0;
       const N = t.N;
-      // High-precision distance checking against track spline
-      for (let k = 0; k < N; k += 2) {
+      // Fast two-phase coarse-to-fine search (8x fewer distance calculations)
+      const step = 8;
+      for (let k = 0; k < N; k += step) {
         const dx = t.cx[k] - tx;
         const dy = t.cy[k] - ty;
         const dSq = dx * dx + dy * dy;
-        if (dSq < minDSq) minDSq = dSq;
+        if (dSq < minDSq) {
+          minDSq = dSq;
+          bestK = k;
+        }
       }
+      // Refine fine window around best coarse sample
+      const fineStart = bestK - step;
+      const fineEnd = bestK + step;
+      for (let k = fineStart; k <= fineEnd; k++) {
+        const ik = ((k % N) + N) % N;
+        const dx = t.cx[ik] - tx;
+        const dy = t.cy[ik] - ty;
+        const dSq = dx * dx + dy * dy;
+        if (dSq < minDSq) {
+          minDSq = dSq;
+          bestK = ik;
+        }
+      }
+      // Exact continuous segment projection on neighboring segments
+      const prevK = (bestK - 1 + N) % N;
+      const nextK = (bestK + 1) % N;
+      const distToSeg = (x1, y1, x2, y2) => {
+        const vx = x2 - x1;
+        const vy = y2 - y1;
+        const lenSq = vx * vx + vy * vy;
+        if (lenSq < 0.001) return minDSq;
+        const u = Math.max(0, Math.min(1, ((tx - x1) * vx + (ty - y1) * vy) / lenSq));
+        const px = x1 + u * vx;
+        const py = y1 + u * vy;
+        const ddx = tx - px;
+        const ddy = ty - py;
+        return ddx * ddx + ddy * ddy;
+      };
+      minDSq = Math.min(minDSq, distToSeg(t.cx[prevK], t.cy[prevK], t.cx[bestK], t.cy[bestK]));
+      minDSq = Math.min(minDSq, distToSeg(t.cx[bestK], t.cy[bestK], t.cx[nextK], t.cy[nextK]));
       return Math.sqrt(minDSq);
     }
     const dx = Math.max(0, Math.max(b.minX - tx, tx - b.maxX));
@@ -1101,64 +1136,92 @@ export class Renderer3D {
     const distToTrack = this.getMinDistToTrack(trackX, trackY);
 
     const trackHalf = (t.width || 84) * 0.5; // ~42m
-    const carLength = 26.0;                  // 1 car length (~26m)
-    // Strictly flat across track + at least 2 full car lengths outside track edges
-    const flatRadius = trackHalf + carLength * 2.0 + 4.0; // ~100m from centerline (>= 2 car lengths away from track edges)
 
-    if (distToTrack <= flatRadius) return 0; // Guaranteed 100% flat
-
-    // 1. Regional Macro Topography (original gentle countryside - NO new or shifted hills)
-    // Preserves the wide ~171m flat buffer and 380m gradual ease-in for high hills
-    const macroFlatRadius = trackHalf + carLength * 4 + 25.0; // ~171m flat radius from centerline
-    let macroElevation = 0;
-    if (distToTrack > macroFlatRadius) {
-      const blendDist = 380.0;
-      const blendRatio = Math.min(1.0, (distToTrack - macroFlatRadius) / blendDist);
-      const macroBlend = blendRatio * blendRatio * blendRatio * (blendRatio * (blendRatio * 6 - 15) + 10);
-
-      // Original unrotated macro hills (exact original landscape)
-      const h1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 75.0;
-      const h2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 32.0;
-      const h3 = Math.cos(x * 0.0045 + y * 0.0040) * 14.0;
-      macroElevation = Math.max(0, h1 + h2 + h3 + 18.0) * macroBlend;
+    // 1. Direct roadbed trough: strictly depressed (-0.14m) directly under asphalt (Z=0.12m) to eliminate Z-fighting
+    if (distToTrack <= trackHalf + 25.0) {
+      return -0.14;
     }
 
-    // 2. Irregular Micro Hills & Valleys (rolling 3.5m - 9.0m countryside knolls & shallow dale dips)
-    // Domain warping continuously twists the coordinate space to eliminate any rectilinear or geometric repetition
-    const hillBlendDist = 120.0;
-    const hillRatio = Math.min(1.0, (distToTrack - flatRadius) / hillBlendDist);
+    // 2. Smooth roadbed transition from -0.14m up to 0.00m at verge edge
+    if (distToTrack <= trackHalf + 55.0) {
+      const tNorm = (distToTrack - (trackHalf + 25.0)) / 30.0;
+      return -0.14 * (1.0 - tNorm * tNorm * (3.0 - 2.0 * tNorm));
+    }
+
+    // 3. Wide flat verge apron (220m margin outside track edge, ~262m from centerline)
+    // Guarantees all triangles crossing or bordering the track are flush at 0.00m (under asphalt Z=0.12m)
+    const flatRadius = trackHalf + 220.0;
+    if (distToTrack <= flatRadius) {
+      return 0.0;
+    }
+
+    // Smooth cubic ease-in from verge into rolling mini hills and mini bumps
+    const hillEaseDist = 80.0;
+    const hillRatio = Math.min(1.0, (distToTrack - flatRadius) / hillEaseDist);
     const hillBlend = hillRatio * hillRatio * (3.0 - 2.0 * hillRatio);
 
+    // Continuous non-linear turbulent coordinate warping for natural flowing landscape features
     const rx1 = x * 0.857 - y * 0.515;
     const ry1 = x * 0.515 + y * 0.857;
     const rx2 = x * 0.292 + y * 0.956;
     const ry2 = -x * 0.956 + y * 0.292;
 
-    // Continuous non-linear turbulent coordinate warping for natural flowing landscape features
-    const warpX = Math.sin(rx1 * 0.0028 + 1.7) * 75.0 + Math.cos(ry2 * 0.0048 - 0.8) * 45.0;
-    const warpY = Math.cos(rx2 * 0.0031 - 1.1) * 75.0 + Math.sin(ry1 * 0.0044 + 2.3) * 45.0;
+    const warpX = Math.sin(rx1 * 0.0042 + 1.7) * 45.0 + Math.cos(ry2 * 0.0068 - 0.8) * 25.0;
+    const warpY = Math.cos(rx2 * 0.0048 - 1.1) * 45.0 + Math.sin(ry1 * 0.0058 + 2.3) * 25.0;
     const wx = x + warpX;
     const wy = y + warpY;
 
-    // Organic micro hills & valleys (rolling mounds and shallow valleys, wavelength ~300m - 700m)
-    const hv1 = Math.sin(wx * 0.0024 + wy * 0.0019 + 0.8) * 4.8;
-    const hv2 = Math.sin(wx * -0.0041 + wy * 0.0053 + 2.4) * 3.2;
-    const hv3 = Math.cos(wx * 0.0068 - wy * 0.0059 + 1.6) * 1.8;
-    const microHillsValleys = (hv1 + hv2 + hv3) * hillBlend;
+    // 4. Random Mini Hills Sized ~10 to 75 Cars (~50m to ~375m diameter):
+    // Formula 1 car length is ~5m.
+    // Category A: 10-20 Car-Sized Mini Mounds (~50m - 100m diameter, 2.5m - 4.5m height)
+    const kS1 = Math.sin(wx * 0.068 + wy * 0.052 + 1.3);
+    const kS2 = Math.cos(wx * -0.058 + wy * 0.064 + 2.7);
+    const kS3 = Math.sin(wx * 0.082 - wy * 0.045 + 0.6);
+    const smallHills = (Math.pow(Math.max(0, kS1), 2.2) * 3.8 +
+                        Math.pow(Math.max(0, kS2), 2.2) * 3.2 +
+                        Math.pow(Math.max(0, kS3), 2.4) * 2.8);
 
-    // 3. Pronounced Organic Micro Bumps (tactile 0.6m - 2.8m surface ripples and turf knolls)
-    const bumpBlendDist = 65.0;
-    const bumpRatio = Math.min(1.0, (distToTrack - flatRadius) / bumpBlendDist);
-    const bumpBlend = bumpRatio * bumpRatio * (3.0 - 2.0 * bumpRatio);
+    // Category B: 25-45 Car-Sized Medium Knolls (~125m - 225m diameter, 4.5m - 8.0m height)
+    const kM1 = Math.sin(wx * 0.032 - wy * 0.026 + 0.9);
+    const kM2 = Math.cos(wx * 0.024 + wy * 0.031 + 2.2);
+    const kM3 = Math.sin(wx * -0.038 - wy * 0.019 + 1.5);
+    const medHills = (Math.pow(Math.max(0, kM1), 1.9) * 5.8 +
+                      Math.pow(Math.max(0, kM2), 1.9) * 5.2 +
+                      Math.pow(Math.max(0, kM3), 2.0) * 4.4);
 
-    const mb1 = Math.sin(wx * 0.0078 + wy * 0.0062 + 1.3) * 1.60;
-    const mb2 = Math.sin(wx * -0.0135 + wy * 0.0158 + 2.1) * 1.05;
-    const mb3 = Math.sin(wx * 0.0242 - wy * 0.0215 + 0.6) * 0.65;
-    const mb4 = Math.sin(wx * 0.0384 + wy * 0.0351 + 3.2) * 0.35;
+    // Category C: 50-75 Car-Sized Large Mini Hills (~250m - 375m diameter, 7.0m - 12.0m height)
+    const kL1 = Math.sin(wx * 0.016 + wy * 0.013 + 1.8);
+    const kL2 = Math.cos(wx * -0.018 + wy * 0.015 + 0.4);
+    const largeHills = (Math.pow(Math.max(0, kL1), 1.7) * 8.5 +
+                        Math.pow(Math.max(0, kL2), 1.7) * 7.5);
 
-    const microBumps = (mb1 + mb2 + mb3 + mb4) * bumpBlend;
+    // Rolling harmonic swells connecting the hills into a flowing natural landscape
+    const rollingBase = Math.sin(wx * 0.0085 + wy * 0.0070 + 1.1) * 3.4 +
+                        Math.cos(wx * 0.0135 - wy * 0.0120 + 2.5) * 2.6;
 
-    let elevation = macroElevation + microHillsValleys + microBumps;
+    const miniHills = (smallHills + medHills + largeHills + rollingBase) * hillBlend;
+
+    // 5. Tactile Mini Bumps & Peat Hummocks (wavelength ~55m - 130m, height 0.8m - 2.0m)
+    const b1 = Math.sin(wx * 0.045 - wy * 0.038 + 0.8) * 1.05;
+    const b2 = Math.cos(wx * 0.072 + wy * 0.065 + 1.9) * 0.65;
+    const b3 = (Math.abs(Math.sin(wx * 0.034 + 0.5) * Math.cos(wy * 0.031 - 0.4)) - 0.35) * 1.1;
+    const miniBumps = (b1 + b2 + b3) * hillBlend;
+
+    // 6. Regional Macro Topography (wavelength 700m - 2200m, height 18m - 65m)
+    const macroFlatRadius = trackHalf + 110.0;
+    let macroElevation = 0;
+    if (distToTrack > macroFlatRadius) {
+      const blendDist = 260.0;
+      const blendRatio = Math.min(1.0, (distToTrack - macroFlatRadius) / blendDist);
+      const macroBlend = blendRatio * blendRatio * (3.0 - 2.0 * blendRatio);
+
+      const m1 = Math.sin(x * 0.0010 + 0.5) * Math.cos(y * 0.0010 - 0.4) * 65.0;
+      const m2 = Math.sin(x * 0.0022 - y * 0.0018 + 1.2) * 28.0;
+      const m3 = Math.cos(x * 0.0045 + y * 0.0040) * 12.0;
+      macroElevation = Math.max(0, m1 + m2 + m3 + 16.0) * macroBlend;
+    }
+
+    let elevation = macroElevation + miniHills + miniBumps;
 
     // Horizon mountain ridges
     const distFromCenter = Math.hypot(x - cx, y - cy);
@@ -1180,7 +1243,7 @@ export class Renderer3D {
       if (lakeDist < 1.35) {
         const dRatio = Math.max(0, 1.0 - lakeDist / 1.35);
         const basinDepth = 14.0 * dRatio * dRatio;
-        elevation = Math.max(0, elevation - basinDepth * 1.5);
+        elevation = Math.max(-0.08, elevation - basinDepth * 1.5);
       }
     }
 
@@ -1192,11 +1255,11 @@ export class Renderer3D {
       if (rDist < rRadius) {
         const rRatio = Math.max(0, 1.0 - rDist / rRadius);
         const trench = 6.5 * rRatio * rRatio;
-        elevation = Math.max(0, elevation - trench * 1.4);
+        elevation = Math.max(-0.08, elevation - trench * 1.4);
       }
     }
 
-    return Math.max(0, elevation);
+    return Math.max(-0.08, elevation);
   }
 
   setupTerrain() {
@@ -1208,16 +1271,51 @@ export class Renderer3D {
     }
 
     const w = 24000;
-    const segs = 280;
+    const segs = 120;
     const geo = new THREE.PlaneGeometry(w, w, segs, segs);
     const pos = geo.attributes.position.array;
     const count = geo.attributes.position.count;
     const colors = new Float32Array(count * 3);
+    const dists = new Float32Array(count);
 
     for (let i = 0; i < count; i++) {
       const vx = pos[i * 3];
       const vy = pos[i * 3 + 1];
+      dists[i] = this.getMinDistToTrack(vx, -vy);
       pos[i * 3 + 2] = this.getTerrainHeight(vx, vy);
+    }
+
+    // Bulletproof Topological Clearance:
+    // Any triangle that touches or borders the track corridor is clamped strictly:
+    // 1) Any triangle within trackHalf + 240m is clamped strictly to <= 0.00m (under asphalt Z=0.12m)
+    // 2) Any triangle touching or bordering the road surface (within trackHalf + 65m) has ALL THREE vertices
+    //    clamped strictly to <= -0.14m.
+    // Asphalt is at Z = +0.12m, white lines at Z = +0.14m.
+    // This creates a guaranteed 0.26-meter vertical clearance gap under the entire asphalt corridor,
+    // making it physically impossible for any terrain triangle to ever pierce or overlap the track!
+    if (geo.index) {
+      const indices = geo.index.array;
+      const numTris = indices.length / 3;
+      const trackHalfDist = ((this.track && this.track.width) || 84) * 0.5;
+
+      for (let k = 0; k < numTris; k++) {
+        const iA = indices[k * 3];
+        const iB = indices[k * 3 + 1];
+        const iC = indices[k * 3 + 2];
+        const minD = Math.min(dists[iA], dists[iB], dists[iC]);
+
+        if (minD <= trackHalfDist + 240.0) {
+          if (pos[iA * 3 + 2] > 0.0) pos[iA * 3 + 2] = 0.0;
+          if (pos[iB * 3 + 2] > 0.0) pos[iB * 3 + 2] = 0.0;
+          if (pos[iC * 3 + 2] > 0.0) pos[iC * 3 + 2] = 0.0;
+        }
+
+        if (minD <= trackHalfDist + 65.0) {
+          if (pos[iA * 3 + 2] > -0.14) pos[iA * 3 + 2] = -0.14;
+          if (pos[iB * 3 + 2] > -0.14) pos[iB * 3 + 2] = -0.14;
+          if (pos[iC * 3 + 2] > -0.14) pos[iC * 3 + 2] = -0.14;
+        }
+      }
     }
 
     geo.computeVertexNormals();
@@ -1435,13 +1533,15 @@ export class Renderer3D {
       shininess: 0,       // No specular glossiness or glare
       reflectivity: 0,    // No environment reflections
       normalMap: normalMap,
-      normalScale: new THREE.Vector2(0.85, 0.85),
+      normalScale: new THREE.Vector2(1.5, 1.5),
       flatShading: false,
     });
 
     this.terrainMesh = new THREE.Mesh(geo, mat);
-    this.terrainMesh.receiveShadow = true;
+    this.terrainMesh.receiveShadow = false;
     this.terrainMesh.castShadow = false;
+    this.terrainMesh.matrixAutoUpdate = false;
+    this.terrainMesh.updateMatrix();
     this.scene.add(this.terrainMesh);
   }
 
@@ -1478,7 +1578,9 @@ export class Renderer3D {
       lakeGeo.scale(1.0, lake.ry / lake.rx, 1.0);
       const lakeMesh = new THREE.Mesh(lakeGeo, waterMat);
       lakeMesh.position.set(lake.cx, lake.cy, lake.waterZ);
-      lakeMesh.receiveShadow = true;
+      lakeMesh.receiveShadow = false;
+      lakeMesh.matrixAutoUpdate = false;
+      lakeMesh.updateMatrix();
       this.waterGroup.add(lakeMesh);
 
       // Sandy gravel shoreline ring
@@ -1486,7 +1588,9 @@ export class Renderer3D {
       shoreGeo.scale(1.0, lake.ry / lake.rx, 1.0);
       const shoreMesh = new THREE.Mesh(shoreGeo, shoreMat);
       shoreMesh.position.set(lake.cx, lake.cy, lake.waterZ - 0.12);
-      shoreMesh.receiveShadow = true;
+      shoreMesh.receiveShadow = false;
+      shoreMesh.matrixAutoUpdate = false;
+      shoreMesh.updateMatrix();
       this.waterGroup.add(shoreMesh);
     }
 
@@ -1532,10 +1636,14 @@ export class Renderer3D {
       riverGeo.computeVertexNormals();
 
       const riverMesh = new THREE.Mesh(riverGeo, waterMat);
-      riverMesh.receiveShadow = true;
+      riverMesh.receiveShadow = false;
+      riverMesh.matrixAutoUpdate = false;
+      riverMesh.updateMatrix();
       this.waterGroup.add(riverMesh);
     }
 
+    this.waterGroup.matrixAutoUpdate = false;
+    this.waterGroup.updateMatrix();
     this.scene.add(this.waterGroup);
   }
 
@@ -1564,11 +1672,11 @@ export class Renderer3D {
       const vDist = (i / N) * totalTiles;
 
       // Outer point (u = 0)
-      vertices.push(t.ox[idx], -t.oy[idx], 0.05);
+      vertices.push(t.ox[idx], -t.oy[idx], 0.12);
       uvs.push(0, vDist);
 
       // Inner point (u = uMax)
-      vertices.push(t.ix[idx], -t.iy[idx], 0.05);
+      vertices.push(t.ix[idx], -t.iy[idx], 0.12);
       uvs.push(uMax, vDist);
     }
 
@@ -1602,7 +1710,9 @@ export class Renderer3D {
 
     this.trackMesh = new THREE.Mesh(geo, mat);
     this.trackMesh.castShadow = false;
-    this.trackMesh.receiveShadow = true;
+    this.trackMesh.receiveShadow = false;
+    this.trackMesh.matrixAutoUpdate = false;
+    this.trackMesh.updateMatrix();
     this.trackMesh.renderOrder = 1;
     this.scene.add(this.trackMesh);
 
@@ -1643,8 +1753,8 @@ export class Renderer3D {
       const v3 = nxt * 2 + 1;
 
       outerBorderVerts.push(
-        t.ox[i], -t.oy[i], 0.12,
-        t.ox[i] + onx * lineWidth, -t.oy[i] + ony * lineWidth, 0.12
+        t.ox[i], -t.oy[i], 0.14,
+        t.ox[i] + onx * lineWidth, -t.oy[i] + ony * lineWidth, 0.14
       );
       outerBorderIndices.push(v0, v1, v2, v1, v3, v2);
 
@@ -1656,8 +1766,8 @@ export class Renderer3D {
       const iny = idy / iDist;
 
       innerBorderVerts.push(
-        t.ix[i], -t.iy[i], 0.12,
-        t.ix[i] + inx * lineWidth, -t.iy[i] + iny * lineWidth, 0.12
+        t.ix[i], -t.iy[i], 0.14,
+        t.ix[i] + inx * lineWidth, -t.iy[i] + iny * lineWidth, 0.14
       );
       innerBorderIndices.push(v0, v1, v2, v1, v3, v2);
     }
@@ -1717,10 +1827,10 @@ export class Renderer3D {
       const v3 = dashIdx * 4 + 3;
 
       centerDashVerts.push(
-        t.cx[i] - nx1 * dashHalfWidth, -t.cy[i] - ny1 * dashHalfWidth, 0.11,
-        t.cx[i] + nx1 * dashHalfWidth, -t.cy[i] + ny1 * dashHalfWidth, 0.11,
-        t.cx[iEnd] - nx2 * dashHalfWidth, -t.cy[iEnd] - ny2 * dashHalfWidth, 0.11,
-        t.cx[iEnd] + nx2 * dashHalfWidth, -t.cy[iEnd] + ny2 * dashHalfWidth, 0.11
+        t.cx[i] - nx1 * dashHalfWidth, -t.cy[i] - ny1 * dashHalfWidth, 0.13,
+        t.cx[i] + nx1 * dashHalfWidth, -t.cy[i] + ny1 * dashHalfWidth, 0.13,
+        t.cx[iEnd] - nx2 * dashHalfWidth, -t.cy[iEnd] - ny2 * dashHalfWidth, 0.13,
+        t.cx[iEnd] + nx2 * dashHalfWidth, -t.cy[iEnd] + ny2 * dashHalfWidth, 0.13
       );
       centerDashIndices.push(v0, v1, v2, v1, v3, v2);
       dashIdx++;
@@ -1825,9 +1935,9 @@ export class Renderer3D {
             const w0 = maxKerbWidth * Math.sqrt(Math.max(0, 2 * u0 - u0 * u0));
             const w1 = maxKerbWidth * Math.sqrt(Math.max(0, 2 * u1 - u1 * u1));
 
-            const zTrk = 0.08;
-            const zVrg0 = 0.08 + 0.08 * (w0 / maxKerbWidth);
-            const zVrg1 = 0.08 + 0.08 * (w1 / maxKerbWidth);
+            const zTrk = 0.12;
+            const zVrg0 = 0.12 + 0.10 * (w0 / maxKerbWidth);
+            const zVrg1 = 0.12 + 0.10 * (w1 / maxKerbWidth);
 
             const tx0 = (1 - u0) * xs[k0] + u0 * xs[k1];
             const ty0 = (1 - u0) * (-ys[k0]) + u0 * (-ys[k1]);
@@ -1861,8 +1971,8 @@ export class Renderer3D {
           const j = run[s + 1];
           const target = (k % 2 === 0) ? redVerts : whiteVerts;
 
-          const zTrk = 0.08;
-          const zVrg = 0.16;
+          const zTrk = 0.12;
+          const zVrg = 0.22;
 
           const tx0 = xs[k];
           const ty0 = -ys[k];
@@ -1891,9 +2001,9 @@ export class Renderer3D {
             const w0 = maxKerbWidth * Math.sqrt(Math.max(0, 1 - u0 * u0));
             const w1 = maxKerbWidth * Math.sqrt(Math.max(0, 1 - u1 * u1));
 
-            const zTrk = 0.08;
-            const zVrg0 = 0.08 + 0.08 * (w0 / maxKerbWidth);
-            const zVrg1 = 0.08 + 0.08 * (w1 / maxKerbWidth);
+            const zTrk = 0.12;
+            const zVrg0 = 0.12 + 0.10 * (w0 / maxKerbWidth);
+            const zVrg1 = 0.12 + 0.10 * (w1 / maxKerbWidth);
 
             const tx0 = (1 - u0) * xs[k0] + u0 * xs[k1];
             const ty0 = (1 - u0) * (-ys[k0]) + u0 * (-ys[k1]);
@@ -2003,7 +2113,7 @@ export class Renderer3D {
     tarmacBand.renderOrder = 14;
 
     // Position flush on top of the tarmac surface
-    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.12);
+    tarmacBand.position.set((ix + ox) / 2, (iy + oy) / 2, 0.14);
 
     // Orient: Plane width aligns along road width (dx, dy), length aligns along track tangent (tx, ty)
     const roadAngle = Math.atan2(dy, dx);
@@ -2027,7 +2137,7 @@ export class Renderer3D {
     startBar.position.set(
       (ix + ox) / 2 - tx * (bandLength + 4.0),
       (iy + oy) / 2 - ty * (bandLength + 4.0),
-      0.13
+      0.15
     );
     startBar.rotation.z = roadAngle;
     this.decorGroup.add(startBar);
@@ -2447,9 +2557,102 @@ export class Renderer3D {
     gantryGroup.add(backDisplay);
 
     this._lastLapPlateKey = '';
-    this.updateLapPlateTexture('4 LAPS TO GO', 'LAP 1 OF 5 · LEADER P1', '#38bdf8', false);
+    this.updateLapPlateTexture('4 LAPS TO GO', 'LAP 1 OF 5 Â· LEADER P1', '#38bdf8', false);
 
     this.decorGroup.add(gantryGroup);
+    this.setupStartingGridBoxes();
+  }
+
+  setupStartingGridBoxes() {
+    if (this.gridBoxesGroup) {
+      this.decorGroup.remove(this.gridBoxesGroup);
+    }
+    this.gridBoxesGroup = new THREE.Group();
+    const t = this.track;
+    if (!t || !t.N) return;
+
+    const trackWidth = t.width || 84;
+    // Authentic F1 grid box dimensions for 26-unit cars: 30 units long x 15 units wide
+    const boxLength = 30.0;
+    const boxWidth = 15.0;
+    const pop = CONFIG.ga?.population || 20;
+
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.6,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -5,
+      polygonOffsetUnits: -5,
+      depthTest: true,
+    });
+
+    const yellowStopMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      roughness: 0.5,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -6,
+      polygonOffsetUnits: -6,
+      depthTest: true,
+    });
+
+    for (let i = 0; i < pop; i++) {
+      const row = Math.floor(i / 2);
+      const col = i % 2; // 0 = inside/pole, 1 = outside
+      // Generous F1 row spacing (34 units) and stagger (17 units) so cars have clean clearance without touching
+      const distBack = 20 + row * 34 + (col === 1 ? 17 : 0);
+      const latOffset = (col === 0 ? -1 : 1) * (trackWidth * 0.22);
+
+      const sampleIdx = t.wrap(Math.round(t.N - distBack / t.spacing));
+      const cx = t.cx[sampleIdx];
+      const cy = t.cy[sampleIdx];
+      const tx = t.tx[sampleIdx];
+      const ty = t.ty[sampleIdx];
+      const nx = -ty;
+      const ny = tx;
+
+      const posX = cx + nx * latOffset;
+      const posY = cy + ny * latOffset;
+      const roadAngle = Math.atan2(ty, tx);
+
+      const slotGroup = new THREE.Group();
+      slotGroup.position.set(posX, posY, 0.14);
+      slotGroup.rotation.z = roadAngle;
+
+      // 1. Front yellow stop marker line (where front wing aligns)
+      const stopGeo = new THREE.PlaneGeometry(boxWidth, 0.85);
+      const stopMesh = new THREE.Mesh(stopGeo, yellowStopMat);
+      stopMesh.position.set(0, boxLength * 0.43, 0);
+      slotGroup.add(stopMesh);
+
+      // 2. Left and right white slot guide lines
+      const sideGeo = new THREE.PlaneGeometry(0.40, boxLength * 0.88);
+      const leftLine = new THREE.Mesh(sideGeo, lineMat);
+      leftLine.position.set(-boxWidth * 0.5, 0, 0);
+      const rightLine = new THREE.Mesh(sideGeo, lineMat);
+      rightLine.position.set(boxWidth * 0.5, 0, 0);
+      slotGroup.add(leftLine, rightLine);
+
+      // 3. Rear transverse line
+      const rearGeo = new THREE.PlaneGeometry(boxWidth, 0.35);
+      const rearMesh = new THREE.Mesh(rearGeo, lineMat);
+      rearMesh.position.set(0, -boxLength * 0.45, 0);
+      slotGroup.add(rearMesh);
+
+      this.gridBoxesGroup.add(slotGroup);
+    }
+
+    this.gridBoxesGroup.visible = Boolean(CONFIG.gridBox ?? true);
+    this.decorGroup.add(this.gridBoxesGroup);
+  }
+
+  setGridBoxVisible(visible) {
+    if (this.gridBoxesGroup) {
+      this.gridBoxesGroup.visible = Boolean(visible);
+    }
   }
 
   updateGantryLights(sim) {
@@ -2551,7 +2754,7 @@ export class Renderer3D {
       }
     }
 
-    // Top Header Tag (e.g. "LAP 2 OF 5 · LEADER P1" or "RACE FINISHED")
+    // Top Header Tag (e.g. "LAP 2 OF 5 Â· LEADER P1" or "RACE FINISHED")
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.font = '800 36px "Outfit", "Segoe UI", system-ui, sans-serif';
@@ -2605,18 +2808,18 @@ export class Renderer3D {
     const lapsRemaining = Math.max(0, maxLaps - lapsDone);
 
     let mainText = `${lapsRemaining} LAPS TO GO`;
-    let subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
+    let subText = `LAP ${currentLap} OF ${maxLaps} Â· LEADER P1`;
     let color = '#38bdf8'; // Electric Cyan
     let isFinal = false;
 
     if (simTime < startDelay) {
       mainText = 'START COUNTDOWN';
-      subText = 'WATCH 5 RED LIGHTS · HOLD GRID';
+      subText = 'WATCH 5 RED LIGHTS Â· HOLD GRID';
       color = '#ef4444'; // Red
       isFinal = false;
     } else if (simTime < startDelay + 2.8) {
       mainText = 'GO GO GO!';
-      subText = 'GREEN LIGHTS · RACE ON';
+      subText = 'GREEN LIGHTS Â· RACE ON';
       color = '#22c55e'; // Bright Green
       isFinal = true;
     } else if (isFinished || lapsDone >= maxLaps || (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 0)) {
@@ -2624,31 +2827,31 @@ export class Renderer3D {
       const rem = (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 0)
         ? `${Math.ceil(sim.checkeredFlagTimer)}s FINISH WINDOW`
         : 'RACE WINNER';
-      subText = `FINISH · ${rem}`;
+      subText = `FINISH Â· ${rem}`;
       color = '#fbbf24'; // Radiant Gold
       isFinal = true;
     } else if (lapsRemaining === 1) {
       // 1 lap to go IS the Final Lap (driving lap 5 of 5)
       mainText = 'FINAL LAP';
-      subText = `LAP ${maxLaps} OF ${maxLaps} · 1 LAP TO GO`;
+      subText = `LAP ${maxLaps} OF ${maxLaps} Â· 1 LAP TO GO`;
       color = '#fbbf24'; // Radiant Gold
       isFinal = true;
     } else if (lapsRemaining === 2) {
       // 2 laps to go (driving lap 4 of 5)
       mainText = '2 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} · NEXT IS FINAL LAP`;
+      subText = `LAP ${currentLap} OF ${maxLaps} Â· NEXT IS FINAL LAP`;
       color = '#f472b6'; // Hot Pink / Magenta
     } else if (lapsRemaining === 3) {
       mainText = '3 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} · RACE LEADER`;
+      subText = `LAP ${currentLap} OF ${maxLaps} Â· RACE LEADER`;
       color = '#38bdf8'; // Electric Cyan
     } else if (lapsRemaining === 4) {
       mainText = '4 LAPS TO GO';
-      subText = `LAP ${currentLap} OF ${maxLaps} · LEADER P1`;
+      subText = `LAP ${currentLap} OF ${maxLaps} Â· LEADER P1`;
       color = '#38bdf8'; // Electric Cyan
     } else {
       mainText = 'RACE ON';
-      subText = `LAP 1 OF ${maxLaps} · GREEN FLAG`;
+      subText = `LAP 1 OF ${maxLaps} Â· GREEN FLAG`;
       color = '#38bdf8'; // Electric Cyan
     }
 
@@ -3331,6 +3534,9 @@ export class Renderer3D {
       this.scene.add(carMesh);
     }
 
+    // Setup Circuit Record Ghost car
+    this.setupRecordGhostMesh(null);
+
     // Load and apply the 2022 F1 3D car model with full details
     this.loadF1Model();
   }
@@ -3404,6 +3610,8 @@ export class Renderer3D {
       const carNumber = i + 1;
       this.swapCarMesh(this.carPool[i], template, null, false, i, carNumber);
     }
+
+    this.setupRecordGhostMesh(template);
   }
 
   swapCarMesh(group, template, color, isPlayer, carIdx, carNumber) {
@@ -3416,6 +3624,132 @@ export class Renderer3D {
     const badge = this.createBadgeSprite();
     group.userData.badgeSprite = badge;
     group.add(badge);
+  }
+
+  createRecordGhostBadgeSprite(text = '⚡ RECORD GHOST') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    // Glass pill background
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.70)';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, 240, 48, 24);
+    ctx.fill();
+
+    // Neon cyan glow border
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.80)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = '#00e5ff';
+    ctx.font = 'bold 20px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 32);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      depthTest: true,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.renderOrder = 1000;
+    sprite.scale.set(4.6, 1.15, 1);
+    sprite.position.set(0, 0, 4.6);
+    return sprite;
+  }
+
+  updateRecordGhostBadgeText(text) {
+    if (!this.recordGhostMesh) return;
+    if (this._lastGhostBadgeText === text) return;
+    this._lastGhostBadgeText = text;
+    const oldBadge = this.recordGhostMesh.userData.badgeSprite;
+    if (oldBadge) {
+      this.recordGhostMesh.remove(oldBadge);
+      if (oldBadge.material && oldBadge.material.map) oldBadge.material.map.dispose();
+      if (oldBadge.material) oldBadge.material.dispose();
+    }
+    const newBadge = this.createRecordGhostBadgeSprite(text);
+    this.recordGhostMesh.userData.badgeSprite = newBadge;
+    this.recordGhostMesh.add(newBadge);
+  }
+
+  setupRecordGhostMesh(template) {
+    if (!this.recordGhostMesh) {
+      this.recordGhostMesh = new THREE.Group();
+      this.recordGhostMesh.visible = false;
+      this.scene.add(this.recordGhostMesh);
+    }
+    while (this.recordGhostMesh.children.length > 0) {
+      this.recordGhostMesh.remove(this.recordGhostMesh.children[0]);
+    }
+
+    if (!template) {
+      const proceduralGhost = this.createCarMesh('#00e5ff', false, 99, 0);
+      proceduralGhost.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const mat = child.material.clone();
+          mat.transparent = true;
+          mat.opacity = 0.20;
+          mat.depthWrite = false;
+          child.material = mat;
+        }
+      });
+      this.recordGhostMesh.add(proceduralGhost);
+    } else {
+      const cloned = template.clone(true);
+      const s = 6.0;
+      cloned.scale.set(s, s, s);
+      cloned.rotation.set(Math.PI / 2, 0, 0);
+      cloned.position.set(0, 0, 0);
+
+      const ghostMat = new THREE.MeshStandardMaterial({
+        color: 0x00e5ff,
+        emissive: 0x0099cc,
+        emissiveIntensity: 0.35,
+        transparent: true,
+        opacity: 0.20,
+        roughness: 0.30,
+        metalness: 0.50,
+        depthWrite: false,
+      });
+
+      cloned.traverse((child) => {
+        // Exclude studio background floor plane and environment sphere
+        if (
+          child.name &&
+          (child.name.includes('Plane') ||
+            child.name.includes('Sphere') ||
+            child.name.includes('Object_12') ||
+            child.name.includes('Object_4'))
+        ) {
+          child.visible = false;
+          return;
+        }
+
+        if (child.isMesh) {
+          child.material = ghostMat;
+          child.castShadow = false;
+          child.receiveShadow = false;
+        }
+      });
+
+      const ghostSub = new THREE.Group();
+      ghostSub.add(cloned);
+      ghostSub.rotation.z = Math.PI;
+      this.recordGhostMesh.add(ghostSub);
+    }
+
+    const badge = this.createRecordGhostBadgeSprite('⚡ RECORD GHOST');
+    this.recordGhostMesh.userData.badgeSprite = badge;
+    this.recordGhostMesh.add(badge);
   }
 
   createF1CarMesh(template, color, isPlayer = false, carIdx = 0, carNumber = 1) {
@@ -3455,8 +3789,8 @@ export class Renderer3D {
       }
 
       if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        child.castShadow = false;
+        child.receiveShadow = false;
 
         const isFrontWheelsMesh = child.name === 'Object_8';
         const isRearWheelsMesh = child.name === 'Object_10';
@@ -3542,7 +3876,7 @@ export class Renderer3D {
           metalness: origMetalness,
         });
 
-        mat.customProgramCacheKey = () => `f1_body_car_${isPlayer ? 'player' : carIdx}_${carNumber}`;
+        mat.customProgramCacheKey = () => 'f1_ground_effect_body_v1';
 
         mat.onBeforeCompile = (shader) => {
           shader.uniforms.decalTex = { value: numTex };
@@ -3613,7 +3947,7 @@ export class Renderer3D {
       const decalMat = new THREE.MeshBasicMaterial({
         map: numTex,
         transparent: true,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide,
         depthTest: true,
         depthWrite: false,
         polygonOffset: true,
@@ -3631,7 +3965,7 @@ export class Renderer3D {
       });
     }
 
-    // Yaw 180° so the car's nose points forward along velocity vector +X
+    // Yaw 180Â° so the car's nose points forward along velocity vector +X
     carSubGroup.rotation.z = Math.PI;
     group.add(carSubGroup);
     return group;
@@ -3699,7 +4033,7 @@ export class Renderer3D {
     const maxY = b.maxY + pad;
 
     // 1. Organic cluster centers (groves) across the surrounding terrain
-    const numClusters = 28 + Math.floor(rand() * 12);
+    const numClusters = 42 + Math.floor(rand() * 12);
     const clusterCenters = [];
     for (let c = 0; c < numClusters; c++) {
       // Each grove has a dominant tree species archetype (0: Pine, 1: Oak, 2: Cypress, 3: Birch)
@@ -3707,8 +4041,8 @@ export class Renderer3D {
       clusterCenters.push({
         cx: minX + rand() * (maxX - minX),
         cy: minY + rand() * (maxY - minY),
-        radius: 60 + rand() * 140,
-        count: 6 + Math.floor(rand() * 10),
+        radius: 50 + rand() * 140,
+        count: 14 + Math.floor(rand() * 14),
         groveType,
       });
     }
@@ -3729,8 +4063,8 @@ export class Renderer3D {
       }
     }
 
-    // Standalone trees for sparse natural meadow scattering on hill slopes
-    const standalone = 80 + Math.floor(rand() * 40);
+    // Standalone trees for natural meadow scattering on hill slopes
+    const standalone = 120 + Math.floor(rand() * 40);
     for (let i = 0; i < standalone; i++) {
       candidates.push({
         x: minX + rand() * (maxX - minX),
@@ -3780,7 +4114,7 @@ export class Renderer3D {
       let tooClose = false;
       for (const ex of allPlaced) {
         const d2 = (x - ex.x) ** 2 + (y - ex.y) ** 2;
-        if (d2 < (ex.r * 0.75 + 11) ** 2) {
+        if (d2 < (ex.r * 0.45 + 5.5) ** 2) {
           tooClose = true;
           break;
         }
@@ -3834,11 +4168,13 @@ export class Renderer3D {
       }
     }
 
+    this.placedTreePositions = allPlaced;
+
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
-    const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4e3827, roughness: 0.88, metalness: 0.05, flatShading: true });
-    const paleWoodMat = new THREE.MeshStandardMaterial({ color: 0xded9cb, roughness: 0.82, metalness: 0.05, flatShading: true });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, metalness: 0.04, flatShading: true });
+    const darkWoodMat = new THREE.MeshLambertMaterial({ color: 0x4e3827, flatShading: true });
+    const paleWoodMat = new THREE.MeshLambertMaterial({ color: 0xded9cb, flatShading: true });
+    const leafMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
 
     // Procedural Helper: Faceted Conifer Tier Cone (Nested solid low-poly evergreen tier)
     const createConiferConeGeo = (radius, height, segments = 7) => {
@@ -3986,11 +4322,11 @@ export class Renderer3D {
       if (tier2Inst.instanceColor) tier2Inst.instanceColor.needsUpdate = true;
       if (tier3Inst.instanceColor) tier3Inst.instanceColor.needsUpdate = true;
       if (tier4Inst.instanceColor) tier4Inst.instanceColor.needsUpdate = true;
-      pineTrunkInst.castShadow = true; pineTrunkInst.receiveShadow = true;
-      tier1Inst.castShadow = true; tier1Inst.receiveShadow = true;
-      tier2Inst.castShadow = true; tier2Inst.receiveShadow = true;
-      tier3Inst.castShadow = true; tier3Inst.receiveShadow = true;
-      tier4Inst.castShadow = true; tier4Inst.receiveShadow = true;
+      pineTrunkInst.castShadow = false; pineTrunkInst.receiveShadow = false;
+      tier1Inst.castShadow = false; tier1Inst.receiveShadow = false;
+      tier2Inst.castShadow = false; tier2Inst.receiveShadow = false;
+      tier3Inst.castShadow = false; tier3Inst.receiveShadow = false;
+      tier4Inst.castShadow = false; tier4Inst.receiveShadow = false;
 
       this.treeGroup.add(pineTrunkInst, tier1Inst, tier2Inst, tier3Inst, tier4Inst);
     }
@@ -4078,11 +4414,11 @@ export class Renderer3D {
       if (oakLeftInst.instanceColor) oakLeftInst.instanceColor.needsUpdate = true;
       if (oakRightInst.instanceColor) oakRightInst.instanceColor.needsUpdate = true;
       if (oakTopInst.instanceColor) oakTopInst.instanceColor.needsUpdate = true;
-      oakTrunkInst.castShadow = true; oakTrunkInst.receiveShadow = true;
-      oakMainInst.castShadow = true; oakMainInst.receiveShadow = true;
-      oakLeftInst.castShadow = true; oakLeftInst.receiveShadow = true;
-      oakRightInst.castShadow = true; oakRightInst.receiveShadow = true;
-      oakTopInst.castShadow = true; oakTopInst.receiveShadow = true;
+      oakTrunkInst.castShadow = false; oakTrunkInst.receiveShadow = false;
+      oakMainInst.castShadow = false; oakMainInst.receiveShadow = false;
+      oakLeftInst.castShadow = false; oakLeftInst.receiveShadow = false;
+      oakRightInst.castShadow = false; oakRightInst.receiveShadow = false;
+      oakTopInst.castShadow = false; oakTopInst.receiveShadow = false;
 
       this.treeGroup.add(oakTrunkInst, oakMainInst, oakLeftInst, oakRightInst, oakTopInst);
     }
@@ -4158,10 +4494,10 @@ export class Renderer3D {
       if (tier1Inst.instanceColor) tier1Inst.instanceColor.needsUpdate = true;
       if (tier2Inst.instanceColor) tier2Inst.instanceColor.needsUpdate = true;
       if (tier3Inst.instanceColor) tier3Inst.instanceColor.needsUpdate = true;
-      cedarTrunkInst.castShadow = true; cedarTrunkInst.receiveShadow = true;
-      tier1Inst.castShadow = true; tier1Inst.receiveShadow = true;
-      tier2Inst.castShadow = true; tier2Inst.receiveShadow = true;
-      tier3Inst.castShadow = true; tier3Inst.receiveShadow = true;
+      cedarTrunkInst.castShadow = false; cedarTrunkInst.receiveShadow = false;
+      tier1Inst.castShadow = false; tier1Inst.receiveShadow = false;
+      tier2Inst.castShadow = false; tier2Inst.receiveShadow = false;
+      tier3Inst.castShadow = false; tier3Inst.receiveShadow = false;
 
       this.treeGroup.add(cedarTrunkInst, tier1Inst, tier2Inst, tier3Inst);
     }
@@ -4232,15 +4568,459 @@ export class Renderer3D {
       if (birchCrown1Inst.instanceColor) birchCrown1Inst.instanceColor.needsUpdate = true;
       if (birchCrown2Inst.instanceColor) birchCrown2Inst.instanceColor.needsUpdate = true;
       if (birchCrown3Inst.instanceColor) birchCrown3Inst.instanceColor.needsUpdate = true;
-      birchTrunkInst.castShadow = true; birchTrunkInst.receiveShadow = true;
-      birchCrown1Inst.castShadow = true; birchCrown1Inst.receiveShadow = true;
-      birchCrown2Inst.castShadow = true; birchCrown2Inst.receiveShadow = true;
-      birchCrown3Inst.castShadow = true; birchCrown3Inst.receiveShadow = true;
+      birchTrunkInst.castShadow = false; birchTrunkInst.receiveShadow = false;
+      birchCrown1Inst.castShadow = false; birchCrown1Inst.receiveShadow = false;
+      birchCrown2Inst.castShadow = false; birchCrown2Inst.receiveShadow = false;
+      birchCrown3Inst.castShadow = false; birchCrown3Inst.receiveShadow = false;
 
       this.treeGroup.add(birchTrunkInst, birchCrown1Inst, birchCrown2Inst, birchCrown3Inst);
     }
 
     this.scene.add(this.treeGroup);
+
+    if (this.allExternalTreeTemplates && this.allExternalTreeTemplates.length > 0) {
+      this.populateExternalTrees();
+    } else {
+      this.loadExternalTreeModels();
+    }
+  }
+
+  createTreeLabel(number, color = '#facc15') {
+    this._treeLabelCache = this._treeLabelCache || {};
+    if (this._treeLabelCache[number]) {
+      return this._treeLabelCache[number].clone();
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    // Outer dark circle
+    ctx.beginPath();
+    ctx.arc(128, 128, 118, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+    ctx.fill();
+
+    // Vibrant thick circular ring
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 14;
+    ctx.stroke();
+
+    // Inner subtle guide ring
+    ctx.beginPath();
+    ctx.arc(128, 128, 102, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.30)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Big bold unique number
+    ctx.fillStyle = '#ffffff';
+    const numStr = String(number);
+    const fontSize = numStr.length <= 2 ? 118 : (numStr.length === 3 ? 94 : 76);
+    ctx.font = `900 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(numStr, 128, 130);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const mat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true, opacity: 0.98 });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(16, 16, 1);
+    this._treeLabelCache[number] = sprite;
+    return sprite.clone();
+  }
+
+  normalizeTreeTemplate(object, targetHeight = 24, forcedRot = null, meta = {}) {
+    const wrapper = new THREE.Group();
+    wrapper.userData = {
+      typeId: meta.typeId || 1,
+      label: meta.label || 'tree',
+      pack: meta.pack || 'unknown',
+      color: meta.color || '#facc15',
+      targetHeight: targetHeight,
+      ...meta,
+    };
+    const cloned = object.clone(true);
+
+    cloned.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = false;
+        child.receiveShadow = false;
+        if (child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          const clonedMats = mats.map((m) => {
+            const cm = m.clone();
+            const matName = (cm.name || child.name || '').toLowerCase();
+            const isTrunk = matName.includes('bark') || matName.includes('tran') || matName.includes('trunk');
+            if (!isTrunk && meta.foliageTint) {
+              cm.color.copy(meta.foliageTint);
+              cm.roughness = 0.98;
+              cm.metalness = 0.0;
+              if ('specularIntensity' in cm) cm.specularIntensity = 0.0;
+              if ('envMapIntensity' in cm) cm.envMapIntensity = 0.35;
+            } else if (!isTrunk) {
+              cm.roughness = 0.92;
+            }
+            return cm;
+          });
+          child.material = Array.isArray(child.material) ? clonedMats : clonedMats[0];
+        }
+      }
+    });
+
+    if (forcedRot) {
+      if (forcedRot.x !== undefined) cloned.rotation.x = forcedRot.x;
+      if (forcedRot.y !== undefined) cloned.rotation.y = forcedRot.y;
+      if (forcedRot.z !== undefined) cloned.rotation.z = forcedRot.z;
+    }
+
+    cloned.position.set(0, 0, 0);
+    cloned.scale.set(1, 1, 1);
+    cloned.updateMatrixWorld(true);
+
+    // Measure raw bounding box after applying explicit rotation
+    let box = new THREE.Box3().setFromObject(cloned);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+
+    const currentHeight = size.z > 0.001 ? size.z : 1;
+    const s = targetHeight / currentHeight;
+    cloned.scale.set(s, s, s);
+    cloned.updateMatrixWorld(true);
+
+    // Recompute box after scaling to accurately center and anchor base
+    box = new THREE.Box3().setFromObject(cloned);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+
+    // Center horizontally so trunk is at (0, 0), and place ground contact at Z = 0
+    cloned.position.x = -center.x;
+    cloned.position.y = -center.y;
+    cloned.position.z = -box.min.z;
+    cloned.updateMatrixWorld(true);
+
+    wrapper.add(cloned);
+    wrapper.updateMatrixWorld(true);
+
+    // Bake child mesh transforms relative to wrapper origin into geometry for high-performance InstancedMesh
+    const parts = [];
+    cloned.traverse((child) => {
+      if (child.isMesh && child.geometry) {
+        const bakedGeo = child.geometry.clone();
+        bakedGeo.applyMatrix4(child.matrixWorld);
+        parts.push({
+          geometry: bakedGeo,
+          material: child.material,
+          name: child.name,
+        });
+      }
+    });
+    wrapper.userData.parts = parts;
+
+    return wrapper;
+  }
+
+  loadExternalTreeModels() {
+    if (this._loadingTrees) return;
+    this._loadingTrees = true;
+
+    this.externalTreeTemplatesBySpecies = { 0: [], 1: [], 2: [], 3: [] };
+    this.allExternalTreeTemplates = [];
+
+    const loader = new GLTFLoader();
+
+    const addTemplate = (template, speciesList = [], triggerPopulate = true) => {
+      if (!template) return;
+      this.allExternalTreeTemplates.push(template);
+      speciesList.forEach((sp) => {
+        if (!this.externalTreeTemplatesBySpecies[sp]) {
+          this.externalTreeTemplatesBySpecies[sp] = [];
+        }
+        this.externalTreeTemplatesBySpecies[sp].push(template);
+      });
+      if (triggerPopulate) {
+        this.populateExternalTrees();
+      }
+    };
+
+    // 1. Alpine Pine Tree (Type 1: User favorite, dark muted alpine needle green)
+    loader.load(
+      './pine_tree/scene.gltf',
+      (gltf) => {
+        const template = this.normalizeTreeTemplate(gltf.scene, 72, { x: Math.PI / 2, y: 0, z: 0 }, {
+          typeId: 1,
+          label: 'pine_tree',
+          pack: 'pine',
+          color: '#10b981',
+          foliageTint: new THREE.Color(0.38, 0.43, 0.36),
+        });
+        addTemplate(template, [0, 1, 2, 3], true);
+      },
+      undefined,
+      (err) => console.warn('Could not load pine_tree model:', err)
+    );
+
+    // 2. Low Poly Trees Free (Types 2, 3, 4: Deep, dark, desaturated woodland tones)
+    loader.load(
+      './low_poly_trees_free/scene.gltf',
+      (gltf) => {
+        const found = [];
+        gltf.scene.traverse((child) => {
+          if (child.name && child.name.startsWith('Tree') && child.children && child.children.length > 0) {
+            found.push(child);
+          }
+        });
+        if (found.length > 0) {
+          const typeConfigs = [
+            { typeId: 2, label: 'low_poly_Oak', height: 65, color: '#a855f7', species: [1], tint: new THREE.Color(0.18, 0.20, 0.15) },
+            { typeId: 3, label: 'low_poly_Conifer', height: 75, color: '#3b82f6', species: [0, 2], tint: new THREE.Color(0.14, 0.17, 0.14) },
+            { typeId: 4, label: 'low_poly_Birch', height: 60, color: '#eab308', species: [3], tint: new THREE.Color(0.19, 0.20, 0.15) },
+          ];
+          found.forEach((c, idx) => {
+            const cfg = typeConfigs[idx] || { typeId: 2 + idx, label: `low_poly_${idx}`, height: 65, color: '#a855f7', species: [2, 3], tint: new THREE.Color(0.17, 0.19, 0.15) };
+            const tmpl = this.normalizeTreeTemplate(c, cfg.height, { x: Math.PI, y: 0, z: 0 }, {
+              typeId: cfg.typeId,
+              label: cfg.label,
+              pack: 'low_poly',
+              color: cfg.color,
+              foliageTint: cfg.tint,
+            });
+            addTemplate(tmpl, cfg.species, false);
+          });
+          this.populateExternalTrees();
+        }
+      },
+      undefined,
+      (err) => console.warn('Could not load low_poly_trees_free model:', err)
+    );
+
+    // 3. Shapespark Exterior Plants Kit (Types 5-21: Tree-01, Tree-02, Tree-03, and Bushes)
+    loader.load(
+      './shapespark_low_poly_exterior_plants_kit/scene.gltf',
+      (gltf) => {
+        const found = [];
+        gltf.scene.traverse((child) => {
+          if (child.name && (child.name.startsWith('Tree-') || child.name.startsWith('Bush-'))) {
+            found.push(child);
+          }
+        });
+
+        // Exact mapping keeping Types 11, 13, 14, 15 consistent with user badges
+        const shapesparkMap = {
+          'Tree-01-1_0': { typeId: 5, height: 70, color: '#06b6d4', isFamily: false },
+          'Tree-01-2_1': { typeId: 6, height: 70, color: '#06b6d4', isFamily: false },
+          'Tree-01-3_2': { typeId: 7, height: 68, color: '#06b6d4', isFamily: false },
+          'Tree-01-4_3': { typeId: 8, height: 68, color: '#06b6d4', isFamily: false },
+          'Tree-02-1_4': { typeId: 9, height: 65, color: '#f59e0b', isFamily: true },
+          'Tree-02-2_5': { typeId: 10, height: 65, color: '#f59e0b', isFamily: true },
+          'Tree-02-3_6': { typeId: 11, height: 65, color: '#f59e0b', isFamily: true },
+          'Tree-02-4_7': { typeId: 12, height: 65, color: '#f59e0b', isFamily: true },
+          'Tree-03-1_8': { typeId: 13, height: 62, color: '#14b8a6', isFamily: true },
+          'Tree-03-2_9': { typeId: 14, height: 62, color: '#14b8a6', isFamily: true },
+          'Tree-03-3_10': { typeId: 15, height: 62, color: '#14b8a6', isFamily: true },
+          'Tree-03-4_11': { typeId: 16, height: 62, color: '#14b8a6', isFamily: true },
+          'Bush-01_13': { typeId: 17, height: 26, color: '#ec4899', isFamily: false },
+          'Bush-02_14': { typeId: 18, height: 26, color: '#f43f5e', isFamily: false },
+          'Bush-03_15': { typeId: 19, height: 26, color: '#d946ef', isFamily: false },
+          'Bush-04_16': { typeId: 20, height: 26, color: '#8b5cf6', isFamily: false },
+          'Bush-05_17': { typeId: 21, height: 26, color: '#6366f1', isFamily: false },
+        };
+
+        let fallbackId = 22;
+        found.forEach((c) => {
+          const isBush = c.name.startsWith('Bush');
+          const cleanName = c.name.replace(/_[0-9]+$/, '');
+          const info = shapesparkMap[c.name] || {
+            typeId: fallbackId++,
+            height: isBush ? 26 : 65,
+            color: isBush ? '#ec4899' : '#06b6d4',
+            isFamily: c.name.startsWith('Tree-02') || c.name.startsWith('Tree-03'),
+          };
+
+          const tmpl = this.normalizeTreeTemplate(c, info.height, { x: Math.PI / 2, y: 0, z: 0 }, {
+            typeId: info.typeId,
+            label: cleanName,
+            pack: 'shapespark',
+            color: info.color,
+          });
+          tmpl.userData.isFavoriteFamily = info.isFamily;
+
+          const targetSpecies = info.isFamily ? [0, 1, 2, 3] : (c.name.startsWith('Tree-01') ? [0, 2] : (isBush ? [0, 1, 2, 3] : [2, 3]));
+          addTemplate(tmpl, targetSpecies, false);
+        });
+        this.populateExternalTrees();
+      },
+      undefined,
+      (err) => console.warn('Could not load shapespark_low_poly_exterior_plants_kit model:', err)
+    );
+  }
+
+  populateExternalTrees() {
+    if (!this.treeGroup || !this.placedTreePositions || this.placedTreePositions.length === 0) return;
+    if (!this.allExternalTreeTemplates || this.allExternalTreeTemplates.length === 0) return;
+
+    // Clear placeholder / previous trees, protecting shared template geometries
+    while (this.treeGroup.children.length > 0) {
+      const child = this.treeGroup.children[0];
+      this.treeGroup.remove(child);
+      if (!child.userData || !child.userData.isSharedTemplate) {
+        child.traverse((c) => {
+          if (c.geometry) c.geometry.dispose();
+        });
+      }
+    }
+
+    // Categorize templates for custom frequency distribution
+    const pineTemplates = this.allExternalTreeTemplates.filter(
+      (t) => t.userData && t.userData.pack === 'pine'
+    );
+    const familyTemplates = this.allExternalTreeTemplates.filter(
+      (t) => t.userData && t.userData.isFavoriteFamily
+    );
+    const lowPolyTemplates = this.allExternalTreeTemplates.filter(
+      (t) => t.userData && t.userData.pack === 'low_poly'
+    );
+    const otherShapesparkTemplates = this.allExternalTreeTemplates.filter(
+      (t) => t.userData && t.userData.pack === 'shapespark' && !t.userData.isFavoriteFamily
+    );
+
+    const templateAssignments = new Map();
+    this.allExternalTreeTemplates.forEach((t) => templateAssignments.set(t, []));
+
+    const catalog = [];
+    const n = this.placedTreePositions.length;
+    const tempPos = new THREE.Vector3();
+    const tempEuler = new THREE.Euler();
+    const tempQuat = new THREE.Quaternion();
+    const tempScale = new THREE.Vector3();
+
+    for (let i = 0; i < n; i++) {
+      const tree = this.placedTreePositions[i];
+      const speciesPool = this.externalTreeTemplatesBySpecies[tree.species];
+
+      // Frequency distribution prioritizing user favorites:
+      // ~45% Pine (Type 1: tall evergreen forest foundation)
+      // ~38% Favorite Family (Types 11, 13, 14, 15...: beloved Tree-02 & Tree-03 family)
+      // ~10% Shapespark Bushes & Plants (Types 5-8, 17-21: understory vegetation)
+      // ~7%  Low-Poly Trees Free (Types 2, 3, 4: rare accents, dark & desaturated)
+      const roll = Math.random();
+      let template = null;
+      if (roll < 0.45 && pineTemplates.length > 0) {
+        template = pineTemplates[Math.floor(Math.random() * pineTemplates.length)];
+      } else if (roll < 0.83 && familyTemplates.length > 0) {
+        const matching = familyTemplates.filter((t) => speciesPool && speciesPool.includes(t));
+        const pool = matching.length > 0 ? matching : familyTemplates;
+        template = pool[Math.floor(Math.random() * pool.length)];
+      } else if (roll < 0.93 && otherShapesparkTemplates.length > 0) {
+        const matching = otherShapesparkTemplates.filter((t) => speciesPool && speciesPool.includes(t));
+        const pool = matching.length > 0 ? matching : otherShapesparkTemplates;
+        template = pool[Math.floor(Math.random() * pool.length)];
+      } else if (lowPolyTemplates.length > 0) {
+        const matching = lowPolyTemplates.filter((t) => speciesPool && speciesPool.includes(t));
+        const pool = matching.length > 0 ? matching : lowPolyTemplates;
+        template = pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      if (!template) {
+        const pool = (speciesPool && speciesPool.length > 0)
+          ? speciesPool
+          : this.allExternalTreeTemplates;
+        template = pool[Math.floor(Math.random() * pool.length)];
+      }
+      if (!template) continue;
+
+      // Normalized scale multiplier so trees match car (26 units) and track (84 units) scale
+      const rFactor = 0.85 + (Math.min(26, tree.r) / 26) * 0.35;
+      const scaleMult = rFactor * (0.95 + (Math.random() - 0.5) * 0.15);
+
+      tempPos.set(tree.x, -tree.y, tree.groundZ - 0.6 * scaleMult);
+      tempEuler.set(0, 0, tree.yaw + (Math.random() - 0.5) * 0.3);
+      tempQuat.setFromEuler(tempEuler);
+      tempScale.set(scaleMult, scaleMult, scaleMult);
+
+      const mat = new THREE.Matrix4().compose(tempPos, tempQuat, tempScale);
+      if (!templateAssignments.has(template)) {
+        templateAssignments.set(template, []);
+      }
+      templateAssignments.get(template).push(mat);
+
+      const meta = template.userData || {};
+      const typeNumber = meta.typeId || 1;
+      const renderedHeight = (meta.targetHeight || 65) * scaleMult;
+
+      catalog.push({
+        instanceId: i + 1,
+        typeId: typeNumber,
+        label: meta.label || 'tree',
+        pack: meta.pack || 'unknown',
+        height: renderedHeight.toFixed(1) + 'm',
+        x: tree.x.toFixed(1),
+        y: (-tree.y).toFixed(1),
+        z: tree.groundZ.toFixed(1),
+      });
+    }
+
+    // Build InstancedMesh groups for each template's baked parts
+    templateAssignments.forEach((matrices, tmpl) => {
+      if (!matrices || matrices.length === 0) return;
+      const parts = (tmpl.userData && tmpl.userData.parts) || [];
+      const count = matrices.length;
+
+      if (parts.length > 0) {
+        parts.forEach((part) => {
+          let instMat = part.material;
+          if (instMat && instMat.isMeshStandardMaterial) {
+            instMat = new THREE.MeshLambertMaterial({
+              color: instMat.color,
+              map: instMat.map,
+              transparent: instMat.transparent,
+              opacity: instMat.opacity,
+              alphaTest: instMat.alphaTest,
+              side: THREE.FrontSide,
+            });
+          }
+          const instMesh = new THREE.InstancedMesh(part.geometry, instMat, count);
+          for (let k = 0; k < count; k++) {
+            instMesh.setMatrixAt(k, matrices[k]);
+          }
+          instMesh.instanceMatrix.needsUpdate = true;
+          instMesh.castShadow = false;
+          instMesh.receiveShadow = false;
+          instMesh.matrixAutoUpdate = false;
+          instMesh.userData = { isSharedTemplate: true };
+          this.treeGroup.add(instMesh);
+        });
+      } else {
+        for (let k = 0; k < count; k++) {
+          const clone = tmpl.clone(true);
+          clone.applyMatrix4(matrices[k]);
+          clone.userData = { isSharedTemplate: true };
+          this.treeGroup.add(clone);
+        }
+      }
+    });
+
+    this.treeGroup.matrixAutoUpdate = false;
+    this.treeGroup.updateMatrix();
+
+    window.treeTypes = {
+      1: { name: 'pine_tree', pack: 'pine', desc: 'Alpine Pine Conifer' },
+      2: { name: 'Tree_0', pack: 'low_poly', desc: 'Deciduous Oak / Maple' },
+      3: { name: 'Tree-1_1', pack: 'low_poly', desc: 'Tall Low-Poly Conifer' },
+      4: { name: 'Tree-2_2', pack: 'low_poly', desc: 'Rounded Birch / Blossom' },
+      5: { name: 'Tree-01', pack: 'shapespark', desc: 'Cypress Pine' },
+      6: { name: 'Tree-02', pack: 'shapespark', desc: 'Round Leafy Oak' },
+      7: { name: 'Tree-03', pack: 'shapespark', desc: 'Slender Birch' },
+      8: { name: 'Bush-01', pack: 'shapespark', desc: 'Dense Shrub' },
+      9: { name: 'Bush-02', pack: 'shapespark', desc: 'Hedge Bush' },
+      10: { name: 'Bush-03', pack: 'shapespark', desc: 'Flowering Bush' },
+      11: { name: 'Bush-04', pack: 'shapespark', desc: 'Wild Shrub' },
+      12: { name: 'Bush-05', pack: 'shapespark', desc: 'Low Green Bush' },
+    };
+    window.treeCatalog = catalog;
+    console.log(`[Trees] Instanced ${catalog.length} trees across ${this.treeGroup.children.length} instanced batches. Locked 60 FPS performance.`);
   }
 
   setupRocks() {
@@ -4402,19 +5182,15 @@ export class Renderer3D {
       },
       {
         list: placedType1,
-        mat: new THREE.MeshStandardMaterial({
+        mat: new THREE.MeshLambertMaterial({
           color: 0x6e6659, // Weathered Sandstone / Limestone
-          roughness: 0.94,
-          metalness: 0.04,
           flatShading: true,
         }),
       },
       {
         list: placedType2,
-        mat: new THREE.MeshStandardMaterial({
+        mat: new THREE.MeshLambertMaterial({
           color: 0x3a4034, // Mossy Basalt / Dark Shale
-          roughness: 0.88,
-          metalness: 0.05,
           flatShading: true,
         }),
       },
@@ -4458,12 +5234,16 @@ export class Renderer3D {
 
       instMesh.instanceMatrix.needsUpdate = true;
       if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
-      instMesh.castShadow = true;
-      instMesh.receiveShadow = true;
+      instMesh.castShadow = false;
+      instMesh.receiveShadow = false;
+      instMesh.matrixAutoUpdate = false;
+      instMesh.updateMatrix();
 
       this.rockGroup.add(instMesh);
     }
 
+    this.rockGroup.matrixAutoUpdate = false;
+    this.rockGroup.updateMatrix();
     this.scene.add(this.rockGroup);
   }
 
@@ -4534,11 +5314,9 @@ export class Renderer3D {
     tireGeo.setIndex(indices);
     tireGeo.computeVertexNormals();
 
-    const tireMat = new THREE.MeshStandardMaterial({
+    const tireMat = new THREE.MeshLambertMaterial({
       color: 0xffffff,
-      roughness: 0.86,
-      metalness: 0.08,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
     });
 
     const tires = sim?.tireBarriers?.tires || (this.track ? this.generateTiresForTrack(this.track) : []);
@@ -4547,7 +5325,9 @@ export class Renderer3D {
     if (this.tireCount > 0) {
       this.tireMesh = new THREE.InstancedMesh(tireGeo, tireMat, this.tireCount);
       this.tireMesh.castShadow = false; // Disable heavy shadow-map pass for 3,862 instances
-      this.tireMesh.receiveShadow = true;
+      this.tireMesh.receiveShadow = false; // Disable expensive shadow-map sampling on 3,862 instances
+      this.tireMesh.matrixAutoUpdate = false;
+      this.tireMesh.updateMatrix();
 
       for (let i = 0; i < this.tireCount; i++) {
         const t = tires[i];
@@ -4566,6 +5346,8 @@ export class Renderer3D {
       this.tireGroup.add(this.tireMesh);
     }
 
+    this.tireGroup.matrixAutoUpdate = false;
+    this.tireGroup.updateMatrix();
     this.scene.add(this.tireGroup);
   }
 
@@ -4950,9 +5732,6 @@ export class Renderer3D {
   }
 
   addTireSmokePuff(x, y, z, carVx, carVy, intensity, extraSpread = 0, puffType = 'auto') {
-    if (this.smokeParticles.length >= this.maxSmokeParticles) {
-      this.smokeParticles.shift();
-    }
     const angle = Math.random() * Math.PI * 2;
     const spread = (0.35 + extraSpread) * (0.8 + Math.random() * 0.5);
 
@@ -4978,20 +5757,48 @@ export class Renderer3D {
     }
 
     const atlasVariant = Math.floor(Math.random() * 4);
+    const alphaVal = Math.min(0.24, 0.05 + intensity * 0.18);
+    const px = x + (Math.random() - 0.5) * spread;
+    const py = y + (Math.random() - 0.5) * spread;
+    const pz = z + Math.random() * 0.06;
+    const pvx = (carVx * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4;
+    const pvy = (carVy * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4;
+    const pvz = 0.4 + Math.random() * 1.4; // Natural thermal updraft
+    const pvRot = (Math.random() - 0.5) * 2.2;
+
+    // Fast zero-allocation buffer recycling when at capacity (avoids O(N) shift())
+    if (this.smokeParticles.length >= this.maxSmokeParticles) {
+      const p = this.smokeParticles[0];
+      p.x = px;
+      p.y = py;
+      p.z = pz;
+      p.vx = pvx;
+      p.vy = pvy;
+      p.vz = pvz;
+      p.size = baseSize;
+      p.growthRate = growth;
+      p.rot = angle;
+      p.vRot = pvRot;
+      p.atlasIdx = atlasVariant;
+      p.alpha = alphaVal;
+      p.life = 1.0;
+      p.decay = decayRate;
+      return;
+    }
 
     this.smokeParticles.push({
-      x: x + (Math.random() - 0.5) * spread,
-      y: y + (Math.random() - 0.5) * spread,
-      z: z + Math.random() * 0.06,
-      vx: (carVx * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4,
-      vy: (carVy * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4,
-      vz: 0.4 + Math.random() * 1.4, // Natural thermal updraft
+      x: px,
+      y: py,
+      z: pz,
+      vx: pvx,
+      vy: pvy,
+      vz: pvz,
       size: baseSize,
       growthRate: growth,
       rot: angle,
-      vRot: (Math.random() - 0.5) * 2.2,
+      vRot: pvRot,
       atlasIdx: atlasVariant,
-      alpha: Math.min(0.24, 0.05 + intensity * 0.18),
+      alpha: alphaVal,
       life: 1.0,
       decay: decayRate,
     });
@@ -5005,14 +5812,20 @@ export class Renderer3D {
 
     const dt = 1 / 60;
     let writeIdx = 0;
+    let aliveCount = 0;
+    const particles = this.smokeParticles;
+    const total = particles.length;
 
-    for (let i = this.smokeParticles.length - 1; i >= 0; i--) {
-      const p = this.smokeParticles[i];
+    // Single-pass forward in-place compaction: eliminates splice() heap churn and GC spikes completely
+    for (let i = 0; i < total; i++) {
+      const p = particles[i];
       p.life -= p.decay * dt;
       if (p.life <= 0) {
-        this.smokeParticles.splice(i, 1);
         continue;
       }
+
+      particles[aliveCount] = p;
+      aliveCount++;
 
       // Physics: chaotic drag deceleration, aerodynamic draft, and thermal rise
       p.x += p.vx * dt;
@@ -5042,6 +5855,9 @@ export class Renderer3D {
       writeIdx++;
     }
 
+    // Direct length truncation is O(1) in V8
+    particles.length = aliveCount;
+
     this.smokeMesh.geometry.attributes.position.needsUpdate = true;
     this.smokeMesh.geometry.attributes.size.needsUpdate = true;
     this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
@@ -5051,7 +5867,7 @@ export class Renderer3D {
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 80000;
+    this.maxSkidQuads = 16000; // Large persistent buffer maintaining permanent skid marks throughout the race
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -5102,13 +5918,13 @@ export class Renderer3D {
       varying float vAlpha;
       varying vec2 vUv;
       void main() {
-        // Authentic motorsport dark graphite rubber compound
-        vec3 rubber = vec3(0.042, 0.045, 0.055);
+        // Authentic motorsport dark graphite rubber compound (natural charcoal, not harsh black ink)
+        vec3 rubber = vec3(0.045, 0.048, 0.056);
         // Soft lateral tire feathering with solid dark center contact patch
         float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
         float lateral = 0.50 + 0.50 * edge;
-        // Translucent, subtle rubber deposit that naturally builds up across laps
-        float alpha = clamp(vAlpha * lateral, 0.0, 0.28);
+        // Subtle, less opaque rubber that stays permanent and builds up naturally without turning into solid black blocks
+        float alpha = clamp(vAlpha * lateral, 0.0, 0.35);
         if (alpha < 0.005) discard;
         gl_FragColor = vec4(rubber, alpha);
       }
@@ -5120,7 +5936,7 @@ export class Renderer3D {
       transparent: true,
       depthWrite: false,
       depthTest: true,
-      side: THREE.DoubleSide,
+      side: THREE.DoubleSide, // Essential for dynamic ribbon quads across winding turns
       blending: THREE.NormalBlending,
       polygonOffset: true,
       polygonOffsetFactor: -4.0,
@@ -5296,18 +6112,18 @@ export class Renderer3D {
       const curFr0x = frx - nx, curFr0y = fry - ny;
       const curFr1x = frx + nx, curFr1y = fry + ny;
 
-      // Translucent, subtle rubber alpha
+      // Subtle, translucent rubber alpha (gentle deposit that naturally accumulates without turning harsh or opaque)
       const isRearMarking = curRearInt > SKID_THRESH;
-      const curRearAlpha = isRearMarking ? (0.05 + curRearInt * 0.20) : 0.0;
+      const curRearAlpha = isRearMarking ? (0.08 + curRearInt * 0.22) : 0.0;
 
       const isFrontMarking = curFrontInt > SKID_THRESH;
-      const curFrontAlpha = isFrontMarking ? (0.05 + curFrontInt * 0.20) : 0.0;
+      const curFrontAlpha = isFrontMarking ? (0.06 + curFrontInt * 0.18) : 0.0;
 
       if (track.initialized) {
         // --- 1. REAR TIRES (Oversteer, Wheelspin, Brake Locks, Crash) ---
         if (isRearMarking || track.rearActive) {
           const dLR = Math.hypot(rlx - track.rlx, rly - track.rly);
-          if (dLR > 0.25 && dLR < 35) {
+          if (dLR > 1.25 && dLR < 35) {
             const pRl0x = track.rearActive ? track.rl0x : (track.rlx - nx);
             const pRl0y = track.rearActive ? track.rl0y : (track.rly - ny);
             const pRl1x = track.rearActive ? track.rl1x : (track.rlx + nx);
@@ -5367,7 +6183,7 @@ export class Renderer3D {
         // --- 2. FRONT TIRES (Understeer, Brake Locks, Crash) ---
         if (isFrontMarking || track.frontActive) {
           const dLF = Math.hypot(flx - track.flx, fly - track.fly);
-          if (dLF > 0.25 && dLF < 35) {
+          if (dLF > 1.25 && dLF < 35) {
             const pFl0x = track.frontActive ? track.fl0x : (track.flx - nx);
             const pFl0y = track.frontActive ? track.fl0y : (track.fly - ny);
             const pFl1x = track.frontActive ? track.fl1x : (track.flx + nx);
@@ -5483,6 +6299,8 @@ export class Renderer3D {
     this._lastActivePreset = 'follow';
     this._camTransition = null;
     this._currentActionPair = null;
+    this._dynamicZoomOutFov = 0;
+    this._dynamicZoomOutDist = 0;
     const t = this.track;
     const startX = t.cx ? t.cx[0] : 0;
     const startY = t.cy ? -t.cy[0] : 0;
@@ -5536,6 +6354,14 @@ export class Renderer3D {
     this.renderer.setSize(this.w, this.h, false);
   }
 
+  setAdaptivePixelRatio(dpr) {
+    if (!this.renderer) return;
+    const target = Math.max(0.80, Math.min(dpr, 1.0));
+    if (Math.abs(this.renderer.getPixelRatio() - target) > 0.01) {
+      this.renderer.setPixelRatio(target);
+    }
+  }
+
   findActionFocusPair(sim, rankedCars, focusCar, opts) {
     const isManual = Boolean(opts && opts.manual && sim && sim.player && (sim.player.alive || sim.player.finished));
     const player = isManual ? sim.player : null;
@@ -5571,13 +6397,10 @@ export class Renderer3D {
       return pair;
     }
     if (pool.length === 1) {
-      return { carA: pool[0], carB: null };
+      const pair = { carA: pool[0], carB: null };
+      this._currentActionPair = pair;
+      return pair;
     }
-
-    const now = performance.now();
-    const prevPair = this._currentActionPair;
-    const prevA = prevPair?.carA;
-    const prevAValid = prevA && (prevA.alive || prevA.finished) && !prevA.crashed;
 
     // 1. Explicit user-selected car (Arrow keys or Leaderboard click)
     const userCar = opts && opts.manualFocusCar;
@@ -5595,209 +6418,57 @@ export class Renderer3D {
         }
       }
       const pair = { carA: userCar, carB: closestOpponent };
-      if (prevA !== userCar) {
-        this._lastActionPairTime = now;
-      }
       this._currentActionPair = pair;
       return pair;
     }
 
-    // 2. Start of Game / Race Launch Phase: Focus on the car with the best qualification lap time, or fallback to first car
-    const isStartPhase = !sim || (sim.time !== undefined && sim.time < 8.5) || (this.lastSimTime || 0) < 0.20;
-    if (isStartPhase && !isManual) {
-      const bestCar = (sim && sim.bestLapCar) || (sim?.cars && sim.cars[0]) || pool[0];
-      if (bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed) {
-        let nearestOpponent = null;
-        let minD = Infinity;
-        for (let i = 0; i < pool.length; i++) {
-          const c = pool[i];
-          if (c !== bestCar && (c.alive || c.finished) && !c.crashed) {
-            const d = Math.hypot(bestCar.x - c.x, -bestCar.y - (-c.y));
-            if (d < minD) {
-              minD = d;
-              nearestOpponent = c;
-            }
-          }
-        }
-        const startPair = { carA: bestCar, carB: nearestOpponent };
-        this._currentActionPair = startPair;
-        this._lastActionPairTime = now;
-        return startPair;
-      }
+    // 2. CORE REQUIREMENT: Camera ALWAYS focuses on P1 (Race Leader), keeping P2 in the viewport!
+    // P1 is the race leader from sim.leader or rankedCars[0]
+    let p1 = null;
+    if (sim && sim.leader && (sim.leader.alive || sim.leader.finished) && !sim.leader.crashed) {
+      p1 = sim.leader;
     }
-
-    // Lock strictly onto current car during TV Gantry shot until finish line is crossed
-    const isBroadcastActive = (this.activeCameraPreset === 'broadcast' || this._autoPreset === 'broadcast');
-    if (isBroadcastActive && prevAValid) {
-      let partnerB = prevPair.carB;
-      if (!partnerB || (!partnerB.alive && !partnerB.finished) || partnerB.crashed) {
-        let closestD = Infinity;
-        for (let i = 0; i < pool.length; i++) {
-          const c = pool[i];
-          if (c !== prevA && (c.alive || c.finished) && !c.crashed) {
-            const d = Math.hypot(prevA.x - c.x, -prevA.y - (-c.y));
-            if (d < closestD) {
-              closestD = d;
-              partnerB = c;
-            }
-          }
-        }
-      }
-      return { carA: prevA, carB: partnerB || null };
-    }
-
-    // 3. ROCK-SOLID CAR FOCUS LOCK: Stay calmly locked onto the active car/battle for 45-60 seconds without hopping
-    const rankPrevA = (prevA && this._carRankMap) ? (this._carRankMap.get(prevA) || 99) : 99;
-    const holdDuration = rankPrevA <= 3 ? 60000 : 45000;
-
-    if (prevAValid && this._lastActionPairTime && (now - this._lastActionPairTime < holdDuration)) {
-      // Keep tracking the same carA; if partner carB is dead/crashed/gone, find closest active opponent
-      let partnerB = prevPair.carB;
-      if (!partnerB || (!partnerB.alive && !partnerB.finished) || partnerB.crashed) {
-        let closestD = Infinity;
-        for (let i = 0; i < pool.length; i++) {
-          const c = pool[i];
-          if (c !== prevA && (c.alive || c.finished) && !c.crashed) {
-            const d = Math.hypot(prevA.x - c.x, -prevA.y - (-c.y));
-            if (d < closestD) {
-              closestD = d;
-              partnerB = c;
-            }
-          }
-        }
-      }
-      return { carA: prevA, carB: partnerB || null };
-    }
-
-    // Reference position of current camera view / previous focus car
-    const curRefX = prevA ? prevA.x : (this.controls?.target ? this.controls.target.x : 0);
-    const curRefY = prevA ? -prevA.y : (this.controls?.target ? this.controls.target.y : 0);
-
-    let bestScore = -Infinity;
-    let bestPair = null;
-
-    for (let i = 0; i < pool.length; i++) {
-      const c1 = pool[i];
-      for (let j = i + 1; j < pool.length; j++) {
-        const c2 = pool[j];
-
-        const dist = Math.hypot(c1.x - c2.x, -c1.y - (-c2.y));
-        if (dist > 85) continue;
-
-        let score = 0;
-
-        // 1. Proximity score: closer cars = intense racing battle
-        if (dist < 28) {
-          const closeness = (28 - dist) / 28;
-          score += Math.pow(closeness, 1.3) * 80;
-        } else {
-          score += ((85 - dist) / 57) * 20;
-        }
-
-        // 2. Dynamic slip / sliding action
-        const slip1 = Math.abs(c1.slipAngle || 0);
-        const slip2 = Math.abs(c2.slipAngle || 0);
-        if (slip1 > 0.05 || slip2 > 0.05) {
-          score += Math.max(slip1, slip2) * 45;
-        }
-
-        // 3. Pack bonus: multiple cars in close proximity
-        let packNeighbors = 0;
-        for (let k = 0; k < pool.length; k++) {
-          if (k !== i && k !== j) {
-            const c3 = pool[k];
-            if (Math.hypot(c1.x - c3.x, -c1.y - (-c3.y)) < 28) packNeighbors++;
-          }
-        }
-        score += Math.min(3, packNeighbors) * 20;
-
-        // 4. Strong rank bias towards leader / podium battle
-        const rank1 = this._carRankMap ? (this._carRankMap.get(c1) || 99) : 99;
-        const rank2 = this._carRankMap ? (this._carRankMap.get(c2) || 99) : 99;
-        const avgRank = (rank1 + rank2) * 0.5;
-        score += Math.max(0, 45 - avgRank * 4.0);
-
-        // 5. Spatial Transition Distance: heavily prioritize nearby action to prevent jarring cross-track camera jumps
-        const pairMidX = (c1.x + c2.x) * 0.5;
-        const pairMidY = (-c1.y + -c2.y) * 0.5;
-        const travelDist = Math.hypot(pairMidX - curRefX, pairMidY - curRefY);
-
-        if (travelDist < 60) {
-          score += 85; // In immediate visual sector
-        } else if (travelDist < 120) {
-          score += (120 - travelDist) * 0.50;
-        } else {
-          score -= Math.min(300, (travelDist - 120) * 1.8); // Severe discount on distant cars
-        }
-
-        // 6. Manual driving player focus
-        if (isManual && (c1 === player || c2 === player)) {
-          score += 60;
-        }
-
-        // 7. Hysteresis / Stability bonus: keeps camera focused on active battle without flip-flopping
-        if (this._currentActionPair &&
-            ((this._currentActionPair.carA === c1 && this._currentActionPair.carB === c2) ||
-             (this._currentActionPair.carA === c2 && this._currentActionPair.carB === c1))) {
-          score += 80;
-        }
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestPair = { carA: c1, carB: c2 };
+    if (!p1 && rankedCars && rankedCars.length > 0) {
+      for (let i = 0; i < rankedCars.length; i++) {
+        const c = rankedCars[i];
+        if (c && (c.alive || c.finished) && !c.crashed) {
+          p1 = c;
+          break;
         }
       }
     }
+    if (!p1) {
+      p1 = focusCar || (sim?.cars && sim.cars[0]) || pool[0] || null;
+    }
 
-    if (!bestPair) {
-      // Smart Fallback: Pick active car closest to current view for seamless transition (with rank preference)
-      let bestFallbackCar = null;
-      let bestFallbackScore = -Infinity;
-
+    // P2 is the 2nd place car / closest active competitor behind P1
+    let p2 = null;
+    if (rankedCars && rankedCars.length > 1) {
+      for (let i = 0; i < rankedCars.length; i++) {
+        const c = rankedCars[i];
+        if (c && c !== p1 && (c.alive || c.finished) && !c.crashed) {
+          p2 = c;
+          break;
+        }
+      }
+    }
+    if (!p2 && p1) {
+      let closestDist = Infinity;
       for (let i = 0; i < pool.length; i++) {
         const c = pool[i];
-        const distToRef = Math.hypot(c.x - curRefX, -c.y - curRefY);
-        const rank = this._carRankMap ? (this._carRankMap.get(c) || 99) : (i + 1);
-        const proxScore = Math.max(0, 200 - distToRef * 1.2);
-        const rankBonus = Math.max(0, 50 - rank * 3.5);
-        const fbScore = proxScore + rankBonus;
-        if (fbScore > bestFallbackScore) {
-          bestFallbackScore = fbScore;
-          bestFallbackCar = c;
-        }
-      }
-
-      const primary = bestFallbackCar || rankedCars[0] || pool[0];
-      let partner = null;
-      let minNeighborD = Infinity;
-      for (let i = 0; i < pool.length; i++) {
-        const c = pool[i];
-        if (c !== primary) {
-          const d = Math.hypot(primary.x - c.x, -primary.y - (-c.y));
-          if (d < minNeighborD) {
-            minNeighborD = d;
-            partner = c;
+        if (c !== p1 && (c.alive || c.finished) && !c.crashed) {
+          const d = Math.hypot(p1.x - c.x, -p1.y - (-c.y));
+          if (d < closestDist) {
+            closestDist = d;
+            p2 = c;
           }
         }
       }
-      bestPair = { carA: primary, carB: partner };
     }
 
-    if (bestPair.carB && this._carRankMap) {
-      const rA = this._carRankMap.get(bestPair.carA) || 99;
-      const rB = this._carRankMap.get(bestPair.carB) || 99;
-      if (rB < rA) {
-        const temp = bestPair.carA;
-        bestPair.carA = bestPair.carB;
-        bestPair.carB = temp;
-      }
-    }
-
-    if (!this._lastActionPairTime || !this._currentActionPair || this._currentActionPair.carA !== bestPair.carA) {
-      this._lastActionPairTime = now;
-    }
-    this._currentActionPair = bestPair;
-    return bestPair;
+    const pair = { carA: p1, carB: p2 };
+    this._currentActionPair = pair;
+    return pair;
   }
 
   render(sim, opts, leader) {
@@ -5814,9 +6485,9 @@ export class Renderer3D {
       this._gantryCrossedLineTime = null;
       this._autoNextSwitch = performance.now() + 24000;
       this._lastActionPairTime = performance.now();
-      const bestCar = (sim && sim.bestLapCar) || (sim?.cars && sim.cars[0]) || null;
-      this._currentActionPair = bestCar ? { carA: bestCar, carB: null } : null;
-      this.focusedCar = bestCar;
+      const p1Start = (sim && sim.leader) || (sim?.cars && sim.cars[0]) || null;
+      this._currentActionPair = p1Start ? { carA: p1Start, carB: null } : null;
+      this.focusedCar = p1Start;
     }
     if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
@@ -5905,17 +6576,20 @@ export class Renderer3D {
       const p1Lap = p1 ? (p1.laps || 0) : 0;
       const isNewLapToGantry = this._lastGantryCutLap !== p1Lap;
 
-      // STRICT PRIORITY: Cut to TV Gantry whenever cars are finishing a lap
-      if (!isStartLaunchPhase && p1ApproachingGantry && isNewLapToGantry && this._autoPreset !== 'broadcast') {
-        this._autoPreset = 'broadcast';
-        this._lastPresetSwitchTime = now;
-        this._lastGantryCutTime = now;
-        this._lastGantryCutLap = p1Lap;
-        this._gantryEntryLap = p1Lap;
-        this._gantryEntryIdx = (p1 && t && t.N) ? (((p1.idx % t.N) + t.N) % t.N) : 0;
-        this._gantryTargetCar = p1;
-        this._gantryCrossedLineTime = null;
-        this._autoNextSwitch = now + 45000; // Generous guard timeout
+      // 40-50% probability to cut to TV Gantry when completing a lap (instead of every single lap)
+      if (!isStartLaunchPhase && p1ApproachingGantry && isNewLapToGantry) {
+        this._lastGantryCutLap = p1Lap; // Ensure this lap end is evaluated once
+        const shouldSelectGantry = Math.random() < 0.45; // 45% chance
+        if (shouldSelectGantry && this._autoPreset !== 'broadcast') {
+          this._autoPreset = 'broadcast';
+          this._lastPresetSwitchTime = now;
+          this._lastGantryCutTime = now;
+          this._gantryEntryLap = p1Lap;
+          this._gantryEntryIdx = (p1 && t && t.N) ? (((p1.idx % t.N) + t.N) % t.N) : 0;
+          this._gantryTargetCar = p1;
+          this._gantryCrossedLineTime = null;
+          this._autoNextSwitch = now + 45000; // Generous guard timeout
+        }
       }
 
       // When TV Gantry camera is active: WAIT until the target car passes the finish line before switching to another cam!
@@ -6052,21 +6726,18 @@ export class Renderer3D {
 
     const p1X = p1 ? p1.x : 0;
     const p1Y = p1 ? -p1.y : 0;
-    const p1Angle = p1 ? p1.angle : 0;
+    const p1Angle = p1 ? -p1.angle : 0;
 
-    const p2Alive = p2 && (p2.alive || p2.finished);
+    const p2Alive = p2 && (p2.alive || p2.finished) && !p2.crashed;
     const p2X = p2Alive ? p2.x : (p1X - Math.cos(p1Angle) * 22.0);
-    const p2Y = p2Alive ? -p2.y : (p1Y + Math.sin(p1Angle) * 22.0);
+    const p2Y = p2Alive ? -p2.y : (p1Y - Math.sin(p1Angle) * 22.0);
 
-    const p1p2Dist = Math.hypot(p1X - p2X, p1Y - p2Y);
-    // Effective span capped so huge gaps don't zoom out infinitely while maintaining comfortable framing
-    const effectiveSpan = Math.min(105.0, Math.max(16.0, p1p2Dist));
+    const p1p2Dist = p2Alive ? Math.hypot(p1X - p2X, p1Y - p2Y) : 22.0;
 
-    // Midpoint: heavily anchored on P1 (88%) for rock-solid stability with subtle contextual partner framing
-    const p1Bias = 0.88;
-    const midX = p1X * p1Bias + p2X * (1 - p1Bias);
-    const midY = p1Y * p1Bias + p2Y * (1 - p1Bias);
-    const battleElev = this.getTerrainHeight(midX, midY);
+    // Terrain elevation at P1 and battle midpoint (active on-track cars are flat at Z=0)
+    const p1Elev = (p1 && !p1.crashed && p1.alive) ? 0 : this.getTerrainHeight(p1X, p1Y);
+    const p2Elev = (p2Alive && !p2.crashed) ? 0 : (p2Alive ? this.getTerrainHeight(p2X, p2Y) : p1Elev);
+    const battleElev = p2Alive ? (p1Elev + p2Elev) * 0.5 : p1Elev;
 
     // Smooth track corridor reference angle (never twitches on car steering or drifts)
     let refAngle = p1Angle;
@@ -6076,6 +6747,17 @@ export class Renderer3D {
       if (typeof t.tx[p1Idx] === 'number' && typeof t.ty[p1Idx] === 'number') {
         refAngle = Math.atan2(-t.ty[p1Idx], t.tx[p1Idx]);
       }
+    }
+
+    // Blend tracking angle with vector from P2 to P1 to keep P2 framed within the viewport
+    let battleAngle = refAngle;
+    if (p2Alive && p1p2Dist > 8.0) {
+      const directAngle = Math.atan2(p1Y - p2Y, p1X - p2X);
+      let diffDirect = directAngle - refAngle;
+      while (diffDirect > Math.PI) diffDirect -= Math.PI * 2;
+      while (diffDirect < -Math.PI) diffDirect += Math.PI * 2;
+      const angleWeight = Math.max(0, 1.0 - Math.abs(diffDirect) / (Math.PI * 0.5));
+      battleAngle = refAngle + diffDirect * (0.30 * angleWeight);
     }
 
     // Destination camera pose & glide defaults computed by active preset
@@ -6091,30 +6773,27 @@ export class Renderer3D {
 
     // 2. Camera View & Preset Positioning
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {
-      destTargetX = midX;
-      destTargetY = midY;
-      destTargetZ = 3.0 + battleElev;
-      // High cinematic orbit perspective
-      destCamX = midX + 115.0;
-      destCamY = midY - 85.0;
-      destCamZ = 48.0 + battleElev;
-      targetFov = 42;
-      camGlide = 0.030;
-      targetGlide = 0.035;
+      destTargetX = p1X;
+      destTargetY = p1Y;
+      destTargetZ = 2.5 + p1Elev;
+      // High cinematic orbit perspective framing both cars
+      const orbitDist = Math.max(110.0, Math.min(230.0, 110.0 + p1p2Dist * 0.45));
+      const altitude = Math.max(48.0, Math.min(140.0, 48.0 + p1p2Dist * 0.35)) + battleElev;
+      destCamX = p1X + orbitDist * 0.8;
+      destCamY = p1Y - orbitDist * 0.6;
+      destCamZ = altitude;
+      targetFov = Math.max(42, Math.min(66, 42 + (p1p2Dist / 100.0) * 16));
+      camGlide = 0.035;
+      targetGlide = 0.040;
     } else if (cameraPreset === 'action' && focusCar) {
-      // ACTION FRONT CAM: Smooth reverse camera floating AHEAD of the car, looking back at P1 & P2
-      if (typeof this._actionAngle !== 'number' || typeof this._actionTargetX !== 'number') {
+      // ACTION FRONT CAM: Reverse camera floating AHEAD of P1, looking back at P1's nose & P2 behind
+      if (typeof this._actionAngle !== 'number' || this._lastActionFocus !== p1 || this._lastActivePreset !== 'action') {
         this._actionAngle = refAngle;
-        this._actionTargetX = midX;
-        this._actionTargetY = midY;
       } else {
         let diffAngle = refAngle - this._actionAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionAngle += diffAngle * 0.018;
-
-        this._actionTargetX += (midX - this._actionTargetX) * 0.040;
-        this._actionTargetY += (midY - this._actionTargetY) * 0.040;
+        this._actionAngle += diffAngle * 0.032;
       }
       this._lastActionFocus = p1;
 
@@ -6123,34 +6802,36 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = cosA;
 
-      // Position camera AHEAD of the cars (+cosA, +sinA) looking back at the cars
-      const leadDist = 36.0 + Math.min(30.0, effectiveSpan * 0.30);
-      destCamX = this._actionTargetX + cosA * leadDist + nx * 2.5;
-      destCamY = this._actionTargetY + sinA * leadDist + ny * 2.5;
-      destCamZ = 5.2 + Math.min(14.0, effectiveSpan * 0.16) + battleElev;
+      // Position camera decisively AHEAD of P1 looking back at P1's nose and front wing
+      // Generous distance and height for authentic F1 broadcast framing
+      const speedLead = Math.max(0, (p1.speed || 0) * 0.16);
+      const leadDist = Math.max(56.0, Math.min(135.0, 56.0 + speedLead + p1p2Dist * 0.22));
 
-      // Look target is anchored on the battle midpoint: cars charge toward camera
-      destTargetX = midX;
-      destTargetY = midY;
-      destTargetZ = 1.8 + battleElev;
+      // Gentle lateral offset framing P2 over P1's shoulder
+      const lateralSign = (p2Alive && ((p2X - p1X) * nx + (p2Y - p1Y) * ny < 0)) ? 1 : -1;
+      const lateralOff = lateralSign * Math.min(7.0, 3.0 + p1p2Dist * 0.04);
 
-      targetFov = Math.max(44, Math.min(62, 44 + (effectiveSpan / 75) * 14));
-      camGlide = 0.035;
-      targetGlide = 0.045;
+      destCamX = p1X + cosA * leadDist + nx * lateralOff;
+      destCamY = p1Y + sinA * leadDist + ny * lateralOff;
+      destCamZ = Math.max(10.5, Math.min(26.0, 10.5 + p1p2Dist * 0.12)) + battleElev;
+
+      // Look target centered smoothly on P1
+      destTargetX = p1X;
+      destTargetY = p1Y;
+      destTargetZ = 1.8 + p1Elev;
+
+      targetFov = Math.max(38, Math.min(54, 38 + (p1p2Dist / 100.0) * 14));
+      camGlide = 0.045;
+      targetGlide = 0.055;
     } else if (cameraPreset === 'action_rear' && focusCar) {
-      // ACTION REAR CAM: Low-angle battle pursuit behind the pack (-cosA, -sinA), framing P2 & P1
-      if (typeof this._actionRearAngle !== 'number' || typeof this._actionRearTargetX !== 'number') {
-        this._actionRearAngle = refAngle;
-        this._actionRearTargetX = midX;
-        this._actionRearTargetY = midY;
+      // ACTION REAR CAM: Low-angle battle pursuit behind the pack, framing P2 & P1
+      if (typeof this._actionRearAngle !== 'number' || this._lastActionRearFocus !== p1 || this._lastActivePreset !== 'action_rear') {
+        this._actionRearAngle = battleAngle;
       } else {
-        let diffAngle = refAngle - this._actionRearAngle;
+        let diffAngle = battleAngle - this._actionRearAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionRearAngle += diffAngle * 0.016;
-
-        this._actionRearTargetX += (midX - this._actionRearTargetX) * 0.038;
-        this._actionRearTargetY += (midY - this._actionRearTargetY) * 0.038;
+        this._actionRearAngle += diffAngle * 0.032;
       }
       this._lastActionRearFocus = p1;
 
@@ -6159,64 +6840,68 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = cosA;
 
-      // Position camera BEHIND the battle looking forward along the battle line
-      const trailDist = 32.0 + Math.min(32.0, effectiveSpan * 0.30);
-      destCamX = this._actionRearTargetX - cosA * trailDist + nx * 3.0;
-      destCamY = this._actionRearTargetY - sinA * trailDist + ny * 3.0;
-      destCamZ = 5.4 + Math.min(16.0, effectiveSpan * 0.18) + battleElev;
+      // Position camera BEHIND P2 looking forward at P1
+      const trailDist = Math.max(30.0, Math.min(180.0, p1p2Dist + 26.0));
+      const heightAbove = Math.max(5.8, Math.min(32.0, 5.8 + p1p2Dist * 0.14));
+      const rearOriginX = p2Alive ? p2X : p1X;
+      const rearOriginY = p2Alive ? p2Y : p1Y;
+      destCamX = rearOriginX - cosA * trailDist + nx * 2.0;
+      destCamY = rearOriginY - sinA * trailDist + ny * 2.0;
+      destCamZ = heightAbove + battleElev;
 
-      destTargetX = midX + cosA * 14.0;
-      destTargetY = midY + sinA * 14.0;
-      destTargetZ = 2.0 + battleElev;
+      destTargetX = p1X + cosA * 5.0;
+      destTargetY = p1Y + sinA * 5.0;
+      destTargetZ = 1.8 + p1Elev;
 
-      targetFov = Math.max(42, Math.min(62, 42 + (effectiveSpan / 75) * 14));
-      camGlide = 0.035;
-      targetGlide = 0.045;
+      targetFov = Math.max(42, Math.min(66, 42 + (p1p2Dist / 100.0) * 18));
+      camGlide = 0.042;
+      targetGlide = 0.050;
     } else if (cameraPreset === 'follow' && focusCar) {
-      // CLASSIC BROADCAST FOLLOW CAM: Smooth high-altitude TV tracking centered on P1 and P2
-      destTargetX = midX;
-      destTargetY = midY;
-      destTargetZ = 3.5 + battleElev;
+      // CLASSIC BROADCAST FOLLOW CAM: Smooth high-altitude TV tracking focused on P1 with P2 in view
+      destTargetX = p1X;
+      destTargetY = p1Y;
+      destTargetZ = 3.0 + p1Elev;
 
-      const canonicalCamZ = 95.0 + Math.min(50.0, effectiveSpan * 0.35) + battleElev;
-      destCamX = midX - 120.0;
-      destCamY = midY + 65.0;
-      destCamZ = canonicalCamZ;
+      const altitude = Math.max(90.0, Math.min(220.0, 90.0 + p1p2Dist * 0.50)) + battleElev;
+      destCamX = p1X - 110.0 - Math.min(60.0, p1p2Dist * 0.25);
+      destCamY = p1Y + 60.0 + Math.min(40.0, p1p2Dist * 0.20);
+      destCamZ = altitude;
 
-      targetFov = Math.max(44, Math.min(58, 44 + (effectiveSpan / 80) * 12));
-      camGlide = 0.035;
-      targetGlide = 0.040;
-    } else if (cameraPreset === 'onboard' && focusCar) {
-      // ONBOARD T-CAM (Roll-hoop periscope camera elevated above cockpit & halo)
-      const cosA = Math.cos(focusCar.angle);
-      const sinA = Math.sin(focusCar.angle);
-      const focusElev = this.getTerrainHeight(focusCar.x, -focusCar.y);
+      targetFov = Math.max(44, Math.min(68, 44 + (p1p2Dist / 90.0) * 16));
+      camGlide = 0.038;
+      targetGlide = 0.045;
+    } else if (cameraPreset === 'onboard' && p1) {
+      // ONBOARD T-CAM on P1 (Roll-hoop periscope camera elevated above cockpit & halo)
+      const targetCar = p1;
+      const cosA = Math.cos(targetCar.angle);
+      const sinA = Math.sin(targetCar.angle);
+      const targetElev = this.getTerrainHeight(targetCar.x, -targetCar.y);
 
-      destCamX = focusCar.x - cosA * 2.0;
-      destCamY = -focusCar.y + sinA * 2.0;
-      destCamZ = 5.8 + focusElev;
+      destCamX = targetCar.x - cosA * 2.0;
+      destCamY = -targetCar.y + sinA * 2.0;
+      destCamZ = 5.8 + targetElev;
 
-      destTargetX = focusCar.x + cosA * 52;
-      destTargetY = -focusCar.y - sinA * 52;
-      destTargetZ = 2.6 + focusElev;
+      destTargetX = targetCar.x + cosA * 52;
+      destTargetY = -targetCar.y - sinA * 52;
+      destTargetZ = 2.6 + targetElev;
 
       targetFov = 44;
-      camGlide = 0.18;
-      targetGlide = 0.18;
+      camGlide = 0.12;
+      targetGlide = 0.12;
     } else if (cameraPreset === 'heli' && focusCar) {
       // CINEMATIC AERIAL PURSUIT HELICOPTER: High aerial sky tracker framing P1 and P2
       if (typeof this._heliAngle !== 'number' || typeof this._heliTargetX !== 'number') {
-        this._heliAngle = refAngle;
-        this._heliTargetX = midX;
-        this._heliTargetY = midY;
+        this._heliAngle = battleAngle;
+        this._heliTargetX = p1X;
+        this._heliTargetY = p1Y;
       } else {
-        let diffAngle = refAngle - this._heliAngle;
+        let diffAngle = battleAngle - this._heliAngle;
         while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
         while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._heliAngle += diffAngle * 0.010;
+        this._heliAngle += diffAngle * 0.020;
 
-        this._heliTargetX += (midX - this._heliTargetX) * 0.030;
-        this._heliTargetY += (midY - this._heliTargetY) * 0.030;
+        this._heliTargetX += (p1X - this._heliTargetX) * 0.040;
+        this._heliTargetY += (p1Y - this._heliTargetY) * 0.040;
       }
       this._lastHeliFocus = p1;
 
@@ -6225,19 +6910,21 @@ export class Renderer3D {
       const nx = -sinA;
       const ny = cosA;
 
-      const trailDist = 65.0 + Math.min(50.0, effectiveSpan * 0.35);
-      const lateralDist = 35.0 + Math.min(20.0, effectiveSpan * 0.15);
+      const trailDist = Math.max(60.0, Math.min(220.0, p1p2Dist + 48.0));
+      const lateralDist = 32.0 + Math.min(36.0, p1p2Dist * 0.16);
+      const altitude = Math.max(65.0, Math.min(180.0, 65.0 + p1p2Dist * 0.45)) + battleElev;
+
       destCamX = this._heliTargetX - cosA * trailDist + nx * lateralDist;
       destCamY = this._heliTargetY - sinA * trailDist + ny * lateralDist;
-      destCamZ = 68.0 + Math.min(45.0, effectiveSpan * 0.35) + battleElev;
+      destCamZ = altitude;
 
-      destTargetX = this._heliTargetX;
-      destTargetY = this._heliTargetY;
-      destTargetZ = 2.0 + battleElev;
+      destTargetX = p1X;
+      destTargetY = p1Y;
+      destTargetZ = 2.0 + p1Elev;
 
-      targetFov = Math.max(40, Math.min(58, 40 + (effectiveSpan / 80) * 14));
-      camGlide = 0.030;
-      targetGlide = 0.040;
+      targetFov = Math.max(42, Math.min(68, 42 + (p1p2Dist / 100.0) * 16));
+      camGlide = 0.038;
+      targetGlide = 0.045;
     } else if (cameraPreset === 'broadcast') {
       // TV GANTRY CAMERA (Fixed Start / Finish Gantry view)
       const cx = t.cx[0];
@@ -6251,19 +6938,21 @@ export class Renderer3D {
       destCamY = cy + ty * 80 + ny * 28;
       destCamZ = 10.5;
 
-      const incoming = (this._gantryTargetCar && (this._gantryTargetCar.alive || this._gantryTargetCar.finished))
-        ? this._gantryTargetCar
-        : ((p1 && (p1.alive || p1.finished)) ? p1 : (focusCar && focusCar.alive ? focusCar : (leader && leader.alive ? leader : null)));
+      const incoming = (p1 && (p1.alive || p1.finished) && !p1.crashed)
+        ? p1
+        : ((this._gantryTargetCar && (this._gantryTargetCar.alive || this._gantryTargetCar.finished) && !this._gantryTargetCar.crashed)
+          ? this._gantryTargetCar
+          : (leader && leader.alive ? leader : null));
       destTargetX = incoming ? incoming.x : cx - tx * 35;
       destTargetY = incoming ? -incoming.y : cy - ty * 35;
       destTargetZ = 3.2;
 
-      targetFov = 42;
+      targetFov = Math.max(42, Math.min(62, 42 + (p1p2Dist / 80.0) * 14));
       camGlide = 0.040;
-      targetGlide = 0.060;
+      targetGlide = 0.050;
     } else {
-      // DEFAULT: 'chase' preset (Dynamic 3rd-person follow)
-      if (hasFinisher && !opts.manual) {
+      // DEFAULT: 'chase' preset (Dynamic 3rd-person follow tracking P1)
+      if (hasFinisher && !opts.manual && p1 && p1.finished) {
         const cx = t.cx[0];
         const cy = -t.cy[0];
         const tx = t.tx[0];
@@ -6275,49 +6964,120 @@ export class Renderer3D {
         destCamY = cy + ty * 80 + ny * 28;
         destCamZ = 10.5;
 
-        const incomingFinisher = leader && leader.alive ? leader : null;
-        destTargetX = incomingFinisher ? incomingFinisher.x : cx - tx * 35;
-        destTargetY = incomingFinisher ? -incomingFinisher.y : cy - ty * 35;
+        destTargetX = p1.x;
+        destTargetY = -p1.y;
         destTargetZ = 3.2;
 
         targetFov = 42;
-        camGlide = 0.035;
+        camGlide = 0.040;
         targetGlide = 0.050;
-      } else if (focusCar) {
+      } else if (p1) {
         if (typeof this._chaseAngle !== 'number' || typeof this._chaseTargetX !== 'number') {
-          this._chaseAngle = refAngle;
-          this._chaseTargetX = midX;
-          this._chaseTargetY = midY;
+          this._chaseAngle = battleAngle;
+          this._chaseTargetX = p1X;
+          this._chaseTargetY = p1Y;
         } else {
-          const posFollowK = 0.035;
-          this._chaseTargetX += (midX - this._chaseTargetX) * posFollowK;
-          this._chaseTargetY += (midY - this._chaseTargetY) * posFollowK;
+          const posFollowK = 0.042;
+          this._chaseTargetX += (p1X - this._chaseTargetX) * posFollowK;
+          this._chaseTargetY += (p1Y - this._chaseTargetY) * posFollowK;
 
-          let diffAngle = refAngle - this._chaseAngle;
+          let diffAngle = battleAngle - this._chaseAngle;
           while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
           while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
 
-          this._chaseAngle += diffAngle * 0.016;
+          this._chaseAngle += diffAngle * 0.028;
         }
         this._lastFocusCar = p1;
 
         const cosA = Math.cos(this._chaseAngle);
         const sinA = Math.sin(this._chaseAngle);
 
-        const distBehind = 38.0 + Math.min(35.0, effectiveSpan * 0.30);
-        const heightAbove = 14.0 + Math.min(16.0, effectiveSpan * 0.18);
+        const distBehind = Math.max(38.0, Math.min(190.0, p1p2Dist + 32.0));
+        const heightAbove = Math.max(13.0, Math.min(42.0, 13.0 + p1p2Dist * 0.16));
         destCamX = this._chaseTargetX - cosA * distBehind;
         destCamY = this._chaseTargetY - sinA * distBehind;
         destCamZ = heightAbove + battleElev;
 
-        const lookAhead = 12.0;
-        destTargetX = midX + cosA * lookAhead;
-        destTargetY = midY + sinA * lookAhead;
-        destTargetZ = 2.4 + battleElev;
+        const lookAhead = 4.0;
+        destTargetX = p1X + cosA * lookAhead;
+        destTargetY = p1Y + sinA * lookAhead;
+        destTargetZ = 1.8 + p1Elev;
 
-        targetFov = Math.max(42, Math.min(60, 42 + (effectiveSpan / 80) * 14));
-        camGlide = 0.035;
-        targetGlide = 0.045;
+        targetFov = Math.max(44, Math.min(68, 44 + (p1p2Dist / 100.0) * 18));
+        camGlide = 0.040;
+        targetGlide = 0.048;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // DYNAMIC VIEWPORT SAFETY GUARD & SMOOTH AUTO-ZOOM COMPENSATION
+    // If the tracked car (or P2 battle car) drifts toward or outside
+    // the screen boundaries, smoothly and temporarily zoom out (expanding
+    // FOV & easing camera distance pullback) while smoothly panning to
+    // re-center the car. When the car returns safely into the central
+    // viewing zone, zoom-out decays gracefully back to baseline.
+    // -------------------------------------------------------------
+    const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
+    if (focusCar && !isOrbitActive) {
+      if (!this._tempNdcVec) this._tempNdcVec = new THREE.Vector3();
+      const carZ = (focusCar.crashed && focusCar.alive) ? this.getTerrainHeight(p1X, p1Y) : (1.0 + p1Elev);
+      this._tempNdcVec.set(p1X, p1Y, carZ).project(this.camera);
+
+      // Safe viewport margin: central 65% of screen
+      let p1Exit = Math.max(Math.abs(this._tempNdcVec.x) / 0.65, Math.abs(this._tempNdcVec.y) / 0.65);
+      if (this._tempNdcVec.z > 1.0 || this._tempNdcVec.z < -1.0) {
+        // Behind camera or clipped
+        p1Exit = Math.max(p1Exit, 2.0);
+      }
+
+      let p2Exit = 0;
+      if (p2Alive) {
+        if (!this._tempNdcVecP2) this._tempNdcVecP2 = new THREE.Vector3();
+        this._tempNdcVecP2.set(p2X, p2Y, 1.0 + p2Elev).project(this.camera);
+        p2Exit = Math.max(Math.abs(this._tempNdcVecP2.x) / 0.72, Math.abs(this._tempNdcVecP2.y) / 0.72);
+        if (this._tempNdcVecP2.z > 1.0 || this._tempNdcVecP2.z < -1.0) {
+          p2Exit = Math.max(p2Exit, 1.6);
+        }
+      }
+
+      const maxExit = Math.max(p1Exit, p2Exit * 0.82);
+      const excess = Math.max(0, maxExit - 1.0);
+
+      // Desired temporary zoom-out compensation
+      const targetExtraFov = Math.min(26.0, excess * 20.0);
+      const targetExtraDist = Math.min(45.0, excess * 35.0);
+
+      if (typeof this._dynamicZoomOutFov !== 'number') {
+        this._dynamicZoomOutFov = 0;
+        this._dynamicZoomOutDist = 0;
+      }
+
+      // Responsive zoom-out expansion (k=0.075), ultra-smooth gentle recovery (k=0.020)
+      const kFov = (targetExtraFov > this._dynamicZoomOutFov) ? 0.075 : 0.020;
+      this._dynamicZoomOutFov += (targetExtraFov - this._dynamicZoomOutFov) * kFov;
+      this._dynamicZoomOutDist += (targetExtraDist - this._dynamicZoomOutDist) * kFov;
+
+      // Apply temporary smooth zoom-out to FOV
+      targetFov += this._dynamicZoomOutFov;
+
+      // Smooth pan assistance when car is drifting out: gently nudge look target toward car
+      if (excess > 0) {
+        const panAssist = Math.min(0.35, excess * 0.20);
+        destTargetX += (p1X - destTargetX) * panAssist;
+        destTargetY += (p1Y - destTargetY) * panAssist;
+      }
+
+      // Smooth camera distance pullback
+      if (this._dynamicZoomOutDist > 0.05) {
+        const pdx = destCamX - destTargetX;
+        const pdy = destCamY - destTargetY;
+        const pdz = destCamZ - destTargetZ;
+        const plen = Math.hypot(pdx, pdy, pdz);
+        if (plen > 0.1) {
+          destCamX += (pdx / plen) * this._dynamicZoomOutDist;
+          destCamY += (pdy / plen) * this._dynamicZoomOutDist;
+          destCamZ += (pdz / plen) * (this._dynamicZoomOutDist * 0.60);
+        }
       }
     }
 
@@ -6327,7 +7087,6 @@ export class Renderer3D {
     // with smooth quintic easing and a parabolic altitude arc.
     // -------------------------------------------------------------
     const now = performance.now();
-    const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
 
     if (this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
       // Capture departing target and camera position
@@ -6349,6 +7108,8 @@ export class Renderer3D {
       // use direct Cartesian linear glide to prevent the camera from flying far outside the track.
       const isDirectMode = cameraPreset === 'broadcast' || this._lastActivePreset === 'broadcast' ||
                            cameraPreset === 'orbit' || this._lastActivePreset === 'orbit' ||
+                           cameraPreset === 'action' || this._lastActivePreset === 'action' ||
+                           cameraPreset === 'action_rear' || this._lastActivePreset === 'action_rear' ||
                            r0 > 75 || r1 > 75;
 
       if (isDirectMode) {
@@ -6356,7 +7117,7 @@ export class Renderer3D {
           active: true,
           type: 'direct',
           startTime: now,
-          duration: (cameraPreset === 'broadcast') ? 700 : 1100,
+          duration: (cameraPreset === 'broadcast') ? 1400 : 1800,
           startCamPos,
           startTarget,
           startFov,
@@ -6372,7 +7133,7 @@ export class Renderer3D {
 
         const z0 = startOffset.z;
         const z1 = liveDestOffset.z;
-        const duration = 1600;
+        const duration = 2000;
         const peakArcHeight = Math.min(8.0, Math.max(2.5, Math.abs(diffPhi) * 2.0));
 
         this._camTransition = {
@@ -6452,12 +7213,12 @@ export class Renderer3D {
       // In steady-state orbit mode, OrbitControls auto-rotates around target
       this.controls.autoRotate = true;
       this.controls.autoRotateSpeed = 0.55;
-      this.controls.target.x += (destTargetX - this.controls.target.x) * 0.035;
-      this.controls.target.y += (destTargetY - this.controls.target.y) * 0.035;
-      this.controls.target.z += (destTargetZ - this.controls.target.z) * 0.035;
+      this.controls.target.x += (destTargetX - this.controls.target.x) * 0.050;
+      this.controls.target.y += (destTargetY - this.controls.target.y) * 0.050;
+      this.controls.target.z += (destTargetZ - this.controls.target.z) * 0.050;
 
-      if (Math.abs(this.camera.fov - targetFov) > 0.1) {
-        this.camera.fov += (targetFov - this.camera.fov) * 0.05;
+      if (Math.abs(this.camera.fov - targetFov) > 0.05) {
+        this.camera.fov += (targetFov - this.camera.fov) * 0.035;
         this.camera.updateProjectionMatrix();
       }
     } else {
@@ -6471,9 +7232,26 @@ export class Renderer3D {
       this.controls.target.y += (destTargetY - this.controls.target.y) * targetGlide;
       this.controls.target.z += (destTargetZ - this.controls.target.z) * targetGlide;
 
-      if (Math.abs(this.camera.fov - targetFov) > 0.05) {
-        this.camera.fov += (targetFov - this.camera.fov) * 0.04;
+      if (Math.abs(this.camera.fov - targetFov) > 0.02) {
+        const fovLerp = (targetFov > this.camera.fov) ? 0.065 : 0.035;
+        this.camera.fov += (targetFov - this.camera.fov) * fovLerp;
         this.camera.updateProjectionMatrix();
+      }
+
+      // Strict forward distance guard for Action Front camera: camera must maintain generous lead ahead of P1
+      if (cameraPreset === 'action' && p1) {
+        const pCos = Math.cos(this._actionAngle || refAngle);
+        const pSin = Math.sin(this._actionAngle || refAngle);
+        const forwardDist = (this.camera.position.x - p1X) * pCos + (this.camera.position.y - p1Y) * pSin;
+        if (forwardDist < 46.0) {
+          const push = 46.0 - forwardDist;
+          this.camera.position.x += pCos * push;
+          this.camera.position.y += pSin * push;
+        }
+        const minZ = 8.5 + p1Elev;
+        if (this.camera.position.z < minZ) {
+          this.camera.position.z = minZ;
+        }
       }
     }
 
@@ -6486,9 +7264,9 @@ export class Renderer3D {
     }
 
     // Smart Viewport Frustum Visibility & Auto-Recovery Guard
-    // When the tracked car leaves the screen viewport for >1400ms during dynamic pursuit,
+    // When the tracked car leaves the screen viewport for >3500ms during dynamic pursuit,
     // automatically recover camera angle / switch to Helicopter or Chase perspective.
-    // Ignored during start launch phase, fixed broadcast gantry views, or right after preset switch.
+    // Dynamic smooth zoom-out handles temporary drifts smoothly before any preset switch!
     const checkCar = (this.focusedCar && (this.focusedCar.alive || this.focusedCar.finished))
       ? this.focusedCar
       : (focusCar && (focusCar.alive || focusCar.finished) ? focusCar : (leader || (rankedCars && rankedCars[0])));
@@ -6510,7 +7288,7 @@ export class Renderer3D {
       if (isOutViewport) {
         if (!this._outOfViewportStart) {
           this._outOfViewportStart = now;
-        } else if (now - this._outOfViewportStart > 1400) {
+        } else if (now - this._outOfViewportStart > 3500) {
           const recoveryPreset = (this.activeCameraPreset === 'heli') ? 'chase' : 'heli';
           this._autoPreset = recoveryPreset;
           this.activeCameraPreset = recoveryPreset;
@@ -6536,11 +7314,11 @@ export class Renderer3D {
     if (sim && sim.player && sim.player.alive) visibleSet.add(sim.player);
     if (focusCar && focusCar.alive) visibleSet.add(focusCar);
 
-    // Update Simulation Fleet (All cars visible; P.x badges shown selectively for Top 10)
+    // Update Simulation Fleet (All active cars visible; P.x badges shown selectively for Top 10)
     for (let i = 0; i < this.carPool.length; i++) {
       const mesh = this.carPool[i];
       const car = sim.cars[i];
-      const shouldShow = this.f1Loaded && car && (car.alive || car.finished) && (opts.ghosts || car === leader || car.crashed || car.finished);
+      const shouldShow = this.f1Loaded && car && (car.alive || car.finished);
       if (shouldShow) {
         mesh.visible = true;
 
@@ -6740,6 +7518,42 @@ export class Renderer3D {
       }
     } else {
       this.playerCar.visible = false;
+    }
+
+    // Update Holographic Record Ghost Car
+    const showRecordGhost = (opts.recordGhost !== false) && (sim && sim.bestLapEver && sim.bestLapEver < 60);
+    if (this.recordGhostMesh) {
+      if (showRecordGhost && sim.getRecordGhostState) {
+        const leaderCar = leader || (sim.cars && sim.cars[0]);
+        const startDelay = CONFIG.generation?.startDelay || 2.0;
+        let lapElapsed = 0;
+        if (leaderCar) {
+          const raw = leaderCar.time - leaderCar.lapStart;
+          lapElapsed = leaderCar.time < startDelay ? 0 : raw;
+        } else {
+          lapElapsed = sim.time < startDelay ? 0 : sim.time;
+        }
+        const ghostState = sim.getRecordGhostState(lapElapsed);
+        if (ghostState) {
+          this.recordGhostMesh.visible = true;
+          this.recordGhostMesh.position.set(ghostState.x, -ghostState.y, 0.12);
+          this.recordGhostMesh.rotation.order = 'ZYX';
+          this.recordGhostMesh.rotation.set(0, 0, -ghostState.angle);
+
+          const dur = sim.bestLapEver;
+          const badgeText = (Number.isFinite(dur) && dur > 5 && dur < 60)
+            ? `⚡ P1 GHOST · ${dur.toFixed(2)}s`
+            : '⚡ P1 RECORD GHOST';
+          this.updateRecordGhostBadgeText(badgeText);
+          if (this.recordGhostMesh.userData.badgeSprite) {
+            this.recordGhostMesh.userData.badgeSprite.visible = true;
+          }
+        } else {
+          this.recordGhostMesh.visible = false;
+        }
+      } else {
+        this.recordGhostMesh.visible = false;
+      }
     }
 
     // Update Dynamic Tire Barrier Physics Transforms

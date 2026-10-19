@@ -315,6 +315,62 @@
                   <span class="settings-item-badge" id="settings-audio-badge" style="color: #22c55e;">ON</span>
                 </button>
 
+                <button class="settings-menu-item" id="btn-settings-ghost" type="button">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 10h.01"></path>
+                    <path d="M15 10h.01"></path>
+                    <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"></path>
+                  </svg>
+                  <span>Ghost Mode</span>
+                  <span class="settings-item-badge" id="settings-ghost-badge" style="color: #22c55e;">ON</span>
+                </button>
+
+                <button class="settings-menu-item" id="btn-settings-record-ghost" type="button">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                  </svg>
+                  <span>Record Ghost</span>
+                  <span class="settings-item-badge" id="settings-record-ghost-badge" style="color: #22c55e;">ON</span>
+                </button>
+
+                <button class="settings-menu-item" id="btn-settings-gridbox" type="button">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                    <path d="M3 9h18"></path>
+                    <path d="M9 21V9"></path>
+                  </svg>
+                  <span>Grid Box</span>
+                  <span class="settings-item-badge" id="settings-gridbox-badge" style="color: #22c55e;">ON</span>
+                </button>
+
+                <div class="settings-menu-item settings-select-item">
+                  <div class="settings-item-left">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                      <line x1="4" y1="22" x2="4" y2="15"></line>
+                    </svg>
+                    <span># Laps</span>
+                  </div>
+                  <select class="settings-select" id="settings-laps-select" aria-label="Select Race Laps">
+                    <option value="1">1 Lap</option>
+                    <option value="2">2 Laps</option>
+                    <option value="3">3 Laps</option>
+                    <option value="5" selected>5 Laps</option>
+                    <option value="10">10 Laps</option>
+                    <option value="15">15 Laps</option>
+                    <option value="20">20 Laps</option>
+                  </select>
+                </div>
+
+                <button class="settings-menu-item" id="btn-settings-reset-record" type="button" title="Recalibrate circuit lap record to current physics baseline">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <span>Reset Lap Record</span>
+                  <span class="settings-item-badge" style="color: #38bdf8;">Recalibrate</span>
+                </button>
+
                 <button class="settings-menu-item" id="btn-settings-panel" type="button">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" x2="18" y1="20" y2="10"></line>
@@ -846,6 +902,13 @@
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                 </svg>
                 <span id="hyper-burst-text">Exploration Burst</span>
+              </button>
+              <button class="btn-hub-secondary" id="btn-hyper-reset-record" type="button" title="Recalibrate circuit lap record to current physics baseline">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span>Reset Record</span>
               </button>
               <button class="btn-hub-danger-ghost" id="btn-hyper-reset-running" type="button" title="Reset all neural weights and start fresh from Gen 1">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -52,6 +52,7 @@ const renderer = new Renderer($('track-canvas'), currentTrack);
 let renderer3d = null;
 try {
   renderer3d = new Renderer3D($('track-canvas-3d'), currentTrack);
+  window.renderer3d = renderer3d;
 } catch (e) {
   console.warn('3D WebGL renderer init error:', e);
 }
@@ -131,6 +132,8 @@ const state = {
   follow: true,
   sensors: false,
   ghosts: true,
+  gridBox: true,
+  recordGhost: localStorage.getItem('ai-racer:recordGhost') !== 'false',
   manual: false,
   autosave: true,
   audio: true,
@@ -144,6 +147,7 @@ const pillArch = $('pill-arch');
 if (pillArch) pillArch.textContent = LAYERS.join('·');
 
 // ---------- Helpers ----------
+export const SPEED_TO_KMH = (5.63 / 26) * 3.6; // ~0.7795 (aligns 26-unit car model with 5.63m real F1 chassis)
 const fmtTime = (s) => (Number.isFinite(s) ? s.toFixed(2) + 's' : '–');
 
 function pulse(id) {
@@ -295,9 +299,12 @@ sim.onNewBest = (best) => {
   persistState();
 };
 
-sim.onNewBestLap = () => {
+sim.onNewBestLap = (lapDuration, car) => {
   if (hyperRunning) return;
   pulse('stat-best-lap-box');
+  const carName = car ? (car.manual ? 'Player' : `Car #${car.idx + 1}`) : 'New Record';
+  const timeTxt = Number.isFinite(lapDuration) ? `${lapDuration.toFixed(2)}s` : '';
+  toast(`⚡ Ghost Refreshed: ${carName} (${timeTxt})`, 'success');
   persistState();
 };
 
@@ -344,9 +351,143 @@ function setTurbo(on) {
   updateStatus();
 }
 
+function setGhostMode(on, showToast = true) {
+  state.ghosts = on;
+  CONFIG.collision = CONFIG.collision || {};
+  if (on) {
+    CONFIG.collision.enabled = false;
+    CONFIG.collision.warmupTime = Infinity;
+  } else {
+    CONFIG.collision.enabled = true;
+    CONFIG.collision.warmupTime = 0;
+  }
+  localStorage.setItem('ai-racer:ghosts', String(on));
+
+  const toggle = $('toggle-ghosts');
+  if (toggle) toggle.checked = on;
+
+  const badge = $('settings-ghost-badge');
+  if (badge) {
+    badge.textContent = on ? 'ON' : 'OFF';
+    badge.style.color = on ? '#22c55e' : '#94a3b8';
+  }
+
+  const ghostPill = $('ghost-timer-pill');
+  const ghostTitle = $('ghost-timer-title');
+  const ghostVal = $('ghost-timer-value');
+  if (ghostPill) {
+    if (on) {
+      ghostPill.classList.remove('hidden', 'urgent', 'active-contact');
+      if (ghostTitle) ghostTitle.textContent = 'GHOST MODE';
+      if (ghostVal) ghostVal.textContent = 'ON';
+    } else {
+      ghostPill.classList.remove('hidden', 'urgent');
+      ghostPill.classList.add('active-contact');
+      if (ghostTitle) ghostTitle.textContent = 'CONTACTS';
+      if (ghostVal) ghostVal.textContent = 'ACTIVE';
+    }
+  }
+
+  if (showToast) {
+    toast(on ? '👻 Ghost Mode ON (no collisions)' : '💥 Ghost Mode OFF (collisions active)');
+  }
+}
+
+function setGridBox(on, showToast = true) {
+  state.gridBox = on;
+  CONFIG.gridBox = on;
+  localStorage.setItem('ai-racer:gridBox', String(on));
+
+  const badge = $('settings-gridbox-badge');
+  if (badge) {
+    badge.textContent = on ? 'ON' : 'OFF';
+    badge.style.color = on ? '#22c55e' : '#94a3b8';
+  }
+
+  if (renderer3d) {
+    renderer3d.setGridBoxVisible(on);
+  }
+
+  // If cars are waiting at the start line, immediately align them to the new formation
+  if (sim && sim.cars && (sim.time === undefined || sim.time < (CONFIG.generation?.startDelay || 2.0))) {
+    for (let i = 0; i < sim.cars.length; i++) {
+      const c = sim.cars[i];
+      if (c && c.alive && !c.crashed) {
+        c.reset(i);
+      }
+    }
+    if (sim.player && sim.player.alive && !sim.player.crashed) {
+      sim.player.reset(0);
+    }
+  }
+
+  if (showToast) {
+    toast(on ? '🏁 Starting Grid Boxes ON' : '🏁 Starting Grid Boxes OFF');
+  }
+}
+
+function setRecordGhost(on, showToast = true) {
+  state.recordGhost = on;
+  localStorage.setItem('ai-racer:recordGhost', String(on));
+
+  const badge = $('settings-record-ghost-badge');
+  if (badge) {
+    badge.textContent = on ? 'ON' : 'OFF';
+    badge.style.color = on ? '#22c55e' : '#94a3b8';
+  }
+
+  if (showToast) {
+    toast(on ? '⚡ Record Ghost ON (Benchmark lap car visible)' : '⚡ Record Ghost OFF');
+  }
+}
+
+function handleResetLapRecord() {
+  if (!sim) return;
+  const newRec = sim.resetLapRecord();
+
+  persistState();
+  chart.draw(sim.history, sim.bestLapEver);
+  hubChart?.draw(sim.history, sim.bestLapEver);
+  hyperChart?.draw(sim.history, sim.bestLapEver);
+  refreshSavedInfo();
+  updateHud(sim.leader);
+
+  if (Number.isFinite(newRec) && newRec < 60) {
+    toast(`⏱️ Circuit Record recalibrated to current baseline: ${newRec.toFixed(2)}s!`, 'success');
+  } else {
+    toast(`⏱️ Circuit Record reset! Next completed lap will establish the new benchmark.`, 'info');
+  }
+}
+
+function setMaxLaps(laps, showToast = true) {
+  const numLaps = Math.max(1, parseInt(laps, 10) || 5);
+  CONFIG.generation = CONFIG.generation || {};
+  CONFIG.generation.maxLaps = numLaps;
+  localStorage.setItem('ai-racer:maxLaps', String(numLaps));
+
+  const select = $('settings-laps-select');
+  if (select && select.value !== String(numLaps)) {
+    select.value = String(numLaps);
+  }
+
+  const maxLaps = numLaps;
+  const currentLap = sim?.leader ? Math.min(sim.leader.laps + 1, maxLaps) : 1;
+  const hudLap = $('hud-lap');
+  if (hudLap) hudLap.textContent = `${currentLap}/${maxLaps}`;
+
+  if (showToast) {
+    toast(`🏁 Race distance set to ${numLaps} ${numLaps === 1 ? 'lap' : 'laps'}`);
+  }
+}
+
 function setToggle(key, on) {
   state[key] = on;
-  $(`toggle-${key}`).checked = on;
+  $(`toggle-${key}`) && ($(`toggle-${key}`).checked = on);
+  if (key === 'ghosts') {
+    setGhostMode(on);
+  } else if (key === 'gridBox') {
+    setGridBox(on);
+  }
 }
 
 function setManual(on) {
@@ -646,6 +787,9 @@ const settingsPopover = $('settings-popover');
 const btnSettingsClose = $('btn-settings-close');
 const btnSettingsShortcuts = $('btn-settings-shortcuts');
 const btnSettingsAudio = $('btn-settings-audio');
+const btnSettingsGhost = $('btn-settings-ghost');
+const btnSettingsGridbox = $('btn-settings-gridbox');
+const settingsLapsSelect = $('settings-laps-select');
 const btnSettingsPanel = $('btn-settings-panel');
 const btnSettingsGuide = $('btn-settings-guide');
 
@@ -654,6 +798,24 @@ function setSettingsPopoverOpen(open) {
   settingsPopover.hidden = !open;
   btnSettingsMenu?.setAttribute('aria-expanded', String(open));
   btnSettingsMenu?.classList.toggle('is-active', open);
+
+  if (open) {
+    const ghostBadge = $('settings-ghost-badge');
+    if (ghostBadge) {
+      ghostBadge.textContent = state.ghosts ? 'ON' : 'OFF';
+      ghostBadge.style.color = state.ghosts ? '#22c55e' : '#94a3b8';
+    }
+    const gridBadge = $('settings-gridbox-badge');
+    if (gridBadge) {
+      gridBadge.textContent = state.gridBox ? 'ON' : 'OFF';
+      gridBadge.style.color = state.gridBox ? '#22c55e' : '#94a3b8';
+    }
+    const recGhostBadge = $('settings-record-ghost-badge');
+    if (recGhostBadge) {
+      recGhostBadge.textContent = state.recordGhost ? 'ON' : 'OFF';
+      recGhostBadge.style.color = state.recordGhost ? '#22c55e' : '#94a3b8';
+    }
+  }
 }
 
 if (btnSettingsMenu) {
@@ -680,6 +842,36 @@ btnSettingsShortcuts?.addEventListener('click', (e) => {
 btnSettingsAudio?.addEventListener('click', (e) => {
   e.stopPropagation();
   setAudio(!state.audio);
+});
+
+btnSettingsGhost?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setGhostMode(!state.ghosts);
+});
+
+btnSettingsGridbox?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setGridBox(!state.gridBox);
+});
+
+const btnSettingsRecordGhost = $('btn-settings-record-ghost');
+btnSettingsRecordGhost?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setRecordGhost(!state.recordGhost);
+});
+
+const btnSettingsResetRecord = $('btn-settings-reset-record');
+btnSettingsResetRecord?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  handleResetLapRecord();
+});
+
+settingsLapsSelect?.addEventListener('click', (e) => {
+  e.stopPropagation();
+});
+
+settingsLapsSelect?.addEventListener('change', (e) => {
+  setMaxLaps(e.target.value);
 });
 
 btnSettingsPanel?.addEventListener('click', (e) => {
@@ -784,22 +976,28 @@ export function flashCameraNameBadge(shotName, isAuto = false) {
   }, 2400);
 }
 
+let lastPillIsAuto = null;
+
 function updateCameraPill() {
-  const btn = $('btn-camera-menu');
-  const dot = $('cam-active-dot');
   const isAuto = (state.cameraPreset || 'auto') === 'auto';
 
-  if (btn) {
-    btn.classList.toggle('is-auto-director', isAuto);
-  }
+  if (isAuto !== lastPillIsAuto) {
+    lastPillIsAuto = isAuto;
+    const btn = $('btn-camera-menu');
+    const dot = $('cam-active-dot');
 
-  if (dot) {
-    if (isAuto) {
-      dot.style.background = '#22c55e';
-      dot.style.boxShadow = '0 0 6px #22c55e';
-    } else {
-      dot.style.background = '#38bdf8';
-      dot.style.boxShadow = '0 0 6px #38bdf8';
+    if (btn) {
+      btn.classList.toggle('is-auto-director', isAuto);
+    }
+
+    if (dot) {
+      if (isAuto) {
+        dot.style.background = '#22c55e';
+        dot.style.boxShadow = '0 0 6px #22c55e';
+      } else {
+        dot.style.background = '#38bdf8';
+        dot.style.boxShadow = '0 0 6px #38bdf8';
+      }
     }
   }
 
@@ -1718,8 +1916,9 @@ function updateBurstButtonUi() {
 $('btn-hyper-burst')?.addEventListener('click', () => {
   const rem = triggerExplorationBurst(150);
   updateBurstButtonUi();
-  toast('🚀 Exploration Burst Active: 150 generations of elevated mutation injected to break lap time plateau!', 'success');
+  toast('🚀 Stagnation Breaker Active: 150 generations of high-variance apex wildcards injected!', 'success');
 });
+$('btn-hyper-reset-record')?.addEventListener('click', handleResetLapRecord);
 $('btn-hyper-reset-running')?.addEventListener('click', () => resetAllLearning(true));
 
 const hyperChartTabsContainer = $('hyper-chart-tabs');
@@ -1881,8 +2080,8 @@ function runHyperBatch() {
         if (sim.postRaceTimer !== null && sim.postRaceTimer > 0) {
           sim.postRaceTimer = 0;
         }
-        if (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 1.5) {
-          sim.checkeredFlagTimer = 1.5;
+        if (sim.checkeredFlagTimer !== null && sim.checkeredFlagTimer > 4.0) {
+          sim.checkeredFlagTimer = 4.0;
         }
 
         // Fast-forward death slide of crashed cars so finished grids don't waste 180 simulation steps
@@ -1896,10 +2095,17 @@ function runHyperBatch() {
         }
 
         // F1 Checkered Flag Rule in Headless Mode:
-        // When the race leader (P1) finishes, give a brief 1.5s window for trailing cars to finish, then conclude generation
+        // When the race leader (P1) finishes, give a generous 4.0s window for trailing cars to finish.
+        // If all non-crashed surviving cars cross the line earlier, conclude immediately for high throughput.
         if (sim.cars && sim.cars.some(c => c.finished)) {
-          if (headlessPostFinishTimer === null) {
-            headlessPostFinishTimer = 1.5;
+          const nonCrashed = sim.cars.filter(c => !c.crashed);
+          const allSurvivingFinished = nonCrashed.length > 0 && nonCrashed.every(c => c.finished);
+
+          if (allSurvivingFinished) {
+            headlessPostFinishTimer = null;
+            sim.endGeneration();
+          } else if (headlessPostFinishTimer === null) {
+            headlessPostFinishTimer = 4.0;
           } else {
             headlessPostFinishTimer -= CONFIG.dt;
             if (headlessPostFinishTimer <= 0) {
@@ -2524,6 +2730,8 @@ export function loadGenerationPreset(g) {
   if (preset.bestLap && Number.isFinite(preset.bestLap)) {
     sim.bestLapEver = preset.bestLap;
   }
+  sim.recordLapTelemetry = null;
+  sim.isRealCarTelemetry = false;
   leaderboard.reset();
   sim.startGeneration(sim.cars.map(() => Array.from(genome)));
 
@@ -2692,36 +2900,43 @@ function updateHud(leader) {
   setTxt('stat-fps', currentFps);
   setTxt('stat-effective', `×${effSpeed < 10 ? effSpeed.toFixed(1) : effSpeed.toFixed(0)}`);
 
-  // Top-Center Semi-Transparent Ghost Mode 30s Countdown Timer (Integer Seconds)
+  // Top-Center Semi-Transparent Ghost Mode Indicator
   const ghostPill = $('ghost-timer-pill');
   const ghostTitle = $('ghost-timer-title');
   const ghostVal = $('ghost-timer-value');
   const colConfig = CONFIG.collision || {};
-  const warmup = colConfig.warmupTime || 30;
-  const remainingGhost = Math.max(0, warmup - sim.time);
+  const isPermanentGhost = !colConfig.enabled || colConfig.warmupTime === Infinity;
 
   if (ghostPill) {
-    if (remainingGhost > 0) {
-      ghostPill.classList.remove('hidden', 'active-contact');
-      ghostPill.classList.toggle('urgent', remainingGhost <= 5.0);
-      if (ghostTitle) ghostTitle.textContent = remainingGhost <= 5.0 ? 'GHOST EXPIRING' : 'GHOST MODE';
-      if (ghostVal) ghostVal.textContent = Math.ceil(remainingGhost) + 's';
-    } else if (sim.time < warmup + 3.0) {
-      // 3-second grace transition showing CONTACTS ACTIVE before fading out
-      ghostPill.classList.remove('hidden', 'urgent');
-      ghostPill.classList.add('active-contact');
-      if (ghostTitle) ghostTitle.textContent = 'CONTACTS ACTIVE';
+    if (isPermanentGhost) {
+      ghostPill.classList.remove('hidden', 'urgent', 'active-contact');
+      if (ghostTitle) ghostTitle.textContent = 'GHOST MODE';
       if (ghostVal) ghostVal.textContent = 'ON';
     } else {
-      // Gracefully fade out once contact physics are active
-      ghostPill.classList.add('hidden');
+      const warmup = colConfig.warmupTime || 30;
+      const remainingGhost = Math.max(0, warmup - sim.time);
+      if (remainingGhost > 0) {
+        ghostPill.classList.remove('hidden', 'active-contact');
+        ghostPill.classList.toggle('urgent', remainingGhost <= 5.0);
+        if (ghostTitle) ghostTitle.textContent = remainingGhost <= 5.0 ? 'GHOST EXPIRING' : 'GHOST MODE';
+        if (ghostVal) ghostVal.textContent = Math.ceil(remainingGhost) + 's';
+      } else if (sim.time < warmup + 3.0) {
+        // 3-second grace transition showing CONTACTS ACTIVE before fading out
+        ghostPill.classList.remove('hidden', 'urgent');
+        ghostPill.classList.add('active-contact');
+        if (ghostTitle) ghostTitle.textContent = 'CONTACTS ACTIVE';
+        if (ghostVal) ghostVal.textContent = 'ON';
+      } else {
+        // Gracefully fade out once contact physics are active
+        ghostPill.classList.add('hidden');
+      }
     }
   }
 
-  // Toast notification when collisions activate at 30s
-  if (sim.time >= warmup && !prevCollisionActive) {
+  // Toast notification when collisions activate
+  if (!isPermanentGhost && sim.time >= (colConfig.warmupTime || 30) && !prevCollisionActive) {
     prevCollisionActive = true;
-    toast('⚠️ 30s Reached: Collision Avoidance & Contact Physics ACTIVE!', 'warning');
+    toast('⚠️ Collision Avoidance & Contact Physics ACTIVE!', 'warning');
   }
 
   const car = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
@@ -2729,7 +2944,8 @@ function updateHud(leader) {
     : (leader && (leader.alive || leader.finished) ? leader : (sim.leader || null));
   $('leader-dot')?.classList.toggle('player', state.manual);
   if (car) {
-    setTxt('leader-speed', car.speed.toFixed(0));
+    const kmh = Math.round(car.speed * SPEED_TO_KMH);
+    setTxt('leader-speed', kmh);
 
     const contacts = car.contacts || 0;
     const penaltyVal = car.collisionPenalty ? Math.round(car.collisionPenalty) : contacts * 180;
@@ -2813,11 +3029,15 @@ function updateHud(leader) {
 let smoothSteer = 0;
 let smoothBrake = 0;
 let smoothGas = 0;
+let lastRenderedSteerDeg = -999;
+let lastRenderedBrakePct = -999;
+let lastRenderedGasPct = -999;
 const elCockpitWheel = $('cockpit-wheel');
 const elPedalBrakeFill = $('pedal-brake-fill');
 const elPedalGasFill = $('pedal-gas-fill');
 
 function updateCockpitAnimation(focusCar) {
+  if (!isTelemetryOpen) return;
   const car = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
     ? sim.player
     : (focusCar && (focusCar.alive || focusCar.finished) ? focusCar : (sim.leader || null));
@@ -2834,12 +3054,22 @@ function updateCockpitAnimation(focusCar) {
   smoothGas += (targetGas - smoothGas) * k;
 
   const steerDeg = smoothSteer * 58;
-  if (elCockpitWheel) {
+  if (elCockpitWheel && Math.abs(steerDeg - lastRenderedSteerDeg) >= 0.12) {
+    lastRenderedSteerDeg = steerDeg;
     elCockpitWheel.style.transform = `rotate(${steerDeg.toFixed(1)}deg)`;
   }
 
-  if (elPedalBrakeFill) elPedalBrakeFill.style.height = `${(smoothBrake * 100).toFixed(1)}%`;
-  if (elPedalGasFill) elPedalGasFill.style.height = `${(smoothGas * 100).toFixed(1)}%`;
+  const brakePct = smoothBrake * 100;
+  if (elPedalBrakeFill && Math.abs(brakePct - lastRenderedBrakePct) >= 0.25) {
+    lastRenderedBrakePct = brakePct;
+    elPedalBrakeFill.style.height = `${brakePct.toFixed(1)}%`;
+  }
+
+  const gasPct = smoothGas * 100;
+  if (elPedalGasFill && Math.abs(gasPct - lastRenderedGasPct) >= 0.25) {
+    lastRenderedGasPct = gasPct;
+    elPedalGasFill.style.height = `${gasPct.toFixed(1)}%`;
+  }
 }
 
 // ---------- Main loop ----------
@@ -2853,6 +3083,11 @@ let leaderboardTimer = 0;
 let frameCount = 0;
 let fpsTimer = last;
 let currentFps = 60;
+let lowFpsStreak = 0;
+let simTimeAccum = 0;
+let renderTimeAccum = 0;
+let profFrameCount = 0;
+let lastPerfLog = 0;
 
 function frame(now) {
   const realDt = Math.min(0.05, (now - last) / 1000);
@@ -2867,6 +3102,7 @@ function frame(now) {
   sim.playerControls.steer = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
   sim.playerControls.throttle = keys.ArrowUp ? 1 : keys.ArrowDown ? -1 : 0;
 
+  const tSimStart = performance.now();
   if (!state.paused) {
     const t0 = performance.now();
     if (state.turbo) {
@@ -2875,7 +3111,7 @@ function frame(now) {
         stepCounter += 10;
       } while (performance.now() - t0 < CONFIG.budgetMs);
     } else {
-      const PLAYBACK_SPEED_FACTOR = 0.70; // Calibrated playback speed: keeps simulation physics equations intact while giving readable, comfortable race pacing
+      const PLAYBACK_SPEED_FACTOR = 0.90; // Calibrated playback speed: aligns real visual velocity with authentic F1 300+ km/h speeds
       const simSpeed = (state.manual ? 1.0 : state.speed) * PLAYBACK_SPEED_FACTOR;
       if (simSpeed <= 1.0) {
         // Continuous, frame-synced physics (smooth per-frame step)
@@ -2892,26 +3128,31 @@ function frame(now) {
       }
     }
   }
+  const tSim = performance.now() - tSimStart;
+  simTimeAccum += tSim;
 
-  const bestCar = sim.bestLapCar || (sim.cars && sim.cars[0]);
-  const isStartPhase = Boolean(sim && sim.time !== undefined && sim.time < 8.5);
   const userManualCar = (focusedFollowCar && (focusedFollowCar.alive || focusedFollowCar.finished) && !focusedFollowCar.crashed)
     ? focusedFollowCar
     : null;
 
-  const activeFocus = userManualCar
-    ? userManualCar
-    : ((isStartPhase && bestCar && (bestCar.alive || bestCar.finished) && !bestCar.crashed)
-      ? bestCar
-      : (sim.leader || bestCar));
+  // Active P1 race leader: always track the physical race leader (P1)
+  const p1Leader = (state.manual && sim.player && (sim.player.alive || sim.player.finished) && !sim.player.crashed)
+    ? sim.player
+    : (sim.leader || sim.bestLapCar || (sim.cars && sim.cars[0]) || null);
+
+  const activeFocus = userManualCar || p1Leader;
 
   const renderOpts = { ...state, manualFocusCar: userManualCar };
 
+  const tRenderStart = performance.now();
   if (state.view3d && renderer3d) {
     renderer3d.render(sim, renderOpts, activeFocus);
   } else {
     renderer.render(sim, renderOpts, activeFocus);
   }
+  const tRender = performance.now() - tRenderStart;
+  renderTimeAccum += tRender;
+  profFrameCount++;
 
   // Derive the active car in focus (from 3D director, 2D follower, or manual player)
   const currentFocus = (state.manual && sim.player && (sim.player.alive || sim.player.finished))
@@ -2939,18 +3180,57 @@ function frame(now) {
     hubNnViz?.draw(currentFocus?.brain ?? null);
   }
 
-  // FPS calculation
+  // FPS calculation & adaptive resolution scaling
   frameCount++;
   if (now - fpsTimer >= 400) {
     currentFps = Math.round((frameCount * 1000) / (now - fpsTimer));
+    const avgSimMs = profFrameCount > 0 ? (simTimeAccum / profFrameCount).toFixed(1) : '0';
+    const avgRenderMs = profFrameCount > 0 ? (renderTimeAccum / profFrameCount).toFixed(1) : '0';
+    simTimeAccum = 0;
+    renderTimeAccum = 0;
+    profFrameCount = 0;
     frameCount = 0;
     fpsTimer = now;
+
+    const calls = (state.view3d && renderer3d?.renderer?.info?.render?.calls) || 0;
+    const tris = (state.view3d && renderer3d?.renderer?.info?.render?.triangles) || 0;
+    const perfDetail = `FPS: ${currentFps} | Sim: ${avgSimMs}ms | Render: ${avgRenderMs}ms | Calls: ${calls} | Tris: ${(tris / 1000).toFixed(0)}k`;
+
     const pillFps = $('pill-fps');
-    if (pillFps) pillFps.textContent = currentFps;
+    if (pillFps) {
+      pillFps.textContent = currentFps;
+      pillFps.title = perfDetail;
+    }
     const hudFps = $('hud-fps');
-    if (hudFps) hudFps.textContent = currentFps;
+    if (hudFps) {
+      hudFps.textContent = currentFps;
+      hudFps.title = perfDetail;
+    }
     const statFps = $('stat-fps');
-    if (statFps) statFps.textContent = currentFps;
+    if (statFps) {
+      statFps.textContent = currentFps;
+      statFps.title = perfDetail;
+    }
+
+    if (now - lastPerfLog >= 3000) {
+      lastPerfLog = now;
+      console.log(`[PERF 3D] ${perfDetail}`);
+    }
+
+    // Adaptive DPR scaling: dynamically protect 60 FPS under heavy rendering loads
+    if (state.view3d && renderer3d && typeof renderer3d.setAdaptivePixelRatio === 'function') {
+      if (currentFps < 48) {
+        lowFpsStreak++;
+        if (lowFpsStreak >= 2) {
+          renderer3d.setAdaptivePixelRatio(0.85);
+        }
+      } else if (currentFps >= 56) {
+        lowFpsStreak = Math.max(0, lowFpsStreak - 1);
+        if (lowFpsStreak === 0) {
+          renderer3d.setAdaptivePixelRatio(1.0);
+        }
+      }
+    }
   }
 
   if (now - rateStart >= 500) {
@@ -2979,6 +3259,17 @@ refreshSavedInfo();
 updateStatus();
 setAudio(true, false);
 audio.resume();
+
+// Sync settings from localStorage
+const savedGhosts = localStorage.getItem('ai-racer:ghosts');
+setGhostMode(savedGhosts !== null ? savedGhosts !== 'false' : true, false);
+
+const savedGridBox = localStorage.getItem('ai-racer:gridBox');
+setGridBox(savedGridBox !== null ? savedGridBox !== 'false' : true, false);
+
+const savedLaps = localStorage.getItem('ai-racer:maxLaps');
+setMaxLaps(savedLaps !== null ? parseInt(savedLaps, 10) : (CONFIG.generation?.maxLaps || 5), false);
+
 setCameraPreset(state.cameraPreset, false);
 renderGenPresetsRibbon();
 updateHud(sim.leader);

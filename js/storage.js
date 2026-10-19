@@ -95,6 +95,16 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
       generation: simState.generation,
       history: (simState.history || []).slice(-200),
       bestLapEver: Number.isFinite(simState.bestLapEver) ? simState.bestLapEver : null,
+      recordLapTelemetry: (simState.isRealCarTelemetry && Array.isArray(simState.recordLapTelemetry))
+        ? simState.recordLapTelemetry.map((s) => ({
+            t: +s.t.toFixed(3),
+            x: +s.x.toFixed(1),
+            y: +s.y.toFixed(1),
+            angle: +s.angle.toFixed(3),
+            speed: +s.speed.toFixed(1),
+          }))
+        : null,
+      isRealCarTelemetry: Boolean(simState.isRealCarTelemetry),
       allTimeBest: bestToSave ? pack(bestToSave, layers) : null,
       currentGenomes,
       mutationRate: typeof simState.mutationRate === 'number' ? simState.mutationRate : null,
@@ -193,10 +203,18 @@ export function loadTrainingState(layers) {
 
     const resolvedGen = Math.max(1, data.generation || 1, anchorGen || 1);
 
+    let loadedBestLap = data.bestLapEver ?? Infinity;
+    if (typeof loadedBestLap === 'number' && loadedBestLap < 8.80) {
+      loadedBestLap = Infinity;
+    }
+    const hasRealTelemetry = Boolean(data.isRealCarTelemetry && Array.isArray(data.recordLapTelemetry) && data.recordLapTelemetry.length > 10 && loadedBestLap < Infinity);
+
     return {
       generation: resolvedGen,
       history: Array.isArray(data.history) ? data.history : [],
-      bestLapEver: data.bestLapEver ?? Infinity,
+      bestLapEver: loadedBestLap,
+      recordLapTelemetry: hasRealTelemetry ? data.recordLapTelemetry : null,
+      isRealCarTelemetry: hasRealTelemetry,
       allTimeBest,
       currentGenomes,
       mutationRate: typeof data.mutationRate === 'number' ? data.mutationRate : null,

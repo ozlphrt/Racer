@@ -60,7 +60,7 @@ export class TireBarrierSystem {
 
     // Colors for FIA safety barriers: Alternating bold Red, White, and Graphite
     const colors = [
-      { r: 0.90, g: 0.12, b: 0.22 }, // Crimson Red
+      { r: 0.58, g: 0.16, b: 0.18 }, // Weathered Safety Red (less saturated, darker)
       { r: 0.96, g: 0.96, b: 0.98 }, // Pure White
       { r: 0.14, g: 0.16, b: 0.20 }, // Dark Graphite
     ];

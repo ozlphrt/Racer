@@ -39,6 +39,8 @@ export class Simulation {
     this.history = [];
     this.allTimeBest = null;
     this.bestLapEver = Infinity;
+    this.recordLapTelemetry = null;
+    this.isRealCarTelemetry = false;
     this.deathEvents = [];
     const count = this.mode === 'race' ? 20 : this.config.ga.population;
     const genomes = Array.from({ length: count }, () =>
@@ -99,6 +101,17 @@ export class Simulation {
     this.history = Array.isArray(savedState.history) ? [...savedState.history] : [];
     this.allTimeBest = savedState.allTimeBest || null;
     this.bestLapEver = savedState.bestLapEver ?? Infinity;
+    // Sanitize any phantom unreachable benchmarks (< 8.80s is physically impossible on Grand Prix track)
+    if (typeof this.bestLapEver === 'number' && this.bestLapEver < 8.80) {
+      this.bestLapEver = Infinity;
+      this.recordLapTelemetry = null;
+      this.isRealCarTelemetry = false;
+    } else {
+      this.recordLapTelemetry = Array.isArray(savedState.recordLapTelemetry) && savedState.recordLapTelemetry.length > 10
+        ? savedState.recordLapTelemetry
+        : null;
+      this.isRealCarTelemetry = Boolean(savedState.isRealCarTelemetry && this.recordLapTelemetry);
+    }
     this.deathEvents = [];
     if (typeof savedState.mutationRate === 'number') {
       this.mutationRate = savedState.mutationRate;
@@ -196,16 +209,16 @@ export class Simulation {
       c.collisionAlwaysOn = false;
       c.launchDelay = 0;
       c.driverBias = 0;
-      if (idx === 0 && Number.isFinite(this.bestLapEver) && this.bestLapEver > 0) {
-        c.bestLap = this.bestLapEver;
-      }
       if (metaList && metaList[idx]) {
         const m = metaList[idx];
         if (m.genTag !== undefined) c.genTag = m.genTag;
         if (m.genLabel !== undefined) c.genLabel = m.genLabel;
         if (m.teamIdx !== undefined) c.teamIdx = m.teamIdx;
-        if (m.bestLap !== undefined) c.bestLap = m.bestLap;
       }
+      // Live Record Ghost Telemetry Capture: immediate refresh when record lap is completed
+      c.onLapComplete = (car, lapDuration, samples) => {
+        this.handleLapComplete(car, lapDuration, samples);
+      };
       return c;
     });
     this.time = 0;
@@ -218,6 +231,28 @@ export class Simulation {
 
   setManual(on) {
     this.player = on ? new Car(this.track, null, 0) : null;
+    if (this.player) {
+      this.player.onLapComplete = (car, lapDuration, samples) => {
+        this.handleLapComplete(car, lapDuration, samples);
+      };
+    }
+  }
+
+  handleLapComplete(car, lapDuration, samples) {
+    if (!Number.isFinite(lapDuration) || lapDuration <= 5 || lapDuration >= 60) return;
+
+    // Check if this lap beats the current all-time best, or if we need to replace synthetic fallback
+    const isNewCircuitRecord = lapDuration < this.bestLapEver;
+    const isReplacingSynthetic = !this.isRealCarTelemetry;
+
+    if (isNewCircuitRecord || isReplacingSynthetic) {
+      this.bestLapEver = lapDuration;
+      this.isRealCarTelemetry = true;
+      if (samples && samples.length > 5) {
+        this.recordLapTelemetry = [...samples];
+      }
+      this.onNewBestLap?.(lapDuration, car);
+    }
   }
 
   step(customDt) {
@@ -287,7 +322,7 @@ export class Simulation {
 
     const colConfig = this.config.collision || {};
     const warmup = colConfig.warmupTime || 30;
-    const leadTime = colConfig.separationLeadTime || 25;
+    const leadTime = colConfig.separationLeadTime || 4;
     const isSeparationPhase = Boolean(colConfig.enabled) && (this.time >= (warmup - leadTime)) && (this.time < warmup);
     const colEnabled = Boolean(colConfig.enabled) && (this.time >= warmup);
 
@@ -587,12 +622,30 @@ export class Simulation {
       };
       this.onNewBest?.(this.allTimeBest);
     }
-    if (genBestLap < this.bestLapEver) {
-      this.bestLapEver = genBestLap;
-      this.onNewBestLap?.(genBestLap);
+    if (Number.isFinite(genBestLap) && genBestLap > 5 && genBestLap < 60) {
+      const isBetterThanRecord = genBestLap < this.bestLapEver;
+      const shouldUpdate = isBetterThanRecord || !this.isRealCarTelemetry;
+      if (shouldUpdate) {
+        this.bestLapEver = genBestLap;
+        this.isRealCarTelemetry = true;
+        const fastestCar = this.cars.find(
+          (c) => c.bestLapSamples && c.bestLapSamples.length > 5 && c.lapTimes && c.lapTimes.some((t) => Math.abs(t - genBestLap) < 0.05)
+        ) || this.cars.find(
+          (c) => c.lastLapSamples && c.lastLapSamples.length > 5 && c.lapTimes && c.lapTimes.some((t) => Math.abs(t - genBestLap) < 0.05)
+        );
+        if (fastestCar) {
+          const samples = (fastestCar.bestLapSamples && fastestCar.bestLapSamples.length > 5)
+            ? fastestCar.bestLapSamples
+            : fastestCar.lastLapSamples;
+          if (samples && samples.length > 5) {
+            this.recordLapTelemetry = [...samples];
+          }
+        }
+        this.onNewBestLap?.(genBestLap, fastestCar);
+      }
     }
 
-    const next = evolve(scored, this.gaOptions);
+    const next = evolve(scored, { ...this.gaOptions, bestLapEver: this.bestLapEver, genBestLap });
     this.generation++;
     this.startGeneration(next);
     this.onGeneration?.(record);
@@ -678,5 +731,135 @@ export class Simulation {
       best = this.player.bestLap;
     }
     return best;
+  }
+
+  /**
+   * Reset or recalibrate all-time circuit lap record to current physics baseline.
+   */
+  resetLapRecord(targetVal = null) {
+    let recentBest = Infinity;
+    // Prefer the fastest lap set by currently active living cars
+    if (this.cars) {
+      for (const c of this.cars) {
+        if (c.bestLap && Number.isFinite(c.bestLap) && c.bestLap > 5 && c.bestLap < recentBest) {
+          recentBest = c.bestLap;
+        }
+      }
+    }
+    // Or check recent 10 generations (current session baseline)
+    if (recentBest === Infinity && this.history) {
+      const recents = this.history.slice(-10);
+      for (const r of recents) {
+        if (r.bestLap && Number.isFinite(r.bestLap) && r.bestLap > 5 && r.bestLap < recentBest) {
+          recentBest = r.bestLap;
+        }
+      }
+    }
+
+    const baseline = (targetVal !== null && Number.isFinite(targetVal) && targetVal > 0)
+      ? targetVal
+      : recentBest;
+
+    this.bestLapEver = Number.isFinite(baseline) ? baseline : Infinity;
+    this.recordLapTelemetry = null;
+    this.isRealCarTelemetry = false;
+
+    // If a current car has samples for this baseline, adopt them immediately
+    if (this.cars && Number.isFinite(this.bestLapEver) && this.bestLapEver < Infinity) {
+      const matchCar = this.cars.find((c) => c.bestLap && Math.abs(c.bestLap - this.bestLapEver) < 0.05);
+      if (matchCar && matchCar.bestLapSamples && matchCar.bestLapSamples.length > 5) {
+        this.recordLapTelemetry = [...matchCar.bestLapSamples];
+        this.isRealCarTelemetry = true;
+      }
+    }
+
+    // Clean up historical bestLap entries in history so pre-calibration records don't poison new baseline
+    if (this.history && Number.isFinite(this.bestLapEver) && this.bestLapEver < Infinity) {
+      for (const r of this.history) {
+        if (r.bestLap && r.bestLap < this.bestLapEver) {
+          r.bestLap = this.bestLapEver;
+        }
+      }
+    }
+
+    this.onNewBestLap?.(this.bestLapEver);
+    return this.bestLapEver;
+  }
+
+  /**
+   * Returns array of high-resolution trajectory points for the record lap.
+   * If real telemetry was not recorded yet, synthesizes an ideal trajectory from track geometry.
+   */
+  getRecordLapTelemetry() {
+    if (this.recordLapTelemetry && this.recordLapTelemetry.length > 10) {
+      return this.recordLapTelemetry;
+    }
+    const t = this.track;
+    if (!t || !t.cx || t.cx.length === 0) return null;
+    const dur = (Number.isFinite(this.bestLapEver) && this.bestLapEver > 5 && this.bestLapEver < 60)
+      ? this.bestLapEver
+      : 9.50;
+
+    const samples = [];
+    const count = Math.min(260, t.N || 200);
+    const avgSpeed = (t.length || 2400) / dur;
+    for (let i = 0; i < count; i++) {
+      const idx = Math.floor((i / count) * t.N);
+      const frac = i / count;
+      samples.push({
+        t: frac * dur,
+        x: t.cx[idx],
+        y: t.cy[idx],
+        angle: Math.atan2(t.ty[idx], t.tx[idx]),
+        speed: avgSpeed,
+      });
+    }
+    this.recordLapTelemetry = samples;
+    this.isRealCarTelemetry = false;
+    return samples;
+  }
+
+  /**
+   * Computes the interpolated state of the Record Ghost car at a given elapsed lap time.
+   */
+  getRecordGhostState(lapElapsed) {
+    const dur = (Number.isFinite(this.bestLapEver) && this.bestLapEver > 0 && this.bestLapEver < 60)
+      ? this.bestLapEver
+      : 8.54;
+    const samples = this.getRecordLapTelemetry();
+    if (!samples || samples.length === 0) return null;
+
+    const clampedTime = ((lapElapsed % dur) + dur) % dur;
+    let s0 = samples[0];
+    let s1 = samples[samples.length - 1];
+
+    if (clampedTime <= samples[0].t) {
+      s0 = samples[0];
+      s1 = samples.length > 1 ? samples[1] : samples[0];
+    } else if (clampedTime >= samples[samples.length - 1].t) {
+      s0 = samples.length > 1 ? samples[samples.length - 2] : samples[0];
+      s1 = samples[samples.length - 1];
+    } else {
+      for (let i = 0; i < samples.length - 1; i++) {
+        if (samples[i].t <= clampedTime && samples[i + 1].t >= clampedTime) {
+          s0 = samples[i];
+          s1 = samples[i + 1];
+          break;
+        }
+      }
+    }
+
+    const span = s1.t - s0.t;
+    const alpha = span > 0.0001 ? Math.max(0, Math.min(1, (clampedTime - s0.t) / span)) : 0;
+    const x = s0.x + (s1.x - s0.x) * alpha;
+    const y = s0.y + (s1.y - s0.y) * alpha;
+
+    let da = s1.angle - s0.angle;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    const angle = s0.angle + da * alpha;
+    const speed = s0.speed + (s1.speed - s0.speed) * alpha;
+
+    return { x, y, angle, speed, lapTime: clampedTime, totalDuration: dur };
   }
 }

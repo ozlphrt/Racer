@@ -326,19 +326,48 @@ export class Renderer {
     const b = this.track.bounds;
     const m = CONFIG.world.margin;
     const fit = Math.min(this.w / (b.w + 2 * m), this.h / (b.h + 2 * m));
-    const focus = opts.manual && sim.player ? sim.player : leader;
+    const focus = (opts.manual && sim.player && (sim.player.alive || sim.player.finished) && !sim.player.crashed)
+      ? sim.player
+      : (leader || sim.leader || (sim.cars && sim.cars[0]) || null);
     this.focusedCar = focus;
-    const target = opts.follow && focus
-      ? { x: focus.x, y: focus.y, s: Math.max(fit * 1.5, Math.min(1.4, fit * 2.5)) }
-      : { x: b.cx, y: b.cy, s: fit };
+    const baseFollowZoom = Math.max(fit * 1.5, Math.min(1.4, fit * 2.5));
+    let targetX = b.cx;
+    let targetY = b.cy;
+    let targetS = fit;
+
+    if (opts.follow && focus) {
+      targetX = focus.x;
+      targetY = focus.y;
+      targetS = baseFollowZoom;
+
+      // Dynamic viewport edge detection & smooth zoom-out compensation
+      if (this.cam && this.cam.s > 0.001) {
+        const curS = this.cam.s;
+        const halfWorldW = (this.w / 2) / curS;
+        const halfWorldH = (this.h / 2) / curS;
+        const dx = Math.abs(focus.x - this.cam.x);
+        const dy = Math.abs(focus.y - this.cam.y);
+        // Safe viewport region: central 58% of screen
+        const exitX = dx / (halfWorldW * 0.58);
+        const exitY = dy / (halfWorldH * 0.58);
+        const exitRatio = Math.max(exitX, exitY);
+
+        if (exitRatio > 1.0) {
+          const zoomComp = Math.max(fit * 1.05, baseFollowZoom / Math.min(2.5, exitRatio));
+          targetS = zoomComp;
+        }
+      }
+    }
 
     if (!this.cam || isNaN(this.cam.s) || this.cam.s < 0.0001) {
-      this.cam = { ...target };
+      this.cam = { x: targetX, y: targetY, s: targetS };
     } else {
-      const k = 0.12;
-      this.cam.x += (target.x - this.cam.x) * k;
-      this.cam.y += (target.y - this.cam.y) * k;
-      this.cam.s += (target.s - this.cam.s) * k;
+      // Silky-smooth camera panning and responsive edge zoom-out with gentle recovery
+      const kPos = (opts.follow && focus) ? 0.058 : 0.080;
+      const kScale = (targetS < this.cam.s) ? 0.075 : 0.022;
+      this.cam.x += (targetX - this.cam.x) * kPos;
+      this.cam.y += (targetY - this.cam.y) * kPos;
+      this.cam.s += (targetS - this.cam.s) * kScale;
     }
     const s = this.cam.s;
     ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (this.w / 2 - s * this.cam.x), dpr * (this.h / 2 - s * this.cam.y));
@@ -391,6 +420,23 @@ export class Renderer {
     if (leader && leader.alive) visibleSet.add(leader);
 
     this.drawGhosts(sim.cars, leader, carRankMap, visibleSet);
+
+    // Draw Holographic Circuit Record Ghost Car
+    if (opts.recordGhost !== false && sim && sim.bestLapEver && sim.bestLapEver < 60 && sim.getRecordGhostState) {
+      const leaderCar = leader || (sim.cars && sim.cars[0]);
+      const startDelay = CONFIG.generation?.startDelay || 2.0;
+      let lapElapsed = 0;
+      if (leaderCar) {
+        const raw = leaderCar.time - leaderCar.lapStart;
+        lapElapsed = leaderCar.time < startDelay ? 0 : raw;
+      } else {
+        lapElapsed = sim.time < startDelay ? 0 : sim.time;
+      }
+      const ghostState = sim.getRecordGhostState(lapElapsed);
+      if (ghostState) {
+        this.drawRecordGhost(ghostState, sim.bestLapEver);
+      }
+    }
 
     // Draw car death burst animations
     this.processDeathEvents(sim);
@@ -672,9 +718,66 @@ export class Renderer {
     ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
     ctx.fill(this.checkB);
 
-    // 8. Track boundary line
+    // 8. F1 Starting Grid Boxes
+    this.drawGridBoxes(ctx);
+
+    // 9. Track boundary line
     this.glowStroke(this.wallAPath, C.barrier);
     this.glowStroke(this.wallBPath, C.barrier);
+  }
+
+  drawGridBoxes(ctx) {
+    if (!CONFIG.gridBox) return;
+    const t = this.track;
+    if (!t || !t.N) return;
+
+    const trackWidth = t.width || 84;
+    const pop = CONFIG.ga?.population || 20;
+    const boxLength = 30.0;
+    const boxWidth = 15.0;
+
+    ctx.save();
+    for (let i = 0; i < pop; i++) {
+      const row = Math.floor(i / 2);
+      const col = i % 2;
+      const distBack = 20 + row * 34 + (col === 1 ? 17 : 0);
+      const latOffset = (col === 0 ? -1 : 1) * (trackWidth * 0.22);
+
+      const sampleIdx = t.wrap(Math.round(t.N - distBack / t.spacing));
+      const cx = t.cx[sampleIdx];
+      const cy = t.cy[sampleIdx];
+      const tx = t.tx[sampleIdx];
+      const ty = t.ty[sampleIdx];
+      const nx = -ty;
+      const ny = tx;
+
+      const posX = cx + nx * latOffset;
+      const posY = cy + ny * latOffset;
+      const angle = Math.atan2(ty, tx);
+
+      ctx.save();
+      ctx.translate(posX, posY);
+      ctx.rotate(angle);
+
+      // Yellow front stop line
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(-boxWidth / 2, boxLength * 0.40, boxWidth, 1.2);
+
+      // White perimeter
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(-boxWidth / 2, -boxLength / 2, boxWidth, boxLength);
+
+      // Position number
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = 'bold 5px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), 0, 0);
+
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   glowStroke(path, color) {
@@ -738,6 +841,50 @@ export class Renderer {
       const rank = (showBadge && carRankMap) ? carRankMap.get(car) : null;
       this.drawCar(car, team, false, false, carNum, rank);
     }
+  }
+
+  drawRecordGhost(ghost, bestLap) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(ghost.x, ghost.y);
+    ctx.rotate(ghost.angle);
+
+    const L = CONFIG.car.length;
+    const W = CONFIG.car.width;
+
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.16)';
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.roundRect(-L / 2, -W / 2, L, W, 3.5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = 'bold 9px "JetBrains Mono", monospace';
+    const txt = `⚡ REC ${bestLap.toFixed(2)}s`;
+    const tw = ctx.measureText(txt).width;
+    const pad = 4;
+    const bx = ghost.x - tw / 2 - pad;
+    const by = ghost.y - 18;
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(bx, by - 8, tw + pad * 2, 14, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#00e5ff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, ghost.x, by - 1);
+    ctx.restore();
   }
 
   drawCar(car, teamOrColor, isLeader = false, isPlayer = false, carNum = 1, posRank = null) {
@@ -970,7 +1117,7 @@ export class Renderer {
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
     const allCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
-    const maxSkidSegments = 60000;
+    const maxSkidSegments = 180000;
 
     for (let i = 0; i < allCars.length; i++) {
       const car = allCars[i];
@@ -1020,8 +1167,8 @@ export class Renderer {
 
       if (track.initialized && (isMarking || track.active)) {
         const dL = Math.hypot(lx - track.lx, ly - track.ly);
-        if (dL > 0.25 && dL < 35) {
-          const alpha = isMarking ? (0.16 + curInt * 0.44) : 0.08;
+        if (dL > 0.65 && dL < 35) {
+          const alpha = isMarking ? (0.05 + curInt * 0.15) : 0.03;
           this.skidmarks.push({
             x0: track.lx, y0: track.ly,
             x1: lx, y1: ly,
@@ -1087,7 +1234,7 @@ export class Renderer {
     ctx.lineCap = 'round';
     for (let i = 0; i < this.skidmarks.length; i++) {
       const s = this.skidmarks[i];
-      ctx.strokeStyle = `rgba(24, 28, 36, ${s.alpha})`;
+      ctx.strokeStyle = `rgba(32, 36, 44, ${s.alpha})`;
       ctx.beginPath();
       ctx.moveTo(s.x0, s.y0);
       ctx.lineTo(s.x1, s.y1);
