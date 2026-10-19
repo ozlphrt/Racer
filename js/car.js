@@ -53,6 +53,8 @@ export class Car {
     this.vx = 0;
     this.vy = 0;
     this.slipAngle = 0;
+    this.wheelSpin = 0;
+    this.brakeLock = 0;
     this.contacts = 0;
     this.collisionPenalty = 0;
     this.offTrackTimer = 0;
@@ -282,15 +284,52 @@ export class Car {
     let vFwd = this.vx * cos + this.vy * sin;
     let vLat = -this.vx * sin + this.vy * cos;
 
-    // 2. Longitudinal acceleration, braking & aerodynamic drag
-    const aLong = this.throttle * (this.throttle >= 0 ? c.accel : c.brake);
-    vFwd += aLong * dt;
+    // 2. Longitudinal acceleration, braking, launch wheelspin & brake lockups
+    this.wheelSpin = 0;
+    this.brakeLock = 0;
+
+    if (this.throttle >= 0) {
+      // Forward Acceleration with Launch Traction Limit & Wheelspin
+      const requestedDrive = this.throttle * c.accel;
+      // Mechanical tire grip at low speed (~195 units), plus aerodynamic downforce grip proportional to speed
+      const maxDriveGrip = 195 + vFwd * 1.5;
+      if (this.throttle > 0.55 && requestedDrive > maxDriveGrip) {
+        // Rear tire wheelspin occurs!
+        this.wheelSpin = Math.min(1.0, (requestedDrive - maxDriveGrip) / 140);
+        // Kinetic sliding friction delivers ~88% of peak traction while tires spin
+        const effectiveAcc = maxDriveGrip * 0.88;
+        vFwd += effectiveAcc * dt;
+      } else {
+        vFwd += requestedDrive * dt;
+      }
+    } else {
+      // Braking with Threshold Lockup Slip
+      const requestedBrake = -this.throttle * c.brake;
+      // Peak braking tire grip before lockup (increases with downforce)
+      const maxBrakeGrip = 360 + vFwd * 1.6;
+      if (requestedBrake > maxBrakeGrip) {
+        // Tires lock up and scrub across the tarmac!
+        this.brakeLock = Math.min(1.0, (requestedBrake - maxBrakeGrip) / 240);
+        const effectiveBrake = maxBrakeGrip * 0.86;
+        vFwd -= effectiveBrake * dt;
+      } else {
+        vFwd -= requestedBrake * dt;
+      }
+    }
+
+    // Aerodynamic drag
     vFwd -= vFwd * c.drag * dt;
     vFwd = clamp(vFwd, 0, c.maxSpeed);
 
-    // 3. Cornering & Speed-Scaled Steering Authority (high speed stabilizes rack, low speed retains full hairpin agility)
+    // 3. Cornering & Speed-Scaled Steering Authority with Understeer / Lockup push
     const speedRackScale = 1.0 / (1.0 + Math.max(0, vFwd - 90) * 0.0036);
-    const turnAuthority = Math.min(1.0, vFwd / c.minTurnSpeed) * speedRackScale;
+    // Hard brake lockup scrubs front steering authority (understeer lockup push)
+    const lockupLoss = 1.0 - this.brakeLock * 0.42;
+    // Aggressive high-speed steering lock causes front tire scrub / push (understeer)
+    const highSpeedScrub = (Math.abs(this.steer) > 0.65 && vFwd > 120)
+      ? 1.0 - (Math.abs(this.steer) - 0.65) * (c.understeerFactor * vFwd)
+      : 1.0;
+    const turnAuthority = Math.min(1.0, vFwd / c.minTurnSpeed) * speedRackScale * lockupLoss * Math.max(0.35, highSpeedScrub);
     let dAngle = this.steer * c.turnRate * turnAuthority * dt;
 
     // Apply & damp dynamic impact yaw rate (restorative tire self-aligning moment)
@@ -307,9 +346,15 @@ export class Car {
     const vFwdRot = vFwd * cosD + vLat * sinD;
     const vLatRot = -vFwd * sinD + vLat * cosD;
 
-    // 5. Oversteer & Tire Lateral Friction (rock-solid straight line grip, progressive slip in hard corners)
-    const oversteerAmount = Math.abs(this.steer) > 0.12 ? c.oversteerFactor * Math.abs(this.throttle) * Math.abs(this.steer) : 0;
-    const traction = c.tireGrip * Math.max(0.65, 1.0 - oversteerAmount);
+    // 5. Oversteer & Friction Circle Lateral Grip Coupling
+    // Power oversteer: throttle combined with steering angle breaks rear traction
+    const oversteerAmount = Math.abs(this.steer) > 0.08
+      ? (c.oversteerFactor * Math.abs(this.throttle) * Math.abs(this.steer))
+      : 0;
+    // Friction circle penalty: high longitudinal demand (acceleration/wheelspin or hard braking) consumes lateral grip
+    const longGripPenalty = (Math.abs(this.throttle) * 0.25) + (this.wheelSpin * 0.35) + (this.brakeLock * 0.30);
+    const effectiveGrip = Math.max(0.18, 1.0 - oversteerAmount - longGripPenalty);
+    const traction = c.tireGrip * effectiveGrip;
     const vLatFinal = vLatRot - vLatRot * traction * dt;
 
     // 6. Reconstruct world velocity

@@ -6010,42 +6010,40 @@ export class Renderer3D {
         continue;
       }
 
-      // Exact physical loss-of-grip models (zero straightaway marks; marks strictly on true loss of grip):
-      // 1. Oversteer (Rear lateral breakaway / drift):
-      // Must have lateral cornering load (|steer| > 0.18) with slip angle breaking past peak grip limit (> 8.0 deg / 0.14 rad),
-      // OR violent sideways spin/drift across the track (|slipAngle| > 0.35).
-      // Straightaway driving and minor collision bumps do NOT trigger oversteer marks.
+      // Exact physical loss-of-grip models (authentic F1 dynamics):
+      // 1. Oversteer (Rear lateral breakaway / power slide / drift):
       const slipMag = Math.abs(car.slipAngle || 0);
       const steerMag = Math.abs(car.steer || 0);
       let oversteerNorm = 0;
-      if (car.speed > 35) {
-        if (steerMag > 0.18 && slipMag > 0.14) {
-          oversteerNorm = Math.min(1.0, (slipMag - 0.14) / 0.12);
-        } else if (slipMag > 0.35) {
-          oversteerNorm = Math.min(1.0, (slipMag - 0.35) / 0.25);
+      if (car.speed > 25) {
+        if (steerMag > 0.12 && slipMag > 0.08) {
+          oversteerNorm = Math.min(1.0, (slipMag - 0.08) / 0.12);
+        } else if (slipMag > 0.22) {
+          oversteerNorm = Math.min(1.0, (slipMag - 0.22) / 0.20);
         }
       }
-      const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.2) : 0;
+      const oversteerInt = oversteerNorm > 0 ? Math.pow(oversteerNorm, 1.1) : 0;
 
       // 2. Understeer (Front tire scrub / push wide):
-      // Only when driver aggressively locks steering into high-speed corner beyond front grip limits
       let understeerNorm = 0;
-      if (steerMag > 0.85 && car.speed > 75 && !car.crashed) {
-        const steerPush = (steerMag - 0.85) / 0.15;
-        const speedPush = Math.min(1.0, (car.speed - 75) / 40);
+      if (steerMag > 0.60 && car.speed > 55 && !car.crashed) {
+        const steerPush = (steerMag - 0.60) / 0.28;
+        const speedPush = Math.min(1.0, (car.speed - 55) / 45);
         understeerNorm = Math.min(1.0, steerPush * speedPush);
       }
-      const understeerInt = understeerNorm > 0 ? Math.pow(understeerNorm, 1.2) : 0;
+      const understeerInt = understeerNorm > 0 ? Math.pow(understeerNorm, 1.1) : 0;
 
-      // 3. Brake Locks (Panic / maximum threshold braking lockup):
-      // Only under full hard braking at high speed
-      const isHardBraking = car.throttle < -0.80 && car.speed > 38;
-      const brakeLockNorm = isHardBraking ? Math.min(1.0, (-car.throttle - 0.80) / 0.20) : 0;
-      const brakeLockInt = brakeLockNorm > 0 ? Math.pow(brakeLockNorm, 1.2) : 0;
+      // 3. Brake Locks (Threshold braking lockup & front/rear scrub):
+      const rawBrakeLock = (car.throttle < -0.60 && car.speed > 25) ? Math.min(1.0, (-car.throttle - 0.60) / 0.35) : 0;
+      const brakeLockInt = Math.max(car.brakeLock || 0, rawBrakeLock);
 
-      // Rear tires mark strictly on oversteer slides and heavy brake locks
-      const targetRearInt = Math.min(1.0, Math.max(oversteerInt, brakeLockInt * 0.90));
-      // Front tires mark strictly on understeer scrub and heavy brake locks
+      // 4. Launch Wheelspin (Standing starts & hard acceleration wheelspin):
+      const rawLaunchSpin = (car.throttle > 0.65 && car.speed < 60) ? Math.min(1.0, ((60 - car.speed) / 45) * car.throttle) : 0;
+      const launchSpinInt = Math.max(car.wheelSpin || 0, rawLaunchSpin);
+
+      // Rear tires mark on oversteer slides, standing-start wheelspin, and heavy brake lockups:
+      const targetRearInt = Math.min(1.0, Math.max(oversteerInt, launchSpinInt * 0.95, brakeLockInt * 0.85));
+      // Front tires mark on understeer scrub and brake lockups:
       const targetFrontInt = Math.min(1.0, Math.max(understeerInt, brakeLockInt));
 
       let track = this.carPrevTires.get(car);

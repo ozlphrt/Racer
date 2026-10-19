@@ -16,12 +16,12 @@ export const CONFIG = {
     brake: 640, // Deeper, more responsive braking
     drag: 0.23, // Aerodynamic drag
     maxSpeed: 435, // Realistic modern F1 top speed ceiling (~340 km/h with 0.78 scale)
-    turnRate: 3.9, // Higher agility apex steering
-    minTurnSpeed: 50, // Low speed steering authority threshold
-    highSpeedTurnLoss: 0.36, // Downforce-stabilized high speed steering
-    tireGrip: 14.2, // Upgraded downforce lateral tire grip for apex cornering
-    understeerFactor: 0.0022,
-    oversteerFactor: 0.18,
+    turnRate: 3.8, // Agile apex steering
+    minTurnSpeed: 45, // Steering response onset
+    highSpeedTurnLoss: 0.32,
+    tireGrip: 8.2, // Calibrated lateral tire grip: authentic progressive slip and drift dynamics (down from 14.2)
+    understeerFactor: 0.0035, // High-speed front tire scrub on aggressive corner entry
+    oversteerFactor: 0.32, // Power oversteer and throttle-steer rotation on corner exit
   },
 
   collision: {
