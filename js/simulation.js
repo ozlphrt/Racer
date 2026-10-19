@@ -52,6 +52,10 @@ export class Simulation {
     this.raceGhostLap = Infinity;
     this.raceGhostTelemetry = null;
     this.raceGhostSource = null;
+    this.raceGhostActiveLap = 1;
+    this.raceGhostStartedAt = 0;
+    this.raceLapBests = new Map();
+    this.raceLastCompleted = new Map();
     this.recordLapTelemetry = null;
     this.isRealCarTelemetry = false;
     this.deathEvents = [];
@@ -302,6 +306,10 @@ export class Simulation {
     this.raceGhostLap = Infinity;
     this.raceGhostTelemetry = null;
     this.raceGhostSource = null;
+    this.raceGhostActiveLap = 1;
+    this.raceGhostStartedAt = 0;
+    this.raceLapBests = new Map();
+    this.raceLastCompleted = new Map();
     this.deathEvents = [];
     this.tireBarriers?.reset();
   }
@@ -321,15 +329,16 @@ export class Simulation {
   handleLapComplete(car, lapDuration, samples) {
     if (!Number.isFinite(lapDuration) || lapDuration <= 5 || lapDuration >= 60) return;
 
-    // Playback uses only a lap actually driven in this race, independently of
-    // historical records, imported brains, or synthetic centerline trajectories.
-    if (lapDuration < this.raceGhostLap - 0.01 && Array.isArray(samples) && samples.length > 5 &&
+    // Collect completed laps now; select playback only at P1's next lap boundary.
+    if (Number.isInteger(car?.laps) && car.laps > 0 && Array.isArray(samples) && samples.length > 5 &&
       samples.every((s, i) => Number.isFinite(s.t) && s.t >= 0 && s.t <= lapDuration + 0.1 &&
         Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.angle) && Number.isFinite(s.speed) &&
         (i === 0 || s.t >= samples[i - 1].t))) {
-      this.raceGhostLap = lapDuration;
-      this.raceGhostTelemetry = [...samples];
-      this.raceGhostSource = { generation: this.generation, carNumber: car?.carNumber ?? null, lap: car?.laps ?? null };
+      const candidate = { duration: lapDuration, samples: [...samples],
+        source: { generation: this.generation, carNumber: car.carNumber, lap: car.laps } };
+      this.raceLastCompleted.set(car, candidate);
+      const previous = this.raceLapBests.get(car.laps);
+      if (!previous || lapDuration < previous.duration - 0.01) this.raceLapBests.set(car.laps, candidate);
     }
 
     const prevOverallRecord = this.bestLapEver;
@@ -563,6 +572,7 @@ export class Simulation {
     }
 
     this.time += dt;
+    this.updateRaceGhost();
     this.aliveCount = aliveRacing;
 
     // Both live and fast-forward races use the same trailing-finisher window.
@@ -900,33 +910,49 @@ export class Simulation {
     return null;
   }
 
-  /** Use the same display time as interpolated cars, independent of camera/leader changes. */
+  /** Freeze the selected source for the whole lap; restart its clock at P1's crossing. */
+  updateRaceGhost(leader = this.leader) {
+    const completed = leader?.laps || 0;
+    const nextLap = completed + 1;
+    if (nextLap <= this.raceGhostActiveLap || completed >= this.config.generation.maxLaps) return;
+    let selected = null;
+    if (nextLap === 2) {
+      const p1Lap = this.raceLastCompleted.get(leader);
+      if (p1Lap?.source.lap === 1) selected = p1Lap;
+    } else {
+      for (const [lap, candidate] of this.raceLapBests) {
+        if (lap <= completed && (!selected || candidate.duration < selected.duration - 0.01)) selected = candidate;
+      }
+    }
+    this.raceGhostActiveLap = nextLap;
+    this.raceGhostStartedAt = this.time;
+    this.raceGhostLap = selected?.duration ?? Infinity;
+    this.raceGhostTelemetry = selected?.samples ?? null;
+    this.raceGhostSource = selected ? { ...selected.source, replayLap: nextLap } : null;
+  }
+
+  /** Use the same display time as interpolated cars, relative to this lap's start. */
   getRecordGhostRenderState(renderAlpha = 1) {
     const alpha = Math.max(0, Math.min(1, renderAlpha));
     const displayTime = Math.max(0, this.time - this.config.dt * (1 - alpha));
-    const startDelay = this.config.generation?.startDelay ?? 2;
-    return this.getRecordGhostState(displayTime < startDelay ? 0 : displayTime);
+    return this.getRecordGhostState(Math.max(0, displayTime - (this.raceGhostStartedAt || 0)));
   }
 
-  /** Computes the interpolated record pose, including the seam between laps. */
+  /** Interpolate one replay, then hold its finish pose until P1 starts the next lap. */
   getRecordGhostState(lapElapsed) {
     const dur = this.raceGhostLap;
     const samples = this.raceGhostTelemetry;
     if (!Number.isFinite(dur) || dur <= 5 || dur >= 60 || !samples || samples.length < 2) return null;
 
-    const clampedTime = ((lapElapsed % dur) + dur) % dur;
+    const clampedTime = Math.max(0, Math.min(dur, lapElapsed));
     const first = samples[0], last = samples[samples.length - 1];
     let s0, s1, t0, t1;
     if (clampedTime < first.t) {
-      s0 = last;
-      s1 = first;
-      t0 = last.t - dur;
-      t1 = first.t;
+      s0 = s1 = first;
+      t0 = t1 = first.t;
     } else if (clampedTime >= last.t) {
-      s0 = last;
-      s1 = first;
-      t0 = last.t;
-      t1 = first.t + dur;
+      s0 = s1 = last;
+      t0 = t1 = last.t;
     } else {
       let lo = 0, hi = samples.length - 1;
       while (hi - lo > 1) {
@@ -949,7 +975,7 @@ export class Simulation {
     while (da > Math.PI) da -= Math.PI * 2;
     while (da < -Math.PI) da += Math.PI * 2;
     const angle = s0.angle + da * alpha;
-    const speed = s0.speed + (s1.speed - s0.speed) * alpha;
+    const speed = clampedTime >= dur ? 0 : s0.speed + (s1.speed - s0.speed) * alpha;
 
     return { x, y, angle, speed, lapTime: clampedTime, totalDuration: dur };
   }

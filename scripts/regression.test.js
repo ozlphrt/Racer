@@ -986,31 +986,59 @@ test('a failed preview releases the queue so another car can render', async (t) 
   assert.equal(preview.busy, false);
 });
 
-test('race ghost ignores historical records and refreshes only from laps driven in the current race', () => {
+test('race ghost selects completed laps at leader lap boundaries and never switches mid-lap', () => {
   const sim = new Simulation(track(), CONFIG);
   sim.bestLapEver = 8.54;
   sim.isRealCarTelemetry = true;
   sim.recordLapTelemetry = telemetry();
   assert.equal(sim.getRecordGhostState(2), null);
-  const current = telemetry().map(s => ({ ...s, x: s.x + 50 }));
-  sim.handleLapComplete(sim.cars[0], 12, current);
-  assert.equal(sim.raceGhostLap, 12);
-  assert.equal(sim.bestLapEver, 8.54, 'race ghost refresh does not discard the historical record');
-  assert.notEqual(sim.raceGhostTelemetry, current);
-  assert.deepEqual(sim.raceGhostTelemetry, current);
+  const samples = (duration, offset = 0) => Array.from({ length: 13 }, (_, i) => ({
+    t: duration * i / 12, x: offset + i * 10, y: 0, angle: 0, speed: 120 / duration }));
+  const p1 = sim.cars[0], trailer = sim.cars[1];
+  p1.laps = 1; sim.time = 14;
+  sim.handleLapComplete(p1, 14, samples(14));
+  assert.equal(sim.raceGhostTelemetry, null, 'no ghost until the lap boundary is processed');
+  sim.updateRaceGhost(p1);
+  assert.equal(sim.raceGhostActiveLap, 2);
+  assert.equal(sim.raceGhostLap, 14);
+  assert.equal(sim.raceGhostSource.carNumber, p1.carNumber, 'lap 2 replays P1’s first lap');
+  assert.equal(sim.getRecordGhostRenderState(1).lapTime, 0);
+  sim.time = 15;
+  assert.equal(sim.getRecordGhostRenderState(1).lapTime, 1, 'clock is relative to this race lap');
   const firstSource = sim.raceGhostSource;
-  const tied = current.map(s => ({ ...s, x: s.x + 500 }));
-  sim.handleLapComplete({ carNumber: 99, laps: 2 }, 12 - 1e-10, tied);
-  sim.handleLapComplete({ carNumber: 98, laps: 2 }, 11.995, tied);
-  assert.deepEqual(sim.raceGhostTelemetry, current, 'floating-point ties and sub-centisecond differences do not swap racing lines');
+  trailer.laps = 1;
+  sim.handleLapComplete(trailer, 13, samples(13, 500));
+  assert.equal(sim.raceGhostLap, 14, 'a quicker trailing car cannot change playback during lap 2');
   assert.equal(sim.raceGhostSource, firstSource);
-  sim.handleLapComplete(sim.cars[0], 13, telemetry());
-  assert.deepEqual(sim.raceGhostTelemetry, current, 'slower laps cannot replace the current race ghost');
-  sim.handleLapComplete(sim.cars[0], 11, null);
-  assert.equal(sim.raceGhostLap, 12, 'an unrecorded lap cannot supply an invented trajectory');
-  const faster = current.map(s => ({ ...s, t: s.t * 0.9 }));
-  sim.handleLapComplete(sim.cars[0], 11, faster);
+  p1.laps = 2; sim.time = 25;
+  sim.handleLapComplete(p1, 11, samples(11));
+  sim.updateRaceGhost(p1);
+  assert.equal(sim.raceGhostActiveLap, 3);
   assert.equal(sim.raceGhostLap, 11);
+  assert.equal(sim.raceGhostSource.lap, 2);
+  assert.equal(sim.raceGhostStartedAt, 25);
+  trailer.laps = 2;
+  sim.handleLapComplete(trailer, 10.8, samples(10.8, 700));
+  sim.handleLapComplete({ carNumber: 99, laps: 2 }, 10.8 - 1e-10, samples(10.8, 900));
+  sim.time = 26;
+  sim.updateRaceGhost(trailer);
+  assert.equal(sim.raceGhostLap, 11);
+  assert.equal(sim.raceGhostStartedAt, 25, 'same-lap leader changes cannot rephase playback');
+  p1.laps = 3; sim.time = 37;
+  sim.handleLapComplete(p1, 9, null);
+  sim.handleLapComplete(p1, 12, samples(12));
+  sim.updateRaceGhost(p1);
+  assert.equal(sim.raceGhostActiveLap, 4);
+  assert.equal(sim.raceGhostLap, 10.8, 'lap 4 selects the best recorded lap from laps 1–3');
+  assert.equal(sim.raceGhostSource.carNumber, trailer.carNumber, 'tied lap did not replace the proven source');
+  p1.laps = 4; sim.time = 50;
+  sim.handleLapComplete(p1, 13, samples(13));
+  sim.updateRaceGhost(p1);
+  assert.equal(sim.raceGhostActiveLap, 5);
+  assert.equal(sim.raceGhostLap, 10.8, 'an earlier lap stays selected if it remains the fastest');
+  assert.equal(sim.getRecordGhostRenderState(1).lapTime, 0);
+  p1.laps = 5; sim.updateRaceGhost(p1);
+  assert.equal(sim.raceGhostActiveLap, 5, 'a five-lap race does not start a sixth ghost lap');
   sim.startGeneration(sim.cars.map(car => car.brain.genome));
   assert.equal(sim.raceGhostLap, Infinity);
   assert.equal(sim.raceGhostTelemetry, null);
@@ -1098,17 +1126,18 @@ test('record ghost and cars share smooth display time at 30, 60, 120 and 144 FPS
   }
 });
 
-test('record ghost interpolates across the last sample and lap seam without holding still', () => {
+test('race ghost moves through the final interval then waits at the finish without looping', () => {
   const sim = Object.create(Simulation.prototype);
   sim.raceGhostLap = 12;
-  sim.raceGhostTelemetry = Array.from({ length: 12 }, (_, t) => ({
+  sim.raceGhostTelemetry = Array.from({ length: 13 }, (_, t) => ({
     t, x: Math.cos(t * Math.PI / 6), y: Math.sin(t * Math.PI / 6), angle: t * Math.PI / 6, speed: 100,
   }));
   const a = sim.getRecordGhostState(11.2), b = sim.getRecordGhostState(11.8);
   assert.ok(Math.hypot(b.x - a.x, b.y - a.y) > 0.2, 'the final interval continues moving');
   const before = sim.getRecordGhostState(11.999), after = sim.getRecordGhostState(12.001);
-  assert.ok(Math.hypot(before.x - after.x, before.y - after.y) < 0.002, 'lap wrap is continuous');
+  assert.ok(Math.hypot(before.x - after.x, before.y - after.y) < 0.002, 'arrival at the finish is continuous');
   assert.ok(Math.abs(Math.atan2(Math.sin(after.angle - before.angle), Math.cos(after.angle - before.angle))) < 0.002);
+  assert.deepEqual(sim.getRecordGhostState(15), sim.getRecordGhostState(12), 'finished ghost waits until the next P1 lap crossing');
 });
 
 test('terrain water data is reused for probes and regenerated on track changes', () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.4 — 2026-10-20
+
+- Start the ghost at P1's lap crossings: lap 2 replays P1's first lap; subsequent laps select the best completed lap from earlier laps in this race.
+- Freeze the replay choice during each lap and restart its clock at the next P1 lap crossing. Finished replays wait at the line instead of looping.
+- Show the active race lap and the selected source car/lap in Settings; preserve historical records and bundled brains.
+- Validate lap 2–5 selection, tied laps, leader changes, playback timing, finish waiting, and race resets in the 64-test regression suite.
+
 ## 1.5.3 — 2026-10-20
 
 - Keep tied laps from swapping the ghost's racing line due to floating-point noise; require an improvement greater than 0.01 seconds.

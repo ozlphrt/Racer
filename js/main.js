@@ -586,8 +586,8 @@ function updateRecordGhostControl() {
     if (badge.textContent !== label) badge.textContent = label;
     const source = sim.raceGhostSource;
     const detail = ready && source
-      ? `Current race · Gen ${source.generation} · Car #${source.carNumber} · Lap ${source.lap} · ${sim.raceGhostLap.toFixed(2)}s`
-      : 'Waiting for a completed lap in this race. Historical laps are excluded.';
+      ? `Race lap ${source.replayLap} · Replay car #${source.carNumber}, lap ${source.lap} · ${sim.raceGhostLap.toFixed(2)}s`
+      : 'Waiting for P1 to start lap 2. Historical laps are excluded.';
     if (badge.title !== detail) badge.title = detail;
     const sourceLabel = $('settings-race-ghost-source');
     if (sourceLabel && sourceLabel.textContent !== detail) sourceLabel.textContent = detail;
