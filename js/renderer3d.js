@@ -1234,28 +1234,57 @@ export class Renderer3D {
       elevation += Math.max(0, mRidge) * mBlend;
     }
 
-    // Carve lake basins smoothly into valley floor
+    // Bulletproof Lake Basin Sculpting:
+    // Guarantees terrain is fully hollowed out below the water level inside the lake perimeter,
+    // with smooth, natural shoreline banking into surrounding hills.
     const { lakes, river } = this.getWaterBodies();
     for (const lake of lakes) {
       const dx = (x - lake.cx) / lake.rx;
       const dy = (y - lake.cy) / lake.ry;
       const lakeDist = Math.hypot(dx, dy);
-      if (lakeDist < 1.35) {
-        const dRatio = Math.max(0, 1.0 - lakeDist / 1.35);
-        const basinDepth = 14.0 * dRatio * dRatio;
-        elevation = Math.max(-0.08, elevation - basinDepth * 1.5);
+
+      if (lakeDist < 1.40) {
+        // Deep lake bed: 4.5m to 8.5m below water level
+        const bedDepth = 4.5 + 4.0 * Math.pow(Math.max(0, 1.0 - Math.min(1.0, lakeDist)), 1.5);
+        const bedElevation = Math.max(-0.08, lake.waterZ - bedDepth);
+
+        if (lakeDist <= 0.95) {
+          // Deep interior: strictly clamped to underwater basin bed
+          elevation = Math.min(elevation, bedElevation);
+        } else {
+          // Shoreline slope transition (0.95 to 1.40):
+          // Smooth cubic Hermite interpolation from lake bed up to surrounding terrain
+          const t = (lakeDist - 0.95) / (1.40 - 0.95);
+          const sCurve = t * t * (3.0 - 2.0 * t);
+          const blended = bedElevation + (elevation - bedElevation) * sCurve;
+
+          // Critical physical constraint: any point inside or on the lake boundary (lakeDist <= 1.0)
+          // MUST be strictly below the water surface so terrain NEVER pokes into or above water!
+          const maxAllowed = (lakeDist <= 1.02)
+            ? (lake.waterZ - 0.35 - (1.02 - lakeDist) * 3.5)
+            : (lake.waterZ - 0.35 + (lakeDist - 1.02) * 45.0);
+
+          elevation = Math.min(blended, maxAllowed);
+        }
       }
     }
 
-    // Carve riverbed trench
+    // Carve riverbed trench below water level
     for (let i = 0; i < river.length; i += 2) {
       const rp = river[i];
       const rDist = Math.hypot(x - rp.x, y - rp.y);
-      const rRadius = rp.width * 1.6;
+      const rRadius = rp.width * 1.8;
       if (rDist < rRadius) {
-        const rRatio = Math.max(0, 1.0 - rDist / rRadius);
-        const trench = 6.5 * rRatio * rRatio;
-        elevation = Math.max(-0.08, elevation - trench * 1.4);
+        const bedElevation = Math.max(-0.08, rp.waterZ - 3.5);
+        if (rDist <= rp.width * 0.5) {
+          elevation = Math.min(elevation, bedElevation);
+        } else {
+          const t = (rDist - rp.width * 0.5) / (rRadius - rp.width * 0.5);
+          const sCurve = t * t * (3.0 - 2.0 * t);
+          const blended = bedElevation + (elevation - bedElevation) * sCurve;
+          const maxAllowed = rp.waterZ - 0.25 + (t * 20.0);
+          elevation = Math.min(blended, maxAllowed);
+        }
       }
     }
 
@@ -1271,7 +1300,7 @@ export class Renderer3D {
     }
 
     const w = 24000;
-    const segs = 120;
+    const segs = 160;
     const geo = new THREE.PlaneGeometry(w, w, segs, segs);
     const pos = geo.attributes.position.array;
     const count = geo.attributes.position.count;
@@ -1285,18 +1314,12 @@ export class Renderer3D {
       pos[i * 3 + 2] = this.getTerrainHeight(vx, vy);
     }
 
-    // Bulletproof Topological Clearance:
-    // Any triangle that touches or borders the track corridor is clamped strictly:
-    // 1) Any triangle within trackHalf + 240m is clamped strictly to <= 0.00m (under asphalt Z=0.12m)
-    // 2) Any triangle touching or bordering the road surface (within trackHalf + 65m) has ALL THREE vertices
-    //    clamped strictly to <= -0.14m.
-    // Asphalt is at Z = +0.12m, white lines at Z = +0.14m.
-    // This creates a guaranteed 0.26-meter vertical clearance gap under the entire asphalt corridor,
-    // making it physically impossible for any terrain triangle to ever pierce or overlap the track!
+    // Bulletproof Topological Clearance for Track & Water Bodies:
     if (geo.index) {
       const indices = geo.index.array;
       const numTris = indices.length / 3;
       const trackHalfDist = ((this.track && this.track.width) || 84) * 0.5;
+      const { lakes: waterLakes } = this.getWaterBodies();
 
       for (let k = 0; k < numTris; k++) {
         const iA = indices[k * 3];
@@ -1304,6 +1327,7 @@ export class Renderer3D {
         const iC = indices[k * 3 + 2];
         const minD = Math.min(dists[iA], dists[iB], dists[iC]);
 
+        // 1. Roadbed clearance
         if (minD <= trackHalfDist + 240.0) {
           if (pos[iA * 3 + 2] > 0.0) pos[iA * 3 + 2] = 0.0;
           if (pos[iB * 3 + 2] > 0.0) pos[iB * 3 + 2] = 0.0;
@@ -1314,6 +1338,31 @@ export class Renderer3D {
           if (pos[iA * 3 + 2] > -0.14) pos[iA * 3 + 2] = -0.14;
           if (pos[iB * 3 + 2] > -0.14) pos[iB * 3 + 2] = -0.14;
           if (pos[iC * 3 + 2] > -0.14) pos[iC * 3 + 2] = -0.14;
+        }
+
+        // 2. Lake clearance: guarantee no triangle ever rises above lake water level
+        for (const lake of waterLakes) {
+          const vAx = pos[iA * 3], vAy = pos[iA * 3 + 1];
+          const vBx = pos[iB * 3], vBy = pos[iB * 3 + 1];
+          const vCx = pos[iC * 3], vCy = pos[iC * 3 + 1];
+
+          const dA = Math.hypot((vAx - lake.cx) / lake.rx, (vAy - lake.cy) / lake.ry);
+          const dB = Math.hypot((vBx - lake.cx) / lake.rx, (vBy - lake.cy) / lake.ry);
+          const dC = Math.hypot((vCx - lake.cx) / lake.rx, (vCy - lake.cy) / lake.ry);
+
+          const minLakeD = Math.min(dA, dB, dC);
+
+          if (minLakeD < 1.05) {
+            const clampLakeVertex = (idx, dist) => {
+              if (dist <= 1.02) {
+                const maxZ = lake.waterZ - 0.35 - (1.02 - dist) * 3.5;
+                if (pos[idx * 3 + 2] > maxZ) pos[idx * 3 + 2] = maxZ;
+              }
+            };
+            clampLakeVertex(iA, dA);
+            clampLakeVertex(iB, dB);
+            clampLakeVertex(iC, dC);
+          }
         }
       }
     }
