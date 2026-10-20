@@ -93,6 +93,7 @@ export class Car {
     this.spinRate = 0;
     this.yawRate = 0;
     this.wrongWayRecoveryActive = false;
+    this.runoffRecoveryActive = false;
     this.recoveryTurnDirection = 0;
     this.laps = 0;
     this.lapTimes = [];
@@ -303,10 +304,12 @@ export class Car {
 
     // Unrestricted Direct Input: 100% instant 60Hz per-tick response for steering, throttle & brake
     if (controls) {
+      this.runoffRecoveryActive = false;
       this.steer = clamp(controls.steer, -1, 1);
       this.throttle = clamp(controls.throttle, -1, 1);
     } else if (this.brain) {
       if (isWrongWay) {
+        this.runoffRecoveryActive = false;
         // Car is pointed in the wrong direction: actively turn around to face forward along the track!
         this.steer = this.recoveryTurnDirection;
         this.throttle = 0.8;
@@ -314,6 +317,7 @@ export class Car {
         const out = this.brain.forward(this.inputs);
         this.steer = clamp(out[0], -1, 1);
         this.throttle = clamp(out[1], -1, 1);
+        this.applyRunoffRecovery();
       }
     }
     this.targetSteer = this.steer;
@@ -513,6 +517,33 @@ export class Car {
         if (this.totalIdx < this.maxIdx - (g.backwardsTolerance || 80) && !isWrongWay) return this.die('wrong way');
       }
     }
+  }
+
+  applyRunoffRecovery() {
+    // A braking policy can strand itself in the grass: at rest it has no
+    // steering authority. Only assist an already slow, braking AI outside the
+    // curb. Keep the normal runoff deadline, drag and hard boundary intact.
+    if (this.manual || !this.brain || this.finished || this.crashed ||
+        this.wrongWayRecoveryActive || this.speed > 90) {
+      this.runoffRecoveryActive = false;
+      return;
+    }
+    const cos = Math.cos(this.angle), sin = Math.sin(this.angle);
+    if (this.runoffRecoveryActive) {
+      // Release inside the curb with a small margin so the controller does not
+      // alternate with the network while the rear wheels are still on grass.
+      if (!this.isOffTrack(cos, sin, -2)) this.runoffRecoveryActive = false;
+    } else if (this.offTrackTimer >= 0.35 && this.speed < 45 && this.throttle < -0.1 &&
+               this.isOffTrack(cos, sin) && !this.isDeepOffTrack(cos, sin)) {
+      this.runoffRecoveryActive = true;
+    }
+    if (!this.runoffRecoveryActive) return;
+    const t = this.track;
+    const lookahead = t.wrap(this.idx + Math.ceil(45 / t.spacing));
+    const desired = Math.atan2(t.cy[lookahead] - this.y, t.cx[lookahead] - this.x);
+    const error = Math.atan2(Math.sin(desired - this.angle), Math.cos(desired - this.angle));
+    this.steer = clamp(error * 1.8, -1, 1);
+    this.throttle = clamp((55 - this.speed) * 0.04, -0.25, 0.55);
   }
 
   isOffTrack(cos, sin, extraBuffer = 0) {

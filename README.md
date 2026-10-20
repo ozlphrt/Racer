@@ -62,6 +62,17 @@ results. This uses current repository physics and creates a new offline
 population; a brain export does not contain the player's entire population.
 Browser training saves are never read or changed.
 
+Use `node scripts/analyze-runoff.js path/to/brain-export.json 25 11187` to
+compare completed runoff excursions and replay failed policies with experimental
+3.6- and 6-second deadlines. Only failures reproduced at the original 1.8-second
+deadline enter that comparison. The experiment runs offline and does not change
+game settings, physics, or browser saves.
+Append `--compare-recovery` to generate failures with assistance disabled, then
+replay those same policies with low-speed recovery and the unchanged 1.8-second
+deadline. Recovery uses gentle throttle and a forward centerline target only for
+slow AI cars braking in runoff, and releases control once the car is inside the
+curb. Manual driving and normal racing continue to use their existing controls.
+
 ## Controls
 
 | Key | Action |

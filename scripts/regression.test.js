@@ -410,6 +410,97 @@ test('tight left-corner recovery does not toggle braking and throttle around its
   assert.equal(car.recoveryTurnDirection, 0);
 });
 
+function strandedCar(side = 1, index = 0, manual = false) {
+  const circuit = track();
+  const car = new Car(circuit, manual ? null : { forward: () => [side, -1] });
+  car.idx = index; car.totalIdx = index; car.maxIdx = index; car.time = 5;
+  car.x = circuit.cx[index] - circuit.ty[index] * 52 * side;
+  car.y = circuit.cy[index] + circuit.tx[index] * 52 * side;
+  car.angle = Math.atan2(circuit.ty[index], circuit.tx[index]) + side * 0.25;
+  car.offTrackTimer = 0.5;
+  return car;
+}
+
+test('stranded braking AIs rejoin from both sides through ordinary physics before the runoff deadline', () => {
+  for (const index of [0, 25, 100, 200, 300]) for (const side of [-1, 1]) {
+    const car = strandedCar(side, index);
+    let assisted = false, returned = false;
+    for (let step = 0; step < 120 && !car.crashed; step++) {
+      const x = car.x, y = car.y;
+      car.update(CONFIG.dt); car.sense();
+      assisted ||= car.runoffRecoveryActive;
+      assert.ok(Math.hypot(car.x - x, car.y - y) <= 90 * CONFIG.dt, 'no position teleport');
+      if (!car.isOffTrack(Math.cos(car.angle), Math.sin(car.angle), -2)) { returned = true; break; }
+    }
+    assert.ok(assisted && returned, `side ${side}, track index ${index} rejoins`);
+    assert.equal(car.crashed, false);
+    car.update(CONFIG.dt);
+    assert.equal(car.runoffRecoveryActive, false, 'hands control back inside the curb');
+    assert.equal(car.throttle, -1, 'the network resumes control');
+    car.reset();
+    assert.equal(car.runoffRecoveryActive, false);
+  }
+});
+
+test('runoff assistance excludes manual controls, fast departures, fresh excursions and residual timers on asphalt', () => {
+  const manual = strandedCar(1, 0, true);
+  manual.update(CONFIG.dt, { steer: -0.4, throttle: -0.6 });
+  assert.equal(manual.runoffRecoveryActive, false);
+  assert.equal(manual.throttle, -0.6);
+  assert.equal(manual.steer, -0.4);
+  const fast = strandedCar();
+  fast.speed = 100; fast.vx = Math.cos(fast.angle) * 100; fast.vy = Math.sin(fast.angle) * 100;
+  fast.update(CONFIG.dt);
+  assert.equal(fast.runoffRecoveryActive, false);
+  assert.equal(fast.throttle, -1);
+  const fresh = strandedCar(); fresh.offTrackTimer = 0.1;
+  fresh.update(CONFIG.dt);
+  assert.equal(fresh.runoffRecoveryActive, false);
+  const road = strandedCar(); road.x = road.track.cx[road.idx]; road.y = road.track.cy[road.idx];
+  road.update(CONFIG.dt);
+  assert.equal(road.runoffRecoveryActive, false);
+  assert.equal(road.throttle, -1);
+  const driving = strandedCar(); driving.brain = { forward: () => [0, 0.5] };
+  driving.update(CONFIG.dt);
+  assert.equal(driving.runoffRecoveryActive, false, 'does not take over an existing throttle recovery');
+});
+
+test('runoff assistance preserves the hard boundary and the 1.8-second retirement deadline', () => {
+  const late = strandedCar(); late.offTrackTimer = 1.8;
+  late.update(CONFIG.dt);
+  assert.equal(late.crashDiagnostic.cause, 'runoff');
+  const deep = strandedCar();
+  deep.x = deep.track.cx[deep.idx] - deep.track.ty[deep.idx] * 75;
+  deep.y = deep.track.cy[deep.idx] + deep.track.tx[deep.idx] * 75;
+  deep.update(CONFIG.dt);
+  assert.equal(deep.runoffRecoveryActive, false);
+  assert.equal(deep.crashDiagnostic.cause, 'off-track');
+});
+
+test('runoff recovery is visible in the existing pre-crash recovery trace', () => {
+  const car = strandedCar();
+  car.update(CONFIG.dt);
+  car.crashApproach.record(car, true);
+  assert.equal(car.wrongWayRecoveryActive, false);
+  assert.equal(car.crashApproach.snapshot(car.time).at(-1)[6], 1);
+});
+
+test('the proven Gen 5000 policy keeps identical five-lap trajectories from every grid slot', () => {
+  const circuit = track(), genome = PRESET_BRAINS['grand-prix:5000'].genome;
+  for (let slot = 0; slot < 20; slot++) {
+    const enabled = new Car(circuit, new NeuralNetwork(CONFIG.nn.layers, genome), slot);
+    const baseline = new Car(circuit, new NeuralNetwork(CONFIG.nn.layers, genome), slot);
+    baseline.applyRunoffRecovery = () => {};
+    for (let step = 0; step < 6600 && !enabled.finished && !enabled.crashed; step++) {
+      enabled.update(CONFIG.dt); enabled.sense(); baseline.update(CONFIG.dt); baseline.sense();
+      assert.equal(enabled.runoffRecoveryActive, false);
+    }
+    assert.ok(enabled.finished && baseline.finished, `grid slot ${slot} finishes`);
+    assert.deepEqual([enabled.x, enabled.y, enabled.angle, enabled.lapTimes],
+      [baseline.x, baseline.y, baseline.angle, baseline.lapTimes]);
+  }
+});
+
 test('gentle side contact preserves shared forward pace and settles without repeated bounce', () => {
   const a = { x: 0, y: 0, angle: 0, vx: 350, vy: 1, yawRate: 0 };
   const b = { x: 0, y: 12, angle: 0, vx: 350, vy: -1, yawRate: 0 };

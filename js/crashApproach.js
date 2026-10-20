@@ -16,7 +16,7 @@ export class CrashApproachRecorder {
     values[offset] = car.time; values[offset + 1] = car.speed;
     values[offset + 2] = car.throttle; values[offset + 3] = car.steer;
     values[offset + 4] = heading; values[offset + 5] = car.slipAngle;
-    values[offset + 6] = car.wrongWayRecoveryActive ? 1 : 0; values[offset + 7] = lateral;
+    values[offset + 6] = car.wrongWayRecoveryActive || car.runoffRecoveryActive ? 1 : 0; values[offset + 7] = lateral;
     if (!replace) { this.next = (this.next + 1) % 22; this.count = Math.min(22, this.count + 1); }
     this.lastTime = car.time;
   }

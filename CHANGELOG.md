@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.7 — 2026-10-20
+
+- Help slow AI cars stranded while braking in runoff rejoin through gentle throttle and forward centerline steering. Release the assistance inside the curb; exclude manual controls, normal racing, fast departures and cars beyond the hard boundary.
+- Preserve grass drag, off-track penalties and the 1.8-second runoff deadline. Include runoff assistance in existing recovery traces.
+- Across two seeded 25-generation tests from the Gen 11187 export, completion increases from 698/1000 to 767/1000 and runoff retirements fall from 138 to 9, with the same 10.7667s best lap. Direct replay of 67 previously stranded cars returns all 67 to the track and finishes 48 within the standalone race limit; others still fail later. These tests seed new offline populations, not the browser's full population.
+- Add repeatable runoff comparisons and five regression checks for rejoining, control exclusions, hard limits, traces and unchanged healthy-brain trajectories. All 71 checks pass.
+
 ## 1.5.6 — 2026-10-20
 
 - Breed 60% of ordinary offspring through small mutations of complete finisher networks; retain elites, pace champions, exploration, crossover and manual bursts.
