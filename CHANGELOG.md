@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.6 — 2026-10-20
+
+- Breed 60% of ordinary offspring through small mutations of complete finisher networks; retain elites, pace champions, exploration, crossover and manual bursts.
+- Reproduce Gen 10822's champion finishing five laps from all 20 grid slots. In two seeded 25-generation offspring tests, completion improves from 546/1000 to 716/1000; early S1 crashes fall from 159 to 107 and best lap remains 10.8167s. These are offline seeded populations, not a replay of the browser's full population.
+- Add the repeatable start-analysis command and a regression check for intact finisher inheritance. Preserve physics, runoff retirement limits, saves and captured brains.
+
 ## 1.5.5 — 2026-10-20
 
 - Record the first start/finish-line crossing and trim countdown/grid travel from the first-lap ghost replay.

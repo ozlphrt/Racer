@@ -53,6 +53,15 @@ For an offline fresh run, use
 actually reached checkpoints to `public/captured-presets.json`; it does not
 synthesize later generations or install them as browser presets.
 
+## Reproducing start reliability
+
+Run `node scripts/analyze-starts.js path/to/brain-export.json 25 10822` to seed
+25 training generations from an exported champion with a repeatable random seed.
+The JSON output reports completion, crashes, early S1 crashes and grid-slot
+results. This uses current repository physics and creates a new offline
+population; a brain export does not contain the player's entire population.
+Browser training saves are never read or changed.
+
 ## Controls
 
 | Key | Action |

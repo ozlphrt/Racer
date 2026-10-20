@@ -276,6 +276,16 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
     next.push(mutate(Float32Array.from(parent.genome), expRate, expSigma));
   }
 
+  // Preserve most proven policies with small local changes. Mixing independently
+  // trained hidden neurons and mutating dozens of weights at full strength can
+  // destroy launch control even when both parents completed the race.
+  // Keep the existing explorers and the remaining crossover lane for new pace.
+  const localOffspring = finishers.length && !isBurstActive ? Math.floor(population * 0.60) : 0;
+  for (let i = 0; i < localOffspring && next.length < population; i++) {
+    const parent = tournament(finishers, tournamentK);
+    next.push(mutate(Float32Array.from(parent.genome), effectiveRate * 0.35, effectiveSigma * 0.15));
+  }
+
   // 5. Breed rest of population via tournament selection & blended crossover
   // Keep a small pace-exploration lane; most offspring inherit proven finishers.
   while (next.length < population) {

@@ -160,6 +160,26 @@ test('breeding favors finishers while preserving the fastest lap genome', t => {
   assert.deepEqual(fragile, Float32Array.of(1, 1, 1));
 });
 
+test('most ordinary offspring preserve a complete finisher policy before local mutation', t => {
+  let state = 10822;
+  t.mock.method(Math, 'random', () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  });
+  resetStagnation();
+  t.after(resetStagnation);
+  const parents = [1, 2, 3].map(value => Float32Array.from({ length: 32 }, () => value));
+  const scored = parents.map((genome, index) => ({ genome, fitness: 100 - index,
+    bestLap: 12 + index, finished: true }));
+  const next = evolve(scored, { population: 20, elites: 2, tournamentK: 2,
+    mutationRate: 0, mutationSigma: 0.24 });
+  const intact = next.filter(child => parents.some(parent => child.every((value, i) => value === parent[i])));
+  assert.ok(intact.length >= 14, 'two elites and twelve local offspring retain intact parent networks');
+  assert.ok(next.some(child => !intact.includes(child)), 'an exploration/crossover lane remains');
+  assert.ok(next.every(child => parents.every(parent => child !== parent)), 'offspring never alias parent buffers');
+  assert.deepEqual(parents.map(parent => [...new Set(parent)]), [[1], [2], [3]]);
+});
+
 test('breeding can recover when no car finishes', t => {
   resetStagnation();
   t.after(resetStagnation);
