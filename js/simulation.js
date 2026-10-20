@@ -45,6 +45,7 @@ export class Simulation {
     this.generation = 1;
     this.history = [];
     this.allTimeBest = null;
+    this.lastRaceChampion = null;
     this.bestLapEver = Infinity;
     this.prevBestLapEver = null;
     this.playerBestLap = Infinity;
@@ -114,6 +115,7 @@ export class Simulation {
   }
 
   resumeState(savedState) {
+    this.lastRaceChampion = savedState.lastRaceChampion || null;
     this.capturedPresets = compatibleCaptures(savedState.capturedPresets, this.track, this.config);
     this.captureEnabled = savedState.captureEnabled === true;
     this.generation = Math.max(1, savedState.generation || 1);
@@ -167,6 +169,7 @@ export class Simulation {
       // Keep the trained population and generation, but discard circuit-specific results.
       this.history = [];
       this.allTimeBest = null;
+      this.lastRaceChampion = null;
       this.bestLapEver = Infinity;
       this.prevBestLapEver = null;
       this.recordLapTelemetry = null;
@@ -184,6 +187,7 @@ export class Simulation {
 
   /** Replace the current population with mutated copies of `genome`. */
   seedFrom(genome, meta = null) {
+    this.lastRaceChampion = null;
     this.captureEnabled = false;
     if (meta) {
       if (typeof meta.generation === 'number' && meta.generation > 0) {
@@ -657,6 +661,9 @@ export class Simulation {
       };
     });
 
+    const champion = scored.find(s => s.finished);
+    if (champion) this.lastRaceChampion = { genome: Array.from(champion.genome), generation: this.generation,
+      fitness: champion.fitness, bestLap: champion.bestLap };
     let best = scored[0];
     let sum = 0;
     let minFitness = Infinity;

@@ -14,7 +14,7 @@ export function trainingStatus(history, bestLapEver) {
   const starters = recent.reduce((sum, r) => sum + r.population, 0);
   const finished = recent.reduce((sum, r) => sum + r.finishers, 0);
   const rate = starters ? Math.round(100 * finished / starters) : null;
-  const completion = rate === null ? 'Completion data unavailable.' : `${rate}% completed the race over the last ${recent.length} races.`;
+  const completion = rate === null ? 'Population completion unavailable.' : `${rate}% of the evolving population finished over the last ${recent.length} races.`;
   const unchanged = age !== null && age >= 25 ? ` No observed lap improvement for ${age} generations.` : '';
   if (observedImprovement && age !== null && age <= 2 && Number.isFinite(bestLapEver) && Math.abs(best - bestLapEver) < 0.01) {
     return { statusText: 'PACE BREAKTHROUGH', statusClass: 'status-breakthrough',

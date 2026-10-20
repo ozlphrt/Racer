@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AI Racer · Neuroevolution Car Racing Lab</title>
   <meta name="description" content="Watch a population of neural-network-driven cars learn to stay on track and race faster every generation with a genetic algorithm, live in your browser.">
-  <meta name="application-version" content="1.5.7">
+  <meta name="application-version" content="1.5.8">
   <meta name="theme-color" content="#05070f">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -861,16 +861,18 @@
               </div>
 
               <!-- Reliability -->
-              <div class="stat stat-trend stat-split stat-col-3 stat-wide-mobile">
-                <div class="stat-split-left">
-                  <div class="stat-header">
-                    <span class="stat-label">Race Completion</span>
-                  </div>
+              <div class="stat stat-col-3 stat-wide-mobile completion-comparison">
+                <div class="population-completion">
+                  <span class="stat-label">Population finish</span>
                   <span class="stat-value highlight-num" id="hyper-stat-pop-survival">–</span>
+                  <span class="completion-note" id="hyper-population-detail">Latest training race</span>
                   <span class="trend-badge" id="hyper-delta-survival">–</span>
                 </div>
-                <div class="stat-split-right">
-                  <canvas class="tile-split-canvas" id="sparkline-survival"></canvas>
+                <div class="champion-completion">
+                  <span class="stat-label">Champion test</span>
+                  <span id="champion-test-result" class="champion-test-result" role="status">Not tested</span>
+                  <span class="completion-note" id="champion-test-detail">One brain · 20 solo starts</span>
+                  <button type="button" id="btn-validate-champion" class="champion-test-button">Validate</button>
                 </div>
               </div>
 
@@ -900,7 +902,7 @@
                 <div class="chart-tab-group" role="tablist" id="hyper-chart-tabs">
                   <button class="chart-tab active" data-mode="lap" type="button">Lap Pace</button>
                   <button class="chart-tab" data-mode="speed" type="button">Top Speed</button>
-                  <button class="chart-tab" data-mode="survival" type="button">Survival</button>
+                  <button class="chart-tab" data-mode="survival" type="button">Completion</button>
                   <button class="chart-tab" data-mode="fitness" type="button">Fitness</button>
                 </div>
                 <div class="chart-kpi-strip" id="hyper-chart-kpis"></div>

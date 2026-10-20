@@ -19,6 +19,7 @@ import * as storage from './storage.js';
 import { NeuralNetwork } from './neuralNetwork.js';
 import { availableCaptures } from './milestones.js';
 import { PRESET_BRAINS } from './presetBrains.js';
+import { createChampionValidationPanel } from './championValidationUi.js';
 import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
 
 const $ = (id) => document.getElementById(id);
@@ -54,6 +55,7 @@ if (savedState) {
 }
 
 const renderer = new Renderer($('track-canvas'), currentTrack);
+const championPanel = createChampionValidationPanel(sim, () => $('track-select')?.value || initialPreset, () => hyperLaps);
 
 let renderer3d = null;
 try {
@@ -1754,6 +1756,7 @@ function fmtDuration(seconds) {
 let lastHyperTelemetryUpdate = 0;
 
 function updateHyperTelemetryUi(rateStr) {
+  championPanel.refresh();
   const insights = analyzeTrainingProgress(sim.history, sim, rateStr);
 
   const bannerBadge = $('hyper-health-badge');
@@ -1844,9 +1847,11 @@ function updateHyperTelemetryUi(rateStr) {
       const pop = lastRecord.population || 20;
       const fin = lastRecord.finishers || 0;
       const pct = Math.round((fin / pop) * 100);
-      statPopSurvival.textContent = `${fin}/${pop} (${pct}%)`;
+      statPopSurvival.textContent = `${pct}%`;
+      if ($('hyper-population-detail')) $('hyper-population-detail').textContent = `${fin}/${pop} · latest race`;
     } else {
       statPopSurvival.textContent = '–';
+      if ($('hyper-population-detail')) $('hyper-population-detail').textContent = 'Latest training race';
     }
   }
 
@@ -2273,6 +2278,7 @@ function setHyperLaps(laps) {
     CONFIG.generation.maxLaps = hyperLaps;
     CONFIG.generation.timeLimit = hyperLaps === 1 ? 26 : (hyperLaps === 2 ? 50 : (hyperLaps * 22));
   }
+  championPanel.refresh();
 }
 
 document.querySelectorAll('#hub-lap-chips .hub-lap-chip').forEach((btn) => {
@@ -2492,9 +2498,11 @@ function runHyperBatch() {
         const pop = lastRecord.population || 20;
         const fin = lastRecord.finishers || 0;
         const pct = Math.round((fin / pop) * 100);
-        statPopSurvival.textContent = `${fin}/${pop} (${pct}%)`;
+        statPopSurvival.textContent = `${pct}%`;
+        if ($('hyper-population-detail')) $('hyper-population-detail').textContent = `${fin}/${pop} · latest race`;
       } else {
         statPopSurvival.textContent = '–';
+        if ($('hyper-population-detail')) $('hyper-population-detail').textContent = 'Latest training race';
       }
     }
 
@@ -2597,6 +2605,7 @@ function updateHighestGenAndLiveSnapshot() {
       history: [...(sim.history || [])],
       genomes: sim.cars.map((c) => Array.from(c.brain.genome)),
       allTimeBest: sim.allTimeBest ? { ...sim.allTimeBest, genome: Array.from(sim.allTimeBest.genome) } : null,
+      lastRaceChampion: sim.lastRaceChampion,
       currentGenomes: sim.cars.map((c) => Array.from(c.brain.genome)),
       capturedPresets: [...sim.capturedPresets],
       captureEnabled: sim.captureEnabled,

@@ -89,7 +89,7 @@ function drawPaceInsightsAtHeight(chart, h) {
   const cards = [
     [model.recordGain === null ? 'No record yet' : `${seconds(model.recordGain)} record gain`, `${model.sinceRecord ?? '—'} gens since last record`, '#38bdf8'],
     [gapDirection, `First vs last ${model.comparisonSize} gens · median gap`, model.gapChange > 0 ? '#fbbf24' : '#34d399'],
-    [model.finishRate === null ? 'Finish rate unavailable' : `${Math.round(model.finishRate * 100)}% finish rate`,
+    [model.finishRate === null ? 'Population finish unavailable' : `${Math.round(model.finishRate * 100)}% population finish`,
       `${model.finished}/${model.starters} cars · last ${model.finishWindow} gens`, '#c4b5fd'],
   ];
   const portrait = w < 650;
@@ -155,7 +155,7 @@ function drawPaceInsightsAtHeight(chart, h) {
   series('gap', GY, 'rgba(52,211,153,0.27)');
   // Missing measurements remain visible as gaps even when a rolling median exists.
   series('gapMedian', GY, '#34d399', 2, false, false, 'gap');
-  text('FINISH RATE', left, survival.top - 10, '#c4b5fd', 9);
+  text('POPULATION FINISH', left, survival.top - 10, '#c4b5fd', 9);
   text('Each bar = cars finishing / starters · blank = unavailable', w - right, survival.top - 10, '#8796aa', w < 650 ? 7 : 9, 'right');
   ctx.fillStyle = 'rgba(196,181,253,0.05)'; ctx.fillRect(left, survival.top, width, survival.height);
   const barWidth = Math.max(1, width / rows.length - 1);

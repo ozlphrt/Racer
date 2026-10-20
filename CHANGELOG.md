@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.8 — 2026-10-20
+
+- Separate population completion from champion validation inside the existing completion tile. Label historical finish charts and training summaries as population measurements.
+- Add an explicit champion test: freeze the latest completed-race winner (fall back to the saved best brain), run 20 solo starts at the selected Lab distance in a dedicated worker, and display only measured results with their generation and lap count.
+- Keep validation separate from training, records and milestone captures. Support cancellation and clear results when their context changes; do not manufacture or restore a success value on reload.
+- Preserve the latest completed-race champion in saves. Verify success and failure counting, configuration restoration, champion save/reload, and track changes in 73 passing regression checks. Confirm the compact dashboard fits without scrolling.
+
 ## 1.5.7 — 2026-10-20
 
 - Help slow AI cars stranded while braking in runoff rejoin through gentle throttle and forward centerline steering. Release the assistance inside the curb; exclude manual controls, normal racing, fast departures and cars beyond the hard boundary.

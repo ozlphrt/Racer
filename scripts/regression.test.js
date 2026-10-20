@@ -25,6 +25,8 @@ import { evolve, resetStagnation, getBurstGensRemaining } from '../js/genetics.j
 import { trainingStatus } from '../js/trainingStatus.js';
 import { summarizeCrashes, crashDiagnosticMarkup, approachDiagnosticMarkup } from '../js/crashDiagnostics.js';
 import { CrashApproachRecorder, analyzeApproach, summarizeApproaches } from '../js/crashApproach.js';
+import { validateChampion } from '../js/championValidation.js';
+import { physicsSignature } from '../js/milestones.js';
 
 test('pre-crash recorder wraps without growing and preserves the final two seconds in order', () => {
   const car = new Simulation(track(), CONFIG).cars[0];
@@ -225,7 +227,7 @@ test('training banner uses observed records and completion instead of old peak f
     bestLap: 11.43, best: 280600, population: 20, finishers: 8 }));
   let status = trainingStatus(history, 11.43);
   assert.equal(status.statusText, 'COMPLETION NEEDS WORK');
-  assert.match(status.message, /40% completed/);
+  assert.match(status.message, /40% of the evolving population finished/);
   assert.match(status.message, /99 generations/);
   history.push({ ...history.at(-1), generation: 101, bestLap: 11.40 });
   assert.equal(trainingStatus(history, 11.40).statusText, 'PACE BREAKTHROUGH');
@@ -499,6 +501,42 @@ test('the proven Gen 5000 policy keeps identical five-lap trajectories from ever
     assert.deepEqual([enabled.x, enabled.y, enabled.angle, enabled.lapTimes],
       [baseline.x, baseline.y, baseline.angle, baseline.lapTimes]);
   }
+});
+
+test('champion validation measures twenty independent starts without breeding or save access', async () => {
+  const config = structuredClone(CONFIG), circuit = track();
+  const before = JSON.stringify(CONFIG), progress = [];
+  const request = { config, trackKey: 'grand-prix', signature: physicsSignature(circuit, config),
+    genome: [...PRESET_BRAINS['grand-prix:5000'].genome] };
+  const result = await validateChampion(request, ({ tested }) => progress.push(tested));
+  assert.equal(result.tested, 20);
+  assert.equal(result.finished, 20);
+  assert.equal(result.assisted, 0);
+  assert.equal(result.laps, 5);
+  assert.deepEqual(progress, Array.from({ length: 20 }, (_, i) => i + 1));
+  assert.deepEqual(result.results.map(r => r.slot), Array.from({ length: 20 }, (_, i) => i));
+  assert.equal(JSON.stringify(CONFIG), before);
+  const failed = await validateChampion({ ...request, genome: request.genome.map(() => 0) });
+  assert.equal(failed.finished, 0, 'failed starts are counted instead of presenting a success placeholder');
+  await assert.rejects(validateChampion({ ...request, signature: 'different physics' }), /changed/);
+  assert.equal(JSON.stringify(CONFIG), before, 'configuration is restored after failures too');
+});
+
+test('the latest completed race champion survives saving and clears on track changes', t => {
+  storageFixture(t);
+  const sim = new Simulation(track(), CONFIG), car = sim.cars[0];
+  car.finished = true; car.finishTime = 60; car.lapTimes = [12, 12, 12, 12, 12]; car.laps = 5;
+  const expected = Array.from(car.brain.genome);
+  sim.endGeneration();
+  assert.deepEqual(sim.lastRaceChampion.genome, expected);
+  assert.equal(sim.lastRaceChampion.generation, 1);
+  assert.equal(saveTrainingState(sim, layers), true);
+  const loaded = loadTrainingState(layers);
+  const resumed = new Simulation(track(), CONFIG);
+  resumed.resumeState(loaded);
+  assert.deepEqual(Array.from(resumed.lastRaceChampion.genome), expected);
+  resumed.setTrack(track('simple-loop'), true);
+  assert.equal(resumed.lastRaceChampion, null);
 });
 
 test('gentle side contact preserves shared forward pace and settles without repeated bounce', () => {

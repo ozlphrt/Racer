@@ -55,6 +55,15 @@ synthesize later generations or install them as browser presets.
 
 ## Reproducing start reliability
 
+The Training Lab's **Population finish** measures the evolving field, including
+mutated offspring. **Champion test → Validate** freezes the latest completed
+race winner (or the saved best brain before a new winner exists) and tests it
+from 20 solo starts at the selected Lab distance. Results appear only after
+the test completes and identify the tested generation; these are not traffic
+tests. Validation runs in a background worker, can be cancelled, and never
+updates training records or brains. Changing distance, track, physics or
+resetting training clears the result. Reloading starts with **Not tested**.
+
 Run `node scripts/analyze-starts.js path/to/brain-export.json 25 10822` to seed
 25 training generations from an exported champion with a repeatable random seed.
 The JSON output reports completion, crashes, early S1 crashes and grid-slot
@@ -72,6 +81,12 @@ replay those same policies with low-speed recovery and the unchanged 1.8-second
 deadline. Recovery uses gentle throttle and a forward centerline target only for
 slow AI cars braking in runoff, and releases control once the car is inside the
 curb. Manual driving and normal racing continue to use their existing controls.
+
+Use `node scripts/analyze-departures.js path/to/brain-export.json 25 11464` for
+sector crash counts, outcomes after assisted rejoins, and S3 traces. The script
+replays S3 failures with recovery disabled to distinguish a rejoin problem from
+a policy that would otherwise have failed earlier. Results describe newly
+seeded offline populations rather than the browser's original population.
 
 ## Controls
 

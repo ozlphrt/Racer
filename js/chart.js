@@ -910,7 +910,7 @@ export class FitnessChart {
 
     this.updateKpiStrip([
       { label: 'FINISHERS', val: `${liveFin}/${livePop}`, cls: 'white' },
-      { label: 'SURVIVAL', val: `${livePct}%`, cls: livePct >= 90 ? 'green' : (livePct >= 60 ? 'gold' : 'subtle'), dot: '#34d399' },
+      { label: 'POP FINISH', val: `${livePct}%`, cls: livePct >= 90 ? 'green' : (livePct >= 60 ? 'gold' : 'subtle'), dot: '#34d399' },
       { label: '200G MEAN', val: `${winMean}%`, cls: 'cyan' },
       { label: 'ATTRITION', val: `${liveAttrition}%`, cls: liveAttrition > 30 ? 'subtle' : 'green' }
     ]);

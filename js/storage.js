@@ -115,6 +115,7 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
         : null,
       isRealCarTelemetry: Boolean(simState.isRealCarTelemetry),
       allTimeBest: bestToSave ? pack(bestToSave, layers) : null,
+      lastRaceChampion: simState.lastRaceChampion || null,
       currentGenomes,
       mutationRate: typeof simState.mutationRate === 'number' ? simState.mutationRate : null,
       trackPreset: trackKey,
@@ -213,6 +214,10 @@ export function loadTrainingState(layers) {
     }
 
     let currentGenomes = null;
+    let lastRaceChampion = null;
+    if (data.lastRaceChampion) {
+      try { lastRaceChampion = validate({ ...data.lastRaceChampion, layers }, layers); } catch {}
+    }
     if (Array.isArray(data.currentGenomes) && data.currentGenomes.length > 0) {
       const expectedSize = NeuralNetwork.genomeSize(layers);
       const validGenomes = [];
@@ -241,6 +246,7 @@ export function loadTrainingState(layers) {
       recordLapTelemetry: hasRealTelemetry ? data.recordLapTelemetry : null,
       isRealCarTelemetry: hasRealTelemetry,
       allTimeBest,
+      lastRaceChampion,
       currentGenomes,
       mutationRate: typeof data.mutationRate === 'number' ? data.mutationRate : null,
       trackPreset: data.trackPreset || 'grand-prix',
