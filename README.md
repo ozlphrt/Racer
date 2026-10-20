@@ -55,6 +55,11 @@ synthesize later generations or install them as browser presets.
 
 ## Reproducing start reliability
 
+For the separate cornering and lookahead research tools, see
+[offline experiment instructions](scripts/OFFLINE-EXPERIMENTS.md) and
+[measured results](docs/cornering-experiment-results.md). These experiments do
+not replace the live driving model or saved champion.
+
 The Training Lab's **Population finish** measures the evolving field, including
 mutated offspring. **Champion test → Validate** freezes the latest completed
 race winner (or the saved best brain before a new winner exists) and tests it

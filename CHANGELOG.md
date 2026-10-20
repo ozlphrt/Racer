@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.9 — 2026-10-20
+
+- Save the reproducible offline cornering search and the separate 12-input lookahead prototype, with near/far curvature preview and preservation of the original policy when new weights are zero.
+- Include prototype tests in the regression command and document how to reproduce experiments without touching browser saves, active champions or milestone captures.
+- Record the experiment results: 1,776 original-model variant trials and 2,158 lookahead-model trials. The strongest lookahead finalist finishes 20/20 solo five-lap starts, averages 0.2083s faster per race and spends about 8% less time at near-full brake at the reference slot. No finalist beats the 10.7667s baseline best lap or passes the complete promotion gate.
+- Keep the live driving model and champion unchanged. The experimental model is offline-only and is not installed as a live brain or captured milestone.
+
 ## 1.5.8 — 2026-10-20
 
 - Separate population completion from champion validation inside the existing completion tile. Label historical finish charts and training summaries as population measurements.
