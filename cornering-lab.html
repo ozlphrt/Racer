@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="application-version" content="1.5.10">
+  <title>Cornering comparison · AI Racer</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#0b111b;color:#e6eef8;font:14px system-ui,sans-serif;height:100dvh;display:grid;grid-template-rows:auto 1fr auto}
+    header,footer{padding:12px 18px;background:#101a29;display:flex;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0}header p{margin:3px 0 0;color:#a6b9cd;font-size:12px}a{color:#72d6ff}label{display:flex;align-items:center;gap:7px}select,button{font:inherit;color:inherit;background:#1e3047;border:1px solid #49617d;border-radius:6px;padding:7px 10px}button{cursor:pointer}main{position:relative;min-height:0}canvas{display:block;width:100%;height:100%}.cards{position:absolute;top:12px;left:12px;display:flex;gap:8px;pointer-events:none}.card{padding:10px 14px;background:#0b1423e8;border:1px solid #44607b;border-radius:8px;min-width:180px}.card h2{font-size:13px;margin:0 0 5px}.card output{display:block;font-variant-numeric:tabular-nums;line-height:1.7}.card small{color:#a6b9cd}.brake{height:5px;background:#2b3e55;margin-top:6px}.brake span{display:block;height:100%;width:0;background:#fb7185}#status{color:#a6b9cd;font-size:12px;margin-left:auto}#error{position:absolute;bottom:15px;left:15px;color:#ffb4b4;background:#161c29;padding:12px;max-width:85%}[hidden]{display:none!important}@media(max-width:650px){header,footer{padding:8px;gap:8px}.card{min-width:140px;padding:7px}.cards{left:6px;top:6px;gap:6px}.card output{font-size:12px}#status{margin:0}}
+  </style>
+</head>
+<body>
+  <header><div><h1 id="heading">Cornering comparison</h1><p id="description">Saved Gen 11464 brain vs map-based planner · separate solo runs · training saves untouched</p></div><a href="./">Back to race</a></header>
+  <main>
+    <canvas id="view" aria-label="Three-dimensional cornering comparison"></canvas>
+    <div class="cards">
+      <section class="card"><h2 id="champion-heading">Saved champion</h2><output id="champion-stats">Waiting for start</output><small id="champion-brake">Brake 0%</small><div class="brake"><span id="champion-bar"></span></div></section>
+      <section class="card"><h2 id="planner-heading">Experimental planner</h2><output id="planner-stats">Waiting for start</output><small id="planner-brake">Brake 0%</small><div class="brake"><span id="planner-bar"></span></div></section>
+    </div>
+    <div id="error" role="alert" hidden></div>
+  </main>
+  <footer>
+    <label>Mode <select id="mode"><option value="comparison">Comparison</option><option value="grid">20-car race</option></select></label>
+    <label>Watch <select id="focus"><option value="planner">Planner</option><option value="champion">Champion</option></select></label>
+    <label>Camera <select id="camera"><option value="onboard">Onboard</option><option value="chase">Chase</option><option value="heli">Helicopter</option></select></label>
+    <label>Speed <select id="speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+    <button id="pause" type="button">Pause</button><button id="restart" type="button">Restart</button>
+    <span id="status">Loading comparison…</span>
+  </footer>
+  <script type="module" src="./experiments/corneringLab.js"></script>
+</body>
+</html>

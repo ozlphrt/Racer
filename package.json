@@ -1,6 +1,6 @@
 {
   "name": "ai-racer",
-  "version": "1.5.9",
+  "version": "1.5.10",
   "private": true,
   "description": "Neuroevolution sandbox: cars learn to stay on track and race fast.",
   "type": "module",
@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "start": "vite",
     "test:headless": "node scripts/headless-train.js",
-    "test:regression": "node --test scripts/regression.test.js scripts/lookahead.test.js",
+    "test:regression": "node --test scripts/regression.test.js scripts/lookahead.test.js scripts/racingLinePlanner.test.js",
     "bundle:brains": "node scripts/bundle-captured-presets.js"
   },
   "devDependencies": {

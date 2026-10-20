@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.10 — 2026-10-20
+
+- Add an optional Experimental Planner Race from Mode & Track: a separate 20-car, five-lap non-contact mode using a map-based path and speed plan. Include onboard, chase and helicopter cameras, car selection, pause and restart, plus the saved-brain comparison view.
+- Keep planner races separate from neural training, captured milestones, saved brains and historical training records. Existing gameplay retains its neural controller. Onboard focus stays attached when the leader changes through a turn.
+- Refine launch-lap target speed to join the racing line safely. The selected planner completes 100/100 independently perturbed solo starts without runoff or recovery, averaging 56.7262s versus the saved Gen 11464 champion's 57.4033s over five laps. A full 20-car field also finishes without runoff or recovery.
+- Preserve reproducible brake-ablation, racing-line search, startup refinement and validation scripts, with measured results and limitations. The planner uses whole-track geometry and is not a captured neural brain or a validated contact-racing controller.
+- Verify 81 regression checks, production builds of both pages, and complete solo-comparison and full-grid browser races. User review confirms smoother cornering in both views.
+
 ## 1.5.9 — 2026-10-20
 
 - Save the reproducible offline cornering search and the separate 12-input lookahead prototype, with near/far curvature preview and preservation of the original policy when new weights are zero.
