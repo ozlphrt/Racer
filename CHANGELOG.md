@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.19 — 2026-10-21
+
+- Insert new points into the nearest section of the existing smoothed track instead of appending them to the end. Preserve the start/finish point and keep initial freehand sketching available.
+- Add a point context menu: right-click a control point and choose Remove point. Support Undo, keyboard context menus, Escape dismissal and viewport-safe menu placement.
+- Verify insertion in ordinary and closing spline spans, browser point insertion/removal/undo, 104 regression checks and the production build.
+
+
 ## 1.5.18 — 2026-10-21
 
 - Add Track Studio: draw a closed circuit freehand or place corners, drag points to reshape it, undo edits, reverse direction and move start/finish. Support mouse, pen, touch and keyboard drawing.

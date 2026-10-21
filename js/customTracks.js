@@ -1,10 +1,33 @@
 import { Track, TRACK_PRESETS } from './track.js';
-import { distPointSegSq } from './math.js';
+import { catmullRom, distPointSegSq } from './math.js';
 
 export const CUSTOM_TRACKS_KEY = 'ai-racer:custom-tracks:v1';
 export const DRAWING_SIZE = { width: 1600, height: 1000 };
 const validPoint = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&
   p.x >= 0 && p.x <= DRAWING_SIZE.width && p.y >= 0 && p.y <= DRAWING_SIZE.height;
+
+/** Insert into the nearest spline span, keeping start/finish at index zero. */
+export function insertTrackPoint(points, point) {
+  if (points.length >= 80 || !validPoint(point)) return null;
+  let index = points.length;
+  if (points.length >= 4) {
+    let closest = Infinity;
+    const n = points.length;
+    for (let i = 0; i < n; i++) {
+      const p0 = points[(i - 1 + n) % n], p1 = points[i], p2 = points[(i + 1) % n], p3 = points[(i + 2) % n];
+      let previous = p1;
+      for (let step = 1; step <= 48; step++) {
+        const next = catmullRom(p0, p1, p2, p3, step / 48);
+        const distance = distPointSegSq(point.x, point.y, previous.x, previous.y, next.x, next.y);
+        if (distance < closest) { closest = distance; index = i + 1; }
+        previous = next;
+      }
+    }
+  }
+  const result = points.map(p => ({ ...p }));
+  result.splice(index, 0, { x: point.x, y: point.y });
+  return { points: result, index };
+}
 
 /** Validate the actual smoothed road, rather than just its control polygon. */
 export function inspectCustomTrack(points, width = 84) {

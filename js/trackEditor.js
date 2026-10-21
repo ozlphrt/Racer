@@ -1,8 +1,9 @@
 import { CONFIG } from './config.js';
-import { CUSTOM_TRACKS_KEY, DRAWING_SIZE, inspectCustomTrack, readCustomTracks, saveCustomTrack, simplifyStroke } from './customTracks.js';
+import { CUSTOM_TRACKS_KEY, DRAWING_SIZE, inspectCustomTrack, insertTrackPoint, readCustomTracks, saveCustomTrack, simplifyStroke } from './customTracks.js';
 
 const $ = id => document.getElementById(id);
 const drawing = $('track-drawing'), nameInput = $('track-name');
+const pointMenu = $('point-context-menu'), menuRemove = $('point-menu-remove');
 const DRAFT_KEY = 'ai-racer:track-draft:v1';
 const ns = 'http://www.w3.org/2000/svg';
 const make = (tag, attributes) => {
@@ -99,12 +100,50 @@ function location(event) {
   return { x: Math.round(Math.max(60, Math.min(DRAWING_SIZE.width - 60, local.x))),
     y: Math.round(Math.max(60, Math.min(DRAWING_SIZE.height - 60, local.y))) };
 }
+function nearestHandle(p) {
+  let distance = 24, at = -1;
+  points.forEach((q, i) => { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < distance) { distance = d; at = i; } });
+  return at;
+}
+function closePointMenu(restoreFocus = false) {
+  pointMenu.hidden = true;
+  if (restoreFocus) drawing.focus();
+}
+function openPointMenu(at, x, y) {
+  if (at < 0 || gesture) return;
+  selected = at; render();
+  pointMenu.hidden = false;
+  const bounds = pointMenu.getBoundingClientRect();
+  pointMenu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8))}px`;
+  pointMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - bounds.height - 8))}px`;
+  menuRemove.focus();
+}
+drawing.addEventListener('contextmenu', event => {
+  const at = nearestHandle(location(event));
+  if (at < 0) { closePointMenu(); return; }
+  event.preventDefault(); openPointMenu(at, event.clientX, event.clientY);
+});
+menuRemove.addEventListener('click', () => { closePointMenu(); $('remove-point').click(); drawing.focus(); });
+pointMenu.addEventListener('keydown', event => {
+  if (event.key === 'Escape' || event.key === 'Tab') { closePointMenu(true); event.preventDefault(); }
+});
+document.addEventListener('pointerdown', event => { if (!pointMenu.contains(event.target)) closePointMenu(); }, true);
+window.addEventListener('resize', () => closePointMenu());
+document.addEventListener('scroll', () => closePointMenu(), true);
 drawing.addEventListener('pointerdown', event => {
   if (event.button !== 0 || gesture) return;
   event.preventDefault(); drawing.focus(); drawing.setPointerCapture(event.pointerId);
-  const p = location(event), at = points.findIndex(q => Math.hypot(p.x - q.x, p.y - q.y) < 24);
-  checkpoint(); selected = at;
-  gesture = { pointerId: event.pointerId, before: copy(points), at, stroke: at < 0 ? [p] : null };
+  const p = location(event);
+  let at = nearestHandle(p);
+  checkpoint();
+  const before = copy(points);
+  if (at < 0 && points.length >= 4) {
+    const inserted = insertTrackPoint(points, p);
+    if (!inserted) { undo.pop(); drawing.releasePointerCapture(event.pointerId); status('Use fewer than 80 control points.'); return; }
+    points = inserted.points; at = inserted.index;
+  }
+  selected = at;
+  gesture = { pointerId: event.pointerId, before, at, stroke: at < 0 ? [p] : null };
   render();
 });
 drawing.addEventListener('pointermove', event => {
@@ -131,6 +170,15 @@ drawing.addEventListener('pointerup', finishGesture);
 drawing.addEventListener('pointercancel', finishGesture);
 drawing.addEventListener('lostpointercapture', event => { if (gesture) finishGesture({ pointerId: event.pointerId, type: 'pointercancel' }); });
 drawing.addEventListener('keydown', event => {
+  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+    event.preventDefault();
+    const at = selected >= 0 ? selected : nearestHandle(cursor);
+    if (at >= 0) {
+      const p = drawing.createSVGPoint(); p.x = points[at].x; p.y = points[at].y;
+      const screen = p.matrixTransform(drawing.getScreenCTM()); openPointMenu(at, screen.x, screen.y);
+    }
+    return;
+  }
   const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   if (directions[event.key]) {
     event.preventDefault(); const [dx, dy] = directions[event.key], step = event.shiftKey ? 10 : 50;
@@ -138,7 +186,8 @@ drawing.addEventListener('keydown', event => {
     $('keyboard-cursor').setAttribute('visibility', 'visible'); render();
   } else if (event.code === 'Space' || event.key === 'Enter') {
     event.preventDefault();
-    if (points.length < 80) { checkpoint(); points.push({ ...cursor }); selected = points.length - 1; render(); }
+    const inserted = insertTrackPoint(points, cursor);
+    if (inserted) { checkpoint(); points = inserted.points; selected = inserted.index; render(); }
   } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); $('undo').click(); }
   else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); $('remove-point').click(); }
 });

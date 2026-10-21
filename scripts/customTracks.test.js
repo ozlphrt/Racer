@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { CONFIG } from '../js/config.js';
 import { Track, TRACK_PRESETS } from '../js/track.js';
 import { CUSTOM_TRACKS_KEY, inspectCustomTrack, simplifyStroke, readCustomTracks,
-  saveCustomTrack, registerCustomTracks, savedCircuitMatches } from '../js/customTracks.js';
+  saveCustomTrack, registerCustomTracks, savedCircuitMatches, insertTrackPoint } from '../js/customTracks.js';
+import { catmullRom } from '../js/math.js';
 import { validateChampion } from '../js/championValidation.js';
 import { physicsSignature } from '../js/milestones.js';
 import { NeuralNetwork } from '../js/neuralNetwork.js';
@@ -18,6 +19,26 @@ function storage() {
   const data = new Map();
   return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, String(v)), removeItem: k => data.delete(k) };
 }
+
+test('adding a corner inserts it into the closest track span instead of appending it', () => {
+  const points = oval(), original = structuredClone(points);
+  for (const span of [0, 3, 7, 11]) {
+    const p = catmullRom(points[(span + 11) % 12], points[span], points[(span + 1) % 12], points[(span + 2) % 12], 0.45);
+    const inserted = insertTrackPoint(points, p);
+    assert.equal(inserted.index, span + 1);
+    assert.deepEqual(inserted.points[inserted.index], p);
+    assert.deepEqual(inserted.points[0], points[0], 'keep the start line, including insertion in the closing span');
+    assert.deepEqual(inserted.points.filter((_, i) => i !== inserted.index), points);
+  }
+  assert.deepEqual(points, original, 'insertion must not mutate an undo snapshot');
+});
+
+test('initial sketches append points and full or invalid insertions leave the outline intact', () => {
+  const initial = oval().slice(0, 3), point = { x: 500, y: 500 };
+  assert.equal(insertTrackPoint(initial, point).index, 3);
+  assert.equal(insertTrackPoint(Array.from({ length: 80 }, () => point), point), null);
+  assert.equal(insertTrackPoint(initial, { x: NaN, y: 0 }), null);
+});
 
 test('drawn circuits produce a smooth, closed, finite road with the requested start direction', () => {
   const inspection = inspectCustomTrack(oval());

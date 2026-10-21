@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="application-version" content="1.5.18">
+  <meta name="application-version" content="1.5.19">
   <title>Track Studio · AI Racer</title>
   <link rel="stylesheet" href="./css/track-editor.css">
 </head>
@@ -34,7 +34,7 @@
       </section>
       <section>
         <h2>REFINE YOUR LINE</h2>
-        <p class="hint">Drag any blue point to reshape a corner. The arrow marks your driving direction.</p>
+        <p class="hint">Click to insert a point into the nearest track section. Drag points to reshape corners; right-click a point to remove it.</p>
         <div class="tool-grid">
           <button id="set-start" class="button quiet" type="button" disabled>Start here</button>
           <button id="remove-point" class="button quiet" type="button" disabled>Remove point</button>
@@ -70,6 +70,9 @@
       <footer class="drawing-footer"><span>Keep the road inside the boundary. Avoid crossings and overlapping corners.</span><span>1600 × 1000</span></footer>
     </section>
   </main>
+  <div id="point-context-menu" class="point-context-menu" role="menu" aria-label="Track point actions" hidden>
+    <button id="point-menu-remove" type="button" role="menuitem">Remove point</button>
+  </div>
   <script type="module" src="./js/trackEditor.js"></script>
 </body>
 </html>
