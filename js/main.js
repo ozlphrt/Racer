@@ -27,6 +27,19 @@ const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
 
 // ---------- Startup restoration (Immediate) ----------
+// Recovery links are explicit and apply once in this browser/origin. A normal
+// refresh must always retain subsequent training progress.
+const startupUrl = new URL(window.location.href);
+let counterRepair = null;
+if (startupUrl.searchParams.get('repair-generation') === '5000') {
+  try {
+    counterRepair = storage.repairGenerationCounter(LAYERS, 5000);
+    startupUrl.searchParams.delete('repair-generation');
+    window.history.replaceState(null, '', startupUrl);
+  } catch (error) {
+    counterRepair = { error: error.message };
+  }
+}
 const localSavedState = storage.loadTrainingState(LAYERS);
 const startup = resolveStartupState(localSavedState, CONFIG, PRESET_BRAINS);
 const savedState = startup.state;
@@ -3375,7 +3388,11 @@ function frame(now) {
 }
 
 // ---------- Startup UI sync ----------
-if (startup.source === 'bundled') {
+if (counterRepair?.error) {
+  toast(counterRepair.error, 'error');
+} else if (counterRepair?.applied) {
+  toast('Counter restarted at Gen 5000. Brain weights kept; original saves backed up.', 'success');
+} else if (startup.source === 'bundled') {
   toast('Started from bundled Generation 5K 🏁', 'success');
 } else if (savedState && (sim.generation > 1 || sim.allTimeBest || sim.history.length > 0)) {
   toast(`Resumed training from Generation ${sim.generation} 🏁`, 'success');

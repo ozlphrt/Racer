@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.16 — 2026-10-21
+
+- Add an explicit one-time recovery link to restart the generation counter at 5000 while preserving the current population, champion weights, captured presets and lap records.
+- Archive all original save keys separately before applying recovery; keep the old numbered history in that archive and begin a clean generation sequence. Rebase the fallback brain counter too so it cannot restore the unwanted number.
+- Remove the recovery parameter after success and retain a completion receipt so reopening the link preserves subsequent progress. Abort if the archive cannot be stored and roll back partially failed writes.
+- Verify counter repair, exact loaded weights, backup retention, subsequent save/reload, repeated recovery, storage failures and 95 regression checks.
+
+
 ## 1.5.15 — 2026-10-21
 
 - Smooth external camera turns with bounded angular speed and acceleration, including sharp bends, steering reversals and angle wrapping. Remove chase-camera catch-up acceleration and instant front-camera position pushes.

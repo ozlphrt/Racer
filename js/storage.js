@@ -4,6 +4,7 @@ const KEY_BRAIN = 'ai-racer:best-brain:v1';
 const KEY_STATE = 'ai-racer:training-state:v2';
 const KEY_BACKUP = 'ai-racer:training-state:backup';
 const KEY_ANCHOR = 'ai-racer:generation-anchor';
+const KEY_GENERATION_REPAIR = 'ai-racer:generation-repair:5000:v1';
 const populationSaveCache = new WeakMap();
 
 function pack(best, layers) {
@@ -174,6 +175,55 @@ export function loadTrainingState(layers) {
     history: [], bestLapEver: legacy.bestLap, lastRaceChampion: null,
     recordLapTelemetry: null, isRealCarTelemetry: false, capturedPresets: [], captureEnabled: false,
     mutationRate: null, trackPreset: 'grand-prix', savedAt: legacy.savedAt || null };
+}
+
+/** Explicit, one-time counter repair. Keep weights; archive every original save. */
+export function repairGenerationCounter(layers, generation = 5000) {
+  if (generation !== 5000) throw new Error('This recovery only restarts counting from Gen 5000');
+  const receipt = JSON.parse(localStorage.getItem(KEY_GENERATION_REPAIR) || 'null');
+  if (receipt?.applied) return { applied: false, alreadyApplied: true };
+  const state = loadTrainingState(layers);
+  const keys = [KEY_STATE, KEY_BACKUP, KEY_BRAIN, KEY_ANCHOR,
+    'ai-racer:training-state:v1', 'ai-racer:training-state'];
+  // This archive is separate from rotating autosave backups. If quota prevents
+  // it being written, abort before touching the active population or counter.
+  const archive = receipt || { from: state?.generation ?? null, to: generation, applied: false,
+    savedAt: new Date().toISOString(), originals: Object.fromEntries(keys.map(k => [k, localStorage.getItem(k)])) };
+  localStorage.setItem(KEY_GENERATION_REPAIR, JSON.stringify(archive));
+  if (!state) {
+    localStorage.setItem(KEY_GENERATION_REPAIR, JSON.stringify({ ...archive, applied: true }));
+    return { applied: false, empty: true };
+  }
+  const genomes = state.currentGenomes || [state.allTimeBest.genome];
+  const savedAt = new Date().toISOString();
+  const best = state.allTimeBest ? { ...state.allTimeBest, layers: [...layers],
+    genome: Array.from(state.allTimeBest.genome), generation, savedAt } : null;
+  const repaired = { ...state, version: 4, generation, populationGeneration: generation, savedAt,
+    currentGenomes: genomes.map(genome => Array.from(genome)),
+    // Keep the historical measurements in the archive, rather than attributing
+    // 130K-labelled races to a newly restarted generation sequence.
+    history: [], lastRaceChampion: null,
+    allTimeBest: best };
+  try {
+    const json = JSON.stringify(repaired);
+    localStorage.setItem(KEY_STATE, json);
+    localStorage.setItem(KEY_BACKUP, json);
+    localStorage.setItem(KEY_BRAIN, JSON.stringify(best || { layers: [...layers],
+      genome: Array.from(genomes[0]), generation, fitness: null, bestLap: null, savedAt }));
+    localStorage.setItem(KEY_ANCHOR, String(generation));
+    localStorage.setItem(KEY_GENERATION_REPAIR, JSON.stringify({ ...archive, applied: true }));
+  } catch (error) {
+    // Undo partial writes. The archive remains available even if the browser
+    // cannot complete the rollback (for example, storage access is revoked).
+    for (const key of keys) {
+      try {
+        if (archive.originals[key] === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, archive.originals[key]);
+      } catch {}
+    }
+    throw error;
+  }
+  return { applied: true, previousGeneration: state.generation, generation };
 }
 
 export function clearTrainingState() {

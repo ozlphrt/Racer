@@ -7,7 +7,7 @@ import { FixedStepClock } from '../js/fixedStepClock.js';
 import { NeuralNetwork } from '../js/neuralNetwork.js';
 import { Track, TRACK_PRESETS } from '../js/track.js';
 import { Simulation } from '../js/simulation.js';
-import { loadTrainingState, saveTrainingState, buildBrainExport, importBrainFile } from '../js/storage.js';
+import { loadTrainingState, saveTrainingState, buildBrainExport, importBrainFile, repairGenerationCounter } from '../js/storage.js';
 import { compatibleCaptures, availableCaptures } from '../js/milestones.js';
 import { PRESET_BRAINS } from '../js/presetBrains.js';
 import { getRenderPose } from '../js/renderPose.js';
@@ -1524,6 +1524,68 @@ test('a truncated primary recovers genomes, history and track from the valid bac
   assert.equal(restored.trackPreset, 'simple-loop');
   assert.deepEqual(Array.from(restored.currentGenomes[0]), genome());
   assert.equal(restored.history.length, 1);
+});
+
+
+test('explicit counter repair keeps exact brains, archives original saves, and only runs once', t => {
+  const memory = storageFixture(t);
+  const weights = genome(); weights[0] = 0.123456789;
+  const original = { ...saved(), version: 4, generation: 130345, populationGeneration: 130345,
+    currentGenomes: [weights], capturedPresets: [{ gen: 10000, genome: weights }],
+    history: [{ generation: 130344, best: 999 }],
+    allTimeBest: { layers, genome: weights, generation: 130100, fitness: 999, bestLap: 8.5 } };
+  const raw = JSON.stringify(original);
+  memory.set('ai-racer:training-state:v2', raw);
+  memory.set('ai-racer:training-state:backup', raw);
+  memory.set('ai-racer:generation-anchor', '130345');
+  assert.equal(loadTrainingState(layers).generation, 130345, 'ordinary startup must not reset an advanced save');
+  assert.equal(repairGenerationCounter(layers).applied, true);
+  const stored = JSON.parse(memory.get('ai-racer:training-state:v2'));
+  assert.equal(stored.generation, 5000);
+  assert.equal(stored.populationGeneration, 5000);
+  assert.deepEqual(stored.currentGenomes, [weights.map(Math.fround)], 'preserve every loaded Float32 brain weight');
+  assert.deepEqual(stored.allTimeBest.genome, weights.map(Math.fround));
+  assert.deepEqual(stored.capturedPresets, original.capturedPresets);
+  assert.equal(stored.bestLapEver, original.bestLapEver);
+  assert.deepEqual(stored.recordLapTelemetry, original.recordLapTelemetry);
+  assert.deepEqual(stored.history, [], 'do not invent races in the corrected sequence');
+  assert.equal(stored.allTimeBest.generation, 5000, 'brain-only fallback must not resurrect the old counter');
+  const archive = JSON.parse(memory.get('ai-racer:generation-repair:5000:v1'));
+  assert.equal(archive.originals['ai-racer:training-state:v2'], raw);
+  assert.equal(archive.applied, true);
+  const sim = new Simulation(track('simple-loop'), CONFIG);
+  sim.resumeState(loadTrainingState(layers));
+  assert.equal(sim.generation, 5000);
+  sim.generation = 5001;
+  assert.equal(saveTrainingState(sim, layers), true);
+  assert.equal(repairGenerationCounter(layers).alreadyApplied, true);
+  assert.equal(loadTrainingState(layers).generation, 5001, 'reopening the repair URL must preserve subsequent training');
+  assert.equal(JSON.parse(memory.get('ai-racer:generation-repair:5000:v1')).originals['ai-racer:training-state:v2'], raw);
+});
+
+test('counter repair aborts before changing progress when its recovery archive cannot be saved', t => {
+  const memory = storageFixture(t);
+  const raw = JSON.stringify({ ...saved(), generation: 130345 });
+  memory.set('ai-racer:training-state:v2', raw);
+  globalThis.localStorage.setItem = () => { throw new Error('Quota exceeded'); };
+  assert.throws(() => repairGenerationCounter(layers), /Quota exceeded/);
+  assert.equal(memory.get('ai-racer:training-state:v2'), raw);
+});
+
+test('a partially failed counter repair restores original save keys and retains its archive', t => {
+  const memory = storageFixture(t);
+  const raw = JSON.stringify({ ...saved(), generation: 130345 });
+  memory.set('ai-racer:training-state:v2', raw);
+  memory.set('ai-racer:training-state:backup', raw);
+  globalThis.localStorage.removeItem = key => memory.delete(key);
+  globalThis.localStorage.setItem = (key, value) => {
+    if (key === 'ai-racer:training-state:backup') throw new Error('Write failed');
+    memory.set(key, String(value));
+  };
+  assert.throws(() => repairGenerationCounter(layers), /Write failed/);
+  assert.equal(memory.get('ai-racer:training-state:v2'), raw);
+  assert.equal(memory.get('ai-racer:training-state:backup'), raw);
+  assert.equal(JSON.parse(memory.get('ai-racer:generation-repair:5000:v1')).applied, false);
 });
 
 test('an orphan 130K anchor cannot manufacture a generation or block current saves', t => {
