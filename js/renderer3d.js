@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 import { CONFIG } from './config.js';
 import { getRenderPose } from './renderPose.js';
+import { smoothCameraHeading } from './cameraMotion.js';
 import { batchStaticMeshes, batchSceneryInstances } from './staticBatch.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RAY_ANGLES } from './car.js';
@@ -6818,6 +6819,8 @@ export class Renderer3D {
   }
 
   resetCamera(followMode = true) {
+    this._cameraHeadings = {};
+    this._cameraZoomHold = 0;
     this._chaseAngle = null;
     this._chaseTargetX = null;
     this._chaseTargetY = null;
@@ -7301,10 +7304,10 @@ export class Renderer3D {
     const p1Y = p1 ? -p1.y : 0;
     const p1Angle = p1 ? -p1.angle : 0;
 
-    // Carry close tracking cameras with the same displayed translation as the
+    // Carry tracking cameras with the same displayed translation as the
     // chassis. Smoothing then affects framing, rather than accumulating speed-
     // and frame-rate-dependent lag behind a moving car.
-    const closeTracking = ['chase', 'action', 'action_rear'].includes(cameraPreset) &&
+    const closeTracking = ['chase', 'action', 'action_rear', 'heli', 'follow'].includes(cameraPreset) &&
       !(cameraPreset === 'chase' && hasFinisher && !opts.manual && p1?.finished);
     const anchor = this._cameraTrackingAnchor;
     if (closeTracking && !isNewStart && anchor?.car === this.focusedCar &&
@@ -7317,6 +7320,8 @@ export class Renderer3D {
         this.controls.target.y += dy;
         if (typeof this._chaseTargetX === 'number') this._chaseTargetX += dx;
         if (typeof this._chaseTargetY === 'number') this._chaseTargetY += dy;
+        if (typeof this._heliTargetX === 'number') this._heliTargetX += dx;
+        if (typeof this._heliTargetY === 'number') this._heliTargetY += dy;
       }
     }
     this._cameraTrackingAnchor = { car: this.focusedCar, preset: cameraPreset, x: p1X, y: p1Y };
@@ -7364,6 +7369,22 @@ export class Renderer3D {
     let camGlide = 0.035;
     let targetGlide = 0.040;
 
+    // Keep turn acceleration bounded even when the car spins or P1 changes.
+    // Wider framing absorbs heading lag instead of increasing the pan speed.
+    if (!this._cameraHeadings || isNewStart) this._cameraHeadings = {};
+    let headingLag = 0;
+    const followHeading = (key, target) => {
+      let motion = this._cameraHeadings[key];
+      if (!motion || this._lastActivePreset !== cameraPreset) {
+        motion = this._cameraHeadings[key] = {
+          angle: typeof this[key] === 'number' ? this[key] : target, speed: 0
+        };
+      }
+      const angle = smoothCameraHeading(motion, target, cameraDt);
+      headingLag = Math.abs(Math.atan2(Math.sin(target - angle), Math.cos(target - angle)));
+      return angle;
+    };
+
     // 2. Camera View & Preset Positioning
     if (cameraPreset === 'orbit' || !opts.follow || !focusCar) {
       destTargetX = p1X;
@@ -7380,14 +7401,7 @@ export class Renderer3D {
       targetGlide = 0.040;
     } else if (cameraPreset === 'action' && focusCar) {
       // ACTION FRONT CAM: Reverse camera floating AHEAD of P1, looking back at P1's nose & P2 behind
-      if (typeof this._actionAngle !== 'number' || this._lastActionFocus !== p1 || this._lastActivePreset !== 'action') {
-        this._actionAngle = refAngle;
-      } else {
-        let diffAngle = refAngle - this._actionAngle;
-        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
-        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionAngle += diffAngle * cameraBlend(0.032);
-      }
+      this._actionAngle = followHeading('_actionAngle', refAngle);
       this._lastActionFocus = p1;
 
       const cosA = Math.cos(this._actionAngle);
@@ -7414,18 +7428,11 @@ export class Renderer3D {
       destTargetZ = 1.8 + p1Elev;
 
       targetFov = Math.max(38, Math.min(54, 38 + (p1p2Dist / 100.0) * 14));
-      camGlide = 0.045;
-      targetGlide = 0.055;
+      camGlide = 0.025;
+      targetGlide = 0.030;
     } else if (cameraPreset === 'action_rear' && focusCar) {
       // ACTION REAR CAM: Low-angle battle pursuit behind the pack, framing P2 & P1
-      if (typeof this._actionRearAngle !== 'number' || this._lastActionRearFocus !== p1 || this._lastActivePreset !== 'action_rear') {
-        this._actionRearAngle = battleAngle;
-      } else {
-        let diffAngle = battleAngle - this._actionRearAngle;
-        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
-        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._actionRearAngle += diffAngle * cameraBlend(0.032);
-      }
+      this._actionRearAngle = followHeading('_actionRearAngle', battleAngle);
       this._lastActionRearFocus = p1;
 
       const cosA = Math.cos(this._actionRearAngle);
@@ -7447,8 +7454,8 @@ export class Renderer3D {
       destTargetZ = 1.8 + p1Elev;
 
       targetFov = Math.max(42, Math.min(66, 42 + (p1p2Dist / 100.0) * 18));
-      camGlide = 0.042;
-      targetGlide = 0.050;
+      camGlide = 0.025;
+      targetGlide = 0.028;
     } else if (cameraPreset === 'follow' && focusCar) {
       // CLASSIC BROADCAST FOLLOW CAM: Smooth high-altitude TV tracking focused on P1 with P2 in view
       destTargetX = p1X;
@@ -7461,8 +7468,8 @@ export class Renderer3D {
       destCamZ = altitude;
 
       targetFov = Math.max(44, Math.min(68, 44 + (p1p2Dist / 90.0) * 16));
-      camGlide = 0.038;
-      targetGlide = 0.045;
+      camGlide = 0.028;
+      targetGlide = 0.030;
     } else if (cameraPreset === 'onboard' && p1) {
       // ONBOARD T-CAM on P1 (Roll-hoop periscope camera elevated above cockpit & halo)
       const targetCar = p1;
@@ -7482,14 +7489,11 @@ export class Renderer3D {
     } else if (cameraPreset === 'heli' && focusCar) {
       // CINEMATIC AERIAL PURSUIT HELICOPTER: High aerial sky tracker framing P1 and P2
       if (typeof this._heliAngle !== 'number' || typeof this._heliTargetX !== 'number') {
-        this._heliAngle = battleAngle;
+        this._heliAngle = followHeading('_heliAngle', battleAngle);
         this._heliTargetX = p1X;
         this._heliTargetY = p1Y;
       } else {
-        let diffAngle = battleAngle - this._heliAngle;
-        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
-        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        this._heliAngle += diffAngle * cameraBlend(0.020);
+        this._heliAngle = followHeading('_heliAngle', battleAngle);
 
         this._heliTargetX += (p1X - this._heliTargetX) * cameraBlend(0.040);
         this._heliTargetY += (p1Y - this._heliTargetY) * cameraBlend(0.040);
@@ -7514,8 +7518,8 @@ export class Renderer3D {
       destTargetZ = 2.0 + p1Elev;
 
       targetFov = Math.max(42, Math.min(68, 42 + (p1p2Dist / 100.0) * 16));
-      camGlide = 0.038;
-      targetGlide = 0.045;
+      camGlide = 0.028;
+      targetGlide = 0.030;
     } else if (cameraPreset === 'broadcast') {
       // TV GANTRY CAMERA (Fixed Start / Finish Gantry view)
       const cx = t.cx[0];
@@ -7541,7 +7545,7 @@ export class Renderer3D {
 
       targetFov = Math.max(42, Math.min(62, 42 + (p1p2Dist / 80.0) * 14));
       camGlide = 0.040;
-      targetGlide = 0.050;
+      targetGlide = 0.028;
     } else {
       // DEFAULT: 'chase' preset (Dynamic 3rd-person follow tracking P1)
       if (hasFinisher && !opts.manual && p1 && p1.finished) {
@@ -7562,7 +7566,7 @@ export class Renderer3D {
 
         targetFov = 42;
         camGlide = 0.040;
-        targetGlide = 0.050;
+        targetGlide = 0.028;
       } else if (p1) {
         const carAngle3D = -p1.angle;
         // Blend actual car heading with smooth corridor tangent so it tracks the car's true heading smoothly
@@ -7579,23 +7583,13 @@ export class Renderer3D {
         }
 
         if (typeof this._chaseAngle !== 'number' || typeof this._chaseTargetX !== 'number') {
-          this._chaseAngle = targetChaseHeading;
+          this._chaseAngle = followHeading('_chaseAngle', targetChaseHeading);
           this._chaseTargetX = p1X;
           this._chaseTargetY = p1Y;
         } else {
-          // Dynamic adaptive position following: smoothly scales with lag distance so the car never outruns the camera
-          const posDist = Math.hypot(p1X - this._chaseTargetX, p1Y - this._chaseTargetY);
-          const posFollowK = Math.min(0.25, 0.090 + Math.max(0, posDist - 5.0) * 0.008);
-          this._chaseTargetX += (p1X - this._chaseTargetX) * cameraBlend(posFollowK);
-          this._chaseTargetY += (p1Y - this._chaseTargetY) * cameraBlend(posFollowK);
-
-          let diffAngle = targetChaseHeading - this._chaseAngle;
-          while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
-          while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-
-          // Adaptive angular tracking: turns smoothly with the car, accelerating through sharp bends without sudden jerks
-          const angleK = Math.min(0.20, 0.085 + Math.abs(diffAngle) * 0.065);
-          this._chaseAngle += diffAngle * cameraBlend(angleK);
+          this._chaseTargetX += (p1X - this._chaseTargetX) * cameraBlend(0.035);
+          this._chaseTargetY += (p1Y - this._chaseTargetY) * cameraBlend(0.035);
+          this._chaseAngle = followHeading('_chaseAngle', targetChaseHeading);
         }
         this._lastFocusCar = p1;
 
@@ -7618,18 +7612,14 @@ export class Renderer3D {
 
         // Wide, cinematic FOV: prevents claustrophobic framing and gives ample screen margins
         targetFov = Math.max(54, Math.min(74, 54 + (p1p2Dist / 80.0) * 16));
-        camGlide = 0.085;
-        targetGlide = 0.095;
+        camGlide = 0.030;
+        targetGlide = 0.035;
       }
     }
 
     // -------------------------------------------------------------
-    // DYNAMIC VIEWPORT SAFETY GUARD & SMOOTH AUTO-ZOOM COMPENSATION
-    // If the tracked car (or P2 battle car) drifts toward or outside
-    // the screen boundaries, smoothly and temporarily zoom out (expanding
-    // FOV & easing camera distance pullback) while smoothly panning to
-    // re-center the car. When the car returns safely into the central
-    // viewing zone, zoom-out decays gracefully back to baseline.
+    // Pull back early when framing or cornering needs room. Never accelerate
+    // panning to catch the car; retain the wider shot briefly after a bend.
     // -------------------------------------------------------------
     const isOrbitActive = (cameraPreset === 'orbit' || !opts.follow || !focusCar);
     const isOnboardActive = cameraPreset === 'onboard' && !!p1 && !isOrbitActive;
@@ -7644,7 +7634,7 @@ export class Renderer3D {
       const carZ = (focusCar.crashed && focusCar.alive) ? this.getTerrainHeight(p1X, p1Y) : (1.0 + p1Elev);
       this._tempNdcVec.set(p1X, p1Y, carZ).project(this.camera);
 
-      // Safe viewport margin: central 65% of screen
+      // Leave room for the whole car, rather than waiting for its center to exit.
       let p1Exit = Math.max(Math.abs(this._tempNdcVec.x) / 0.65, Math.abs(this._tempNdcVec.y) / 0.65);
       if (this._tempNdcVec.z > 1.0 || this._tempNdcVec.z < -1.0) {
         // Behind camera or clipped
@@ -7661,32 +7651,33 @@ export class Renderer3D {
         }
       }
 
-      const maxExit = Math.max(p1Exit, p2Exit * 0.82);
+      // Estimate baseline framing so zooming out does not immediately request
+      // zooming back in on the next frame (a visible breathing oscillation).
+      const baselineDistance = Math.max(40, Math.hypot(destCamX - destTargetX, destCamY - destTargetY, destCamZ - destTargetZ));
+      const zoomScale = Math.tan(this.camera.fov * Math.PI / 360) / Math.tan(targetFov * Math.PI / 360)
+        * (1 + (this._dynamicZoomOutDist || 0) / baselineDistance);
+      const maxExit = Math.max(p1Exit, Math.min(2, p2Exit) * 0.82) * Math.max(1, zoomScale);
       const excess = Math.max(0, maxExit - 1.0);
 
-      // Desired temporary zoom-out compensation
-      const targetExtraFov = Math.min(26.0, excess * 20.0);
-      const targetExtraDist = Math.min(45.0, excess * 35.0);
-
+      // Heading lag anticipates a sharp bend before the car reaches the edge.
+      const cornerRoom = Math.max(0, headingLag - 0.18);
+      const requestedDist = Math.min(85, Math.max(excess * 55, cornerRoom * 48));
+      const requestedFov = Math.min(14, Math.max(excess * 12, cornerRoom * 8));
       if (typeof this._dynamicZoomOutFov !== 'number') {
         this._dynamicZoomOutFov = 0;
         this._dynamicZoomOutDist = 0;
       }
-
-      // Responsive zoom-out expansion (k=0.075), ultra-smooth gentle recovery (k=0.020)
-      const kFov = (targetExtraFov > this._dynamicZoomOutFov) ? 0.075 : 0.020;
-      this._dynamicZoomOutFov += (targetExtraFov - this._dynamicZoomOutFov) * cameraBlend(kFov);
-      this._dynamicZoomOutDist += (targetExtraDist - this._dynamicZoomOutDist) * cameraBlend(kFov);
-
-      // Apply temporary smooth zoom-out to FOV
-      targetFov += this._dynamicZoomOutFov;
-
-      // Smooth pan assistance when car is drifting out: gently nudge look target toward car
-      if (excess > 0) {
-        const panAssist = Math.min(0.35, excess * 0.20);
-        destTargetX += (p1X - destTargetX) * panAssist;
-        destTargetY += (p1Y - destTargetY) * panAssist;
-      }
+      const zoomDt = Math.max(0, Math.min(0.1, cameraDt));
+      if (requestedDist > this._dynamicZoomOutDist + 2) this._cameraZoomHold = 1.0;
+      else this._cameraZoomHold = Math.max(0, (this._cameraZoomHold || 0) - zoomDt);
+      const hold = this._cameraZoomHold > 0;
+      const targetExtraDist = hold ? Math.max(requestedDist, this._dynamicZoomOutDist) : requestedDist;
+      const targetExtraFov = hold ? Math.max(requestedFov, this._dynamicZoomOutFov) : requestedFov;
+      const distBlend = cameraBlend(targetExtraDist > this._dynamicZoomOutDist ? 0.065 : 0.012);
+      const fovBlend = cameraBlend(targetExtraFov > this._dynamicZoomOutFov ? 0.055 : 0.012);
+      this._dynamicZoomOutDist += (targetExtraDist - this._dynamicZoomOutDist) * distBlend;
+      this._dynamicZoomOutFov += (targetExtraFov - this._dynamicZoomOutFov) * fovBlend;
+      targetFov = Math.min(82, targetFov + this._dynamicZoomOutFov);
 
       // Smooth camera distance pullback
       if (this._dynamicZoomOutDist > 0.05) {
@@ -7697,7 +7688,7 @@ export class Renderer3D {
         if (plen > 0.1) {
           destCamX += (pdx / plen) * this._dynamicZoomOutDist;
           destCamY += (pdy / plen) * this._dynamicZoomOutDist;
-          destCamZ += (pdz / plen) * (this._dynamicZoomOutDist * 0.60);
+          destCamZ += (pdz / plen) * this._dynamicZoomOutDist;
         }
       }
     }
@@ -7714,6 +7705,7 @@ export class Renderer3D {
       this._camTransition = null;
       this._dynamicZoomOutFov = 0;
       this._dynamicZoomOutDist = 0;
+      this._cameraZoomHold = 0;
     }
     if (!isOnboardActive && this._lastActivePreset && cameraPreset !== this._lastActivePreset) {
       // Capture departing target and camera position
@@ -7875,22 +7867,8 @@ export class Renderer3D {
         this.camera.updateProjectionMatrix();
       }
 
-      // Strict forward distance guard for Action Front camera: camera must maintain generous lead ahead of P1
-      if (cameraPreset === 'action' && p1) {
-        const pCos = Math.cos(this._actionAngle || refAngle);
-        const pSin = Math.sin(this._actionAngle || refAngle);
-        const forwardDist = (this.camera.position.x - p1X) * pCos + (this.camera.position.y - p1Y) * pSin;
-        if (forwardDist < 46.0) {
-          const push = 46.0 - forwardDist;
-          this.camera.position.x += pCos * push;
-          this.camera.position.y += pSin * push;
-        }
-        const minZ = 8.5 + p1Elev;
-        if (this.camera.position.z < minZ) {
-          this.camera.position.z = minZ;
-        }
-      }
-      // Aim after the front-camera clearance guard has finalized its position.
+      // Clearance belongs to the eased destination; pushing the live camera
+      // forward here used to produce an abrupt pan during direction changes.
       this.camera.lookAt(this.controls.target);
     }
     if (isOrbitActive) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.15 — 2026-10-21
+
+- Smooth external camera turns with bounded angular speed and acceleration, including sharp bends, steering reversals and angle wrapping. Remove chase-camera catch-up acceleration and instant front-camera position pushes.
+- Widen the shot proactively when camera heading lags through a bend. Prefer eased distance pullback with modest field-of-view expansion, hold the wider framing briefly and restore it gradually instead of speeding up the pan.
+- Preserve chassis-aligned onboard views and stable tracking across frame rates. Extend translation stability coverage to helicopter and broadcast-follow cameras; verify hairpin framing and 92 regression checks.
+
+
 ## 1.5.14 — 2026-10-21
 
 - Draw the transparent race ghost body after road skidmarks, for both the loaded F1 model and procedural fallback. Keep depth testing enabled so solid scenery and real cars still occlude the ghost normally, with smoke rendered afterward.

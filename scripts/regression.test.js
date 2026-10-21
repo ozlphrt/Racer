@@ -29,6 +29,7 @@ import { validateChampion } from '../js/championValidation.js';
 import { physicsSignature } from '../js/milestones.js';
 import { resolveStartupState } from '../js/startupState.js';
 import { RealtimeEngineVoice } from '../js/audio.js';
+import { smoothCameraHeading } from '../js/cameraMotion.js';
 
 test('finished cars release racing controls and keep their finish result during cooldown', () => {
   const car = new Car(track(), { forward: () => { throw new Error('Finished cars must not request racing controls'); } });
@@ -768,7 +769,7 @@ test('notification animations coalesce restarts without forcing page layout', ()
 });
 
 test('close tracking cameras keep constant-speed cars framed through changing FPS and missed frames', () => {
-  for (const preset of ['chase', 'action', 'action_rear']) {
+  for (const preset of ['chase', 'action', 'action_rear', 'heli', 'follow']) {
     const renderer = Object.create(Renderer3D.prototype);
     renderer.track = track();
     renderer.scene = new THREE.Scene();
@@ -802,6 +803,81 @@ test('close tracking cameras keep constant-speed cars framed through changing FP
         `${preset} must not surge forward/backward when frame duration changes (drift ${projected.distanceTo(reference)})`);
       assert.equal(renderer.carPool[0].position.x, car.x);
     }
+  }
+});
+
+
+test('external camera turns stay bounded through sharp bends, reversals and angle wrap at different FPS', () => {
+  const results = [];
+  for (const fps of [20, 30, 60, 144]) {
+    const state = { angle: Math.PI - 0.05, speed: 0 };
+    let previousSpeed = 0;
+    for (let frame = 0; frame < fps * 6; frame++) {
+      // Cross the angle wrap, then reverse sharply. Neither is a camera cut.
+      const target = frame < fps * 3 ? -Math.PI + 1.3 : Math.PI - 1.2;
+      const previous = state.angle;
+      smoothCameraHeading(state, target, 1 / fps);
+      assert.ok(Math.abs(state.angle - previous) <= 0.65 / fps + 1e-9);
+      assert.ok(Math.abs(state.speed - previousSpeed) <= 0.9 / fps + 1e-9);
+      previousSpeed = state.speed;
+    }
+    results.push(state.angle);
+  }
+  assert.ok(Math.max(...results) - Math.min(...results) < 0.01,
+    'the same turn must have the same camera response across frame rates');
+});
+
+test('tracking cameras widen the shot through a hairpin, keep P1 visible, and ease back afterwards', () => {
+  for (const preset of ['chase', 'action', 'action_rear', 'heli']) {
+  const renderer = Object.create(Renderer3D.prototype);
+  renderer.track = track();
+  renderer.scene = new THREE.Scene();
+  renderer.camera = new THREE.PerspectiveCamera(65, 1.5, 5, 24000);
+  renderer.camera.up.set(0, 0, 1);
+  renderer.camera.position.set(-100, 80, 90);
+  renderer.controls = { target: new THREE.Vector3(), update() {}, autoRotate: false };
+  renderer.carPool = [new THREE.Group(), new THREE.Group()];
+  renderer.carPool.forEach(mesh => renderer.scene.add(mesh));
+  renderer.playerCar = new THREE.Group(); renderer.rayGroup = new THREE.Group();
+  renderer.f1Loaded = true; renderer.lastGen = 1; renderer.lastSimTime = 20;
+  renderer._lastActivePreset = preset;
+  for (const method of ['updateGantryLights', 'updateLapPlate', 'updateTireBarriers', 'updateSkidmarks',
+    'processDeathEvents', 'updateBursts', 'updateTireSmoke']) renderer[method] = () => {};
+  renderer.renderer = { render: (scene, camera) => { scene.updateMatrixWorld(true); camera.updateMatrixWorld(true); } };
+  const car = { x: 200, y: 100, angle: 0, previousX: 200, previousY: 100, previousAngle: 0,
+    alive: true, finished: false, crashed: false, laps: 1, idx: 0, totalIdx: 100, speed: 350, time: 20 };
+  const opponent = { ...car, x: 178, previousX: 178, totalIdx: 90 };
+  const sim = { generation: 1, time: 20, cars: [car, opponent], leader: car, player: null, bestLapEver: Infinity };
+  const opts = { cameraPreset: preset, follow: true, renderAlpha: 1, renderDt: 1 / 60, recordGhost: false };
+
+    for (let i = 0; i < 1200; i++) renderer.render(sim, opts, car);
+    const baseZoom = renderer._dynamicZoomOutDist;
+    let maxZoom = baseZoom;
+    let maxTurn = 0;
+    for (let frame = 0; frame < 180; frame++) {
+      // A 150-degree hairpin in one second, including heavy steering changes.
+      const angle = Math.min(1, frame / 60) * Math.PI * 5 / 6;
+      car.angle = angle;
+      renderer.track.tx[0] = Math.cos(angle);
+      renderer.track.ty[0] = Math.sin(angle);
+      const dt = 1 / 60;
+      const dx = Math.cos(angle) * 100 * dt;
+      const dy = Math.sin(angle) * 100 * dt;
+      car.x += dx; car.y += dy;
+      opponent.x += dx; opponent.y += dy;
+      sim.time += dt;
+      const rotation = renderer.camera.quaternion.clone();
+      renderer.render(sim, opts, car);
+      maxTurn = Math.max(maxTurn, rotation.angleTo(renderer.camera.quaternion) / dt);
+      maxZoom = Math.max(maxZoom, renderer._dynamicZoomOutDist);
+      const ndc = new THREE.Vector3(car.x, -car.y, 1).project(renderer.camera);
+      assert.ok(Math.abs(ndc.x) < 0.9 && Math.abs(ndc.y) < 0.9 && ndc.z > -1 && ndc.z < 1,
+        preset + ' must keep P1 comfortably inside the viewport during a hairpin');
+    }
+    assert.ok(maxZoom > baseZoom + 10, preset + ' should widen the shot before resorting to a fast pan');
+    assert.ok(maxTurn < 1.0, preset + ' should not snap its viewing direction (' + maxTurn + ' rad/s)');
+    for (let i = 0; i < 1200; i++) renderer.render(sim, opts, car);
+    assert.ok(renderer._dynamicZoomOutDist < maxZoom - 10, preset + ' should restore a closer shot once settled');
   }
 });
 
