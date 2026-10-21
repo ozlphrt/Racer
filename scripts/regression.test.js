@@ -1450,6 +1450,78 @@ test('a truncated primary recovers genomes, history and track from the valid bac
   assert.equal(restored.history.length, 1);
 });
 
+test('an orphan 130K anchor cannot manufacture a generation or block current saves', t => {
+  const memory = storageFixture(t);
+  memory.set('ai-racer:generation-anchor', '130000');
+  assert.equal(loadTrainingState(layers), null);
+  assert.equal(resolveStartupState(loadTrainingState(layers), CONFIG, PRESET_BRAINS).state.generation, 5000);
+  assert.equal(resolveStartupState({ generation: 130000 }, CONFIG, PRESET_BRAINS).source, 'bundled');
+  const sim = new Simulation(track(), CONFIG);
+  sim.resumeState(resolveStartupState(null, CONFIG, PRESET_BRAINS).state);
+  sim.generation = 5001;
+  assert.equal(saveTrainingState(sim, layers), true);
+  assert.equal(memory.get('ai-racer:generation-anchor'), '5001');
+  assert.equal(loadTrainingState(layers).generation, 5001);
+  sim.generation = 5002;
+  assert.equal(saveTrainingState(sim, layers), true);
+  const restored = loadTrainingState(layers);
+  assert.equal(restored.generation, 5002);
+  assert.deepEqual(Array.from(restored.currentGenomes[0]), Array.from(Float32Array.from(
+    JSON.parse(memory.get('ai-racer:training-state:v2')).currentGenomes[0])));
+});
+
+test('stale anchors do not elevate valid saves and missing populations fall back to backups', t => {
+  const memory = storageFixture(t);
+  memory.set('ai-racer:generation-anchor', '130000');
+  const real = { ...saved(), generation: 6042, history: [{ generation: 6041 }] };
+  memory.set('ai-racer:training-state:backup', JSON.stringify(real));
+  memory.set('ai-racer:training-state:v2', JSON.stringify({ generation: 130000 }));
+  assert.equal(loadTrainingState(layers).generation, 6042);
+  memory.set('ai-racer:training-state:v2', JSON.stringify(real));
+  assert.equal(loadTrainingState(layers).generation, 6042);
+});
+
+test('legacy anchor inflation is repaired only when the completed history proves it', t => {
+  const memory = storageFixture(t);
+  memory.set('ai-racer:generation-anchor', '130000');
+  memory.set('ai-racer:training-state:v2', JSON.stringify({ ...saved(), generation: 130000,
+    history: [{ generation: 6041 }] }));
+  const repaired = loadTrainingState(layers);
+  assert.equal(repaired.generation, 6042);
+  assert.deepEqual(Array.from(repaired.currentGenomes[0]), genome());
+  memory.set('ai-racer:training-state:v2', JSON.stringify({ ...saved(), generation: 130000,
+    history: [{ generation: 129999 }] }));
+  assert.equal(loadTrainingState(layers).generation, 130000, 'genuine advanced populations are preserved');
+});
+
+test('legacy brain recovery uses its own generation rather than an unrelated high counter', t => {
+  const memory = storageFixture(t);
+  memory.set('ai-racer:generation-anchor', '130000');
+  memory.set('ai-racer:best-brain:v1', JSON.stringify({ layers, genome: genome(), generation: 6042,
+    fitness: 100, bestLap: 11 }));
+  assert.equal(loadTrainingState(layers).generation, 6042);
+  memory.set('ai-racer:training-state:v2', JSON.stringify({ generation: 130000,
+    allTimeBest: { layers, genome: genome(), generation: 6042, fitness: 100 } }));
+  assert.equal(loadTrainingState(layers).generation, 6042);
+});
+
+test('the newest intact local snapshot wins and real newer populations remain protected', t => {
+  const memory = storageFixture(t);
+  memory.set('ai-racer:training-state:v2', JSON.stringify({ ...saved(), generation: 6042,
+    history: [{ generation: 6041 }], savedAt: '2026-10-21T08:00:00Z' }));
+  memory.set('ai-racer:training-state:backup', JSON.stringify({ ...saved(), generation: 6043,
+    history: [{ generation: 6042 }], savedAt: '2026-10-21T08:01:00Z' }));
+  assert.equal(loadTrainingState(layers).generation, 6043);
+  const sim = new Simulation(track(), CONFIG); sim.generation = 6042;
+  assert.equal(saveTrainingState(sim, layers), false);
+  sim.generation = 6044;
+  assert.equal(saveTrainingState(sim, layers), true);
+  const stored = JSON.parse(memory.get('ai-racer:training-state:v2'));
+  assert.equal(stored.populationGeneration, 6044);
+  assert.equal(stored.generation, 6044);
+  assert.equal(loadTrainingState(layers).generation, 6044);
+});
+
 test('structurally invalid primary saves also fall back to the backup', (t) => {
   const memory = storageFixture(t);
   memory.set('ai-racer:training-state:backup', JSON.stringify(saved()));

@@ -5,9 +5,15 @@ export const DEFAULT_START_GENERATION = 5000;
 
 /** Select the startup checkpoint without modifying browser saves or inventing history. */
 export function resolveStartupState(localState, config, bundled) {
+  const size = config.nn.layers.slice(1).reduce((sum, n, i) => sum + (config.nn.layers[i] + 1) * n, 0);
+  const validGenome = g => (Array.isArray(g) || ArrayBuffer.isView(g)) && g.length === size && g.every(Number.isFinite);
+  const hasPopulation = Array.isArray(localState?.currentGenomes) && localState.currentGenomes.length > 0 &&
+    localState.currentGenomes.every(validGenome);
+  const hasBrain = validGenome(localState?.allTimeBest?.genome);
   // Preserve the complete local population, records and settings at the floor
   // too, so refreshing a newly started Gen 5K run does not replace its progress.
-  if (localState && localState.generation >= DEFAULT_START_GENERATION) {
+  if (localState && Number.isSafeInteger(localState.generation) && localState.generation >= DEFAULT_START_GENERATION &&
+      (hasPopulation || hasBrain)) {
     return { state: localState, source: 'local' };
   }
   const trackKey = 'grand-prix';

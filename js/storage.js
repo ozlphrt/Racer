@@ -53,29 +53,11 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
   try {
     if (!simState || typeof simState.generation !== 'number') return false;
 
-    // Direct atomic anchor write for generation number (instant, zero overhead)
-    if (isExplicitResetOrOverride) {
-      localStorage.setItem(KEY_ANCHOR, String(simState.generation));
-    } else {
-      const curAnchor = parseInt(localStorage.getItem(KEY_ANCHOR) || '0', 10);
-      if (curAnchor > simState.generation) {
-        // Never overwrite higher generation with lower generation unless explicitly instructed
-        return false;
-      }
-      localStorage.setItem(KEY_ANCHOR, String(simState.generation));
-    }
-
-    // Protection guard on full state JSON
+    // Only an actual saved population/brain can protect newer progress.
+    // A historical numeric anchor must neither elevate startup nor block saves.
     if (!isExplicitResetOrOverride) {
-      try {
-        const raw = localStorage.getItem(KEY_STATE) || localStorage.getItem(KEY_BACKUP);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.generation === 'number' && parsed.generation > simState.generation) {
-            return false;
-          }
-        }
-      } catch {}
+      const previous = loadTrainingState(layers);
+      if (previous && previous.generation > simState.generation) return false;
     }
 
     // Save all genomes compactly (4 decimal places to stay lean and avoid quota limits)
@@ -98,7 +80,8 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
     } : null);
 
     const payload = {
-      version: 3,
+      version: 4,
+      populationGeneration: simState.generation,
       capturedPresets: simState.capturedPresets || [],
       captureEnabled: simState.captureEnabled === true,
       generation: simState.generation,
@@ -125,6 +108,7 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
     const jsonStr = JSON.stringify(payload);
     localStorage.setItem(KEY_STATE, jsonStr);
     localStorage.setItem(KEY_BACKUP, jsonStr);
+    localStorage.setItem(KEY_ANCHOR, String(simState.generation));
 
     if (bestToSave) {
       saveBrain(bestToSave, layers);
@@ -137,137 +121,59 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
 }
 
 export function loadTrainingState(layers) {
-  const anchorGen = parseInt(localStorage.getItem(KEY_ANCHOR) || '0', 10);
-  const keysToTry = [KEY_STATE, KEY_BACKUP, 'ai-racer:training-state:v1', 'ai-racer:training-state'];
-  let raw = null;
-  let data = null;
-
-  for (const k of keysToTry) {
+  const keys = [KEY_STATE, KEY_BACKUP, 'ai-racer:training-state:v1', 'ai-racer:training-state'];
+  const candidates = [];
+  const size = NeuralNetwork.genomeSize(layers);
+  for (const key of keys) {
     try {
-      const val = localStorage.getItem(k);
-      if (val && val.length > 10) {
-        let candidate;
-        try {
-          candidate = JSON.parse(val);
-        } catch {
-          // Only attempt partial recovery after all intact backups have been tried.
-          raw ??= val;
-          continue;
-        }
-        if (!candidate || !Number.isInteger(candidate.generation) || candidate.generation < 1) continue;
-        if (candidate.allTimeBest) {
-          try { validate(candidate.allTimeBest, layers); } catch { continue; }
-        }
-        if (candidate.currentGenomes != null && (!Array.isArray(candidate.currentGenomes) ||
-          candidate.currentGenomes.some((g) => !Array.isArray(g) ||
-            g.length !== NeuralNetwork.genomeSize(layers) || g.some((v) => !Number.isFinite(v))))) continue;
-        data = candidate;
-        raw = val;
-        break;
+      const data = JSON.parse(localStorage.getItem(key) || 'null');
+      if (!data || !Number.isSafeInteger(data.generation) || data.generation < 1) continue;
+      const allTimeBest = data.allTimeBest ? validate(data.allTimeBest, layers) : null;
+      if (data.currentGenomes != null && (!Array.isArray(data.currentGenomes) ||
+          data.currentGenomes.some(g => !Array.isArray(g) || g.length !== size || !g.every(Number.isFinite)))) continue;
+      const currentGenomes = data.currentGenomes?.length ? data.currentGenomes.map(g => Float32Array.from(g)) : null;
+      if (!currentGenomes && !allTimeBest) continue;
+      let generation = currentGenomes ? data.generation : allTimeBest.generation;
+      if (currentGenomes && data.version >= 4) {
+        if (!Number.isSafeInteger(data.populationGeneration) || data.populationGeneration !== data.generation) continue;
+        generation = data.populationGeneration;
       }
-    } catch {}
+      // Old loaders could copy a stale anchor onto an unrelated population.
+      // Repair only when the completed history proves the next generation and
+      // that obsolete anchor exactly matches the inflated number. Never infer
+      // a lower generation from an old champion's fitness/genome alone.
+      const last = Array.isArray(data.history) ? data.history.at(-1) : null;
+      const oldAnchor = Number(localStorage.getItem(KEY_ANCHOR));
+      if (currentGenomes && !(data.version >= 4) && oldAnchor === generation &&
+          Number.isSafeInteger(last?.generation) && last.generation > 0 && last.generation + 1 < generation) {
+        generation = last.generation + 1;
+      }
+      if (!Number.isSafeInteger(generation) || generation < 1) continue;
+      let lastRaceChampion = null;
+      if (data.lastRaceChampion) {
+        try { lastRaceChampion = validate({ ...data.lastRaceChampion, layers }, layers); } catch {}
+      }
+      const bestLapEver = Number.isFinite(data.bestLapEver) && data.bestLapEver > 0 ? data.bestLapEver : Infinity;
+      const real = Boolean(data.isRealCarTelemetry && Array.isArray(data.recordLapTelemetry) &&
+        data.recordLapTelemetry.length > 10 && Number.isFinite(bestLapEver));
+      candidates.push({ generation, currentGenomes, allTimeBest, lastRaceChampion,
+        capturedPresets: Array.isArray(data.capturedPresets) ? data.capturedPresets : [],
+        captureEnabled: data.captureEnabled === true,
+        history: Array.isArray(data.history) ? data.history : [], bestLapEver,
+        recordLapTelemetry: real ? data.recordLapTelemetry : null, isRealCarTelemetry: real,
+        mutationRate: typeof data.mutationRate === 'number' ? data.mutationRate : null,
+        trackPreset: data.trackPreset || 'grand-prix', savedAt: data.savedAt || null });
+    } catch { /* Invalid primary data must not hide intact backups. */ }
   }
-
+  // Prefer the newest intact snapshot, not the largest historical counter.
+  candidates.sort((a, b) => (Date.parse(b.savedAt) || 0) - (Date.parse(a.savedAt) || 0));
+  if (candidates.length) return candidates[0];
   const legacy = loadBrain(layers);
-  const highestGen = Math.max(1, anchorGen, legacy?.generation || 1);
-
-  if (!raw) {
-    if (legacy || anchorGen > 1) {
-      return {
-        generation: highestGen,
-        history: legacy ? [{ generation: legacy.generation, best: legacy.fitness, avg: legacy.fitness * 0.5, bestLap: legacy.bestLap, finishers: 0 }] : [],
-        bestLapEver: legacy?.bestLap ?? Infinity,
-        allTimeBest: legacy,
-        currentGenomes: null,
-        mutationRate: null,
-        trackPreset: 'grand-prix',
-        savedAt: legacy?.savedAt || new Date().toISOString(),
-      };
-    }
-    return null;
-  }
-
-  try {
-    try {
-      data ??= JSON.parse(raw);
-    } catch (parseErr) {
-      console.warn('Corrupted/truncated JSON in training state, attempting regex rescue:', parseErr);
-      const genMatch = raw.match(/"generation"\s*:\s*(\d+)/);
-      const lapMatch = raw.match(/"bestLapEver"\s*:\s*([\d.]+)/);
-      const trackMatch = raw.match(/"trackPreset"\s*:\s*"([^"]+)"/);
-      data = {
-        generation: genMatch ? parseInt(genMatch[1], 10) : anchorGen || 1,
-        bestLapEver: lapMatch ? parseFloat(lapMatch[1]) : Infinity,
-        trackPreset: trackMatch ? trackMatch[1] : 'grand-prix',
-        history: [],
-        currentGenomes: null,
-      };
-    }
-
-    let allTimeBest = null;
-    if (data.allTimeBest) {
-      try {
-        allTimeBest = validate(data.allTimeBest, layers);
-      } catch (e) {
-        console.warn('Could not validate saved all-time best:', e);
-      }
-    }
-
-    let currentGenomes = null;
-    let lastRaceChampion = null;
-    if (data.lastRaceChampion) {
-      try { lastRaceChampion = validate({ ...data.lastRaceChampion, layers }, layers); } catch {}
-    }
-    if (Array.isArray(data.currentGenomes) && data.currentGenomes.length > 0) {
-      const expectedSize = NeuralNetwork.genomeSize(layers);
-      const validGenomes = [];
-      for (const g of data.currentGenomes) {
-        if (Array.isArray(g) && g.length === expectedSize && g.every(Number.isFinite)) {
-          validGenomes.push(Float32Array.from(g));
-        }
-      }
-      if (validGenomes.length > 0) {
-        currentGenomes = validGenomes;
-      }
-    }
-
-    const resolvedGen = Math.max(1, data.generation || 1, anchorGen || 1);
-
-    const loadedBestLap = Number.isFinite(data.bestLapEver) && data.bestLapEver > 0
-      ? data.bestLapEver : Infinity;
-    const hasRealTelemetry = Boolean(data.isRealCarTelemetry && Array.isArray(data.recordLapTelemetry) && data.recordLapTelemetry.length > 10 && loadedBestLap < Infinity);
-
-    return {
-      generation: resolvedGen,
-      capturedPresets: Array.isArray(data.capturedPresets) ? data.capturedPresets : [],
-      captureEnabled: data.captureEnabled === true,
-      history: Array.isArray(data.history) ? data.history : [],
-      bestLapEver: loadedBestLap,
-      recordLapTelemetry: hasRealTelemetry ? data.recordLapTelemetry : null,
-      isRealCarTelemetry: hasRealTelemetry,
-      allTimeBest,
-      lastRaceChampion,
-      currentGenomes,
-      mutationRate: typeof data.mutationRate === 'number' ? data.mutationRate : null,
-      trackPreset: data.trackPreset || 'grand-prix',
-      savedAt: data.savedAt || new Date().toISOString(),
-    };
-  } catch (err) {
-    console.warn('Failed to load training state from localStorage:', err);
-    if (anchorGen > 0) {
-      return {
-        generation: anchorGen,
-        history: [],
-        bestLapEver: Infinity,
-        allTimeBest: null,
-        currentGenomes: null,
-        mutationRate: null,
-        trackPreset: 'grand-prix',
-        savedAt: new Date().toISOString(),
-      };
-    }
-    return null;
-  }
+  if (!legacy || !Number.isSafeInteger(legacy.generation) || legacy.generation < 1) return null;
+  return { generation: legacy.generation, currentGenomes: null, allTimeBest: legacy,
+    history: [], bestLapEver: legacy.bestLap, lastRaceChampion: null,
+    recordLapTelemetry: null, isRealCarTelemetry: false, capturedPresets: [], captureEnabled: false,
+    mutationRate: null, trackPreset: 'grand-prix', savedAt: legacy.savedAt || null };
 }
 
 export function clearTrainingState() {

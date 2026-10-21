@@ -1,6 +1,6 @@
 {
   "name": "ai-racer",
-  "version": "1.5.12",
+  "version": "1.5.13",
   "private": true,
   "description": "Neuroevolution sandbox: cars learn to stay on track and race fast.",
   "type": "module",

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.13 — 2026-10-21
+
+- Stop the historical generation anchor from elevating startup generations, changing the live-generation label or blocking current saves. Gen 5K remains the fallback when no usable local population or brain exists.
+- Resume the newest intact snapshot with its actual population generation. Pair new snapshots with an explicit population-generation marker, retain valid backups and protect genuinely newer populations against stale-tab overwrites.
+- Repair legacy anchor inflation only when completed history proves the population's next generation; recover brain-only saves at the brain's own generation. Preserve genuine higher-generation saves.
+- Enable periodic autosaving during fast-forward training, alongside existing pause/stop and page-exit saves. Verify stale 130K counters, recovery, real advanced populations, save/reload and 90 passing regression checks.
+
 ## 1.5.12 — 2026-10-21
 
 - Release racing throttle, steering and traction effects at the finish line. Keep cooldown movement while preventing stale throttle, wheelspin, lockup or slip values from carrying into the post-race presentation.

@@ -806,7 +806,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) saveQueue.flush();
 });
 setInterval(() => {
-  if (!state.paused && sim.cars && sim.cars.length > 0) {
+  if ((!state.paused || hyperRunning) && sim.cars && sim.cars.length > 0) {
     persistState();
   }
 }, 3000);
@@ -2589,8 +2589,7 @@ $('btn-hyper-start')?.addEventListener('click', startHyperTraining);
 $('btn-hyper-stop')?.addEventListener('click', stopHyperTraining);
 
 // ---------- Generation Preset Scale Ribbon & Multi-Gen Compare Matrix ----------
-const storedAnchor = parseInt(localStorage.getItem('ai-racer:generation-anchor') || '0', 10);
-let userHighestGen = Math.max(storedAnchor, savedState?.generation || 1, sim?.generation || 1);
+let userHighestGen = sim.generation;
 let userLiveStateSnapshot = null;
 let activePresetGen = null;
 let lastRibbonCurrentGen = -1;
