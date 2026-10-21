@@ -5771,15 +5771,16 @@ input[type='range']:disabled {
   min-height: 0;
 }
 #hub-pane-train .training-overview { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-#hub-pane-train .completion-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px; }
-.completion-comparison > div { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; min-width: 0; }
+#hub-pane-train .completion-comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 9px; container-type: inline-size; }
+.completion-comparison > div { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-width: 0; min-height: 0; }
 .completion-comparison .champion-completion { border-left: 1px solid #334155; padding-left: 8px; }
-#hub-pane-train .completion-comparison .stat-label { font-size: clamp(8px, 1.2dvh, 10px); white-space: normal; line-height: 1.1; min-height: 2.2em; }
+#hub-pane-train .completion-comparison .stat-label { font-size: clamp(7px, 3.4cqi, 10px); white-space: normal; line-height: 1.1; }
 #hub-pane-train .completion-comparison .stat-value { font-size: clamp(20px, 3.2dvh, 30px); }
 .completion-note { color: #94a3b8; font-size: clamp(8px, 1.1dvh, 10px); line-height: 1.2; }
-.champion-test-result { color: #b6c5d7; font-family: 'JetBrains Mono', monospace; font-size: clamp(11px, 1.9dvh, 19px); font-weight: 700; }
+.champion-test-result { color: #b6c5d7; font-family: 'JetBrains Mono', monospace; font-size: clamp(9px, 5cqi, 16px); font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.champion-completion .completion-note { font-size: clamp(7px, 2.9cqi, 9px); line-height: 1.15; overflow-wrap: anywhere; }
 .champion-test-result.validated { color: #34d399; }
-.champion-test-button { border: 1px solid #24758d; border-radius: 5px; background: #0c3546; color: #38bdf8; padding: 3px 8px; font: inherit; font-size: 10px; cursor: pointer; }
+.champion-test-button { border: 1px solid #24758d; border-radius: 5px; background: #0c3546; color: #38bdf8; padding: 2px 6px; font: inherit; font-size: 9px; line-height: 1.2; flex-shrink: 0; cursor: pointer; }
 .champion-test-button:disabled { opacity: .45; cursor: default; }
 .champion-test-button:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
 #hub-pane-train .race-outcomes { grid-template-columns: 1fr; gap: 8px; margin-bottom: 0; flex: 1 1 0; min-height: 0; align-content: start; padding: 10px; }

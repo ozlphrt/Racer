@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.17 — 2026-10-21
+
+- Fit Champion Test status, details and its action within the population-completion tile. Size text to the tile width, keep status on one line and compact spacing and button padding.
+- Verify untested and completed validation states in the browser, including a 1024 by 600 dashboard, and build the production bundle.
+
+
 ## 1.5.16 — 2026-10-21
 
 - Add an explicit one-time recovery link to restart the generation counter at 5000 while preserving the current population, champion weights, captured presets and lap records.
