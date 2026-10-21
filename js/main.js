@@ -21,12 +21,15 @@ import { availableCaptures } from './milestones.js';
 import { PRESET_BRAINS } from './presetBrains.js';
 import { createChampionValidationPanel } from './championValidationUi.js';
 import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
+import { resolveStartupState } from './startupState.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
 
 // ---------- Startup restoration (Immediate) ----------
-const savedState = storage.loadTrainingState(LAYERS);
+const localSavedState = storage.loadTrainingState(LAYERS);
+const startup = resolveStartupState(localSavedState, CONFIG, PRESET_BRAINS);
+const savedState = startup.state;
 let initialPreset = 'grand-prix';
 if (savedState?.trackPreset && TRACK_PRESETS[savedState.trackPreset]) {
   initialPreset = savedState.trackPreset;
@@ -3373,7 +3376,9 @@ function frame(now) {
 }
 
 // ---------- Startup UI sync ----------
-if (savedState && (sim.generation > 1 || sim.allTimeBest || sim.history.length > 0)) {
+if (startup.source === 'bundled') {
+  toast('Started from bundled Generation 5K 🏁', 'success');
+} else if (savedState && (sim.generation > 1 || sim.allTimeBest || sim.history.length > 0)) {
   toast(`Resumed training from Generation ${sim.generation} 🏁`, 'success');
 }
 
@@ -3407,7 +3412,7 @@ requestAnimationFrame(frame);
 // Show gentle welcome onboarding guide for new users
 try {
   const guideSeen = localStorage.getItem('ai-racer:welcome-guide-seen');
-  const hasHistory = savedState && (sim.generation > 1 || sim.allTimeBest || (sim.history && sim.history.length > 0));
+  const hasHistory = localSavedState && (localSavedState.generation > 1 || localSavedState.allTimeBest || localSavedState.history?.length > 0);
   if (!guideSeen && !hasHistory) {
     setTimeout(() => {
       if (!localStorage.getItem('ai-racer:welcome-guide-seen') && !hyperRunning) {

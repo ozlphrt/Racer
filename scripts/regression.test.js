@@ -27,6 +27,40 @@ import { summarizeCrashes, crashDiagnosticMarkup, approachDiagnosticMarkup } fro
 import { CrashApproachRecorder, analyzeApproach, summarizeApproaches } from '../js/crashApproach.js';
 import { validateChampion } from '../js/championValidation.js';
 import { physicsSignature } from '../js/milestones.js';
+import { resolveStartupState } from '../js/startupState.js';
+
+test('startup uses the real bundled Gen 5K without fabricating records or personal captures', () => {
+  const selection = resolveStartupState(null, CONFIG, PRESET_BRAINS);
+  const checkpoint = PRESET_BRAINS['grand-prix:5000'];
+  const sim = new Simulation(track(), CONFIG);
+  sim.resumeState(selection.state);
+  assert.equal(selection.source, 'bundled');
+  assert.equal(sim.generation, 5000);
+  assert.ok(sim.cars.every(c => Array.from(c.brain.genome).every((weight, i) => weight === checkpoint.genome[i])));
+  assert.deepEqual(sim.history, []);
+  assert.deepEqual(sim.capturedPresets, []);
+  assert.equal(sim.bestLapEver, Infinity);
+  assert.equal(sim.recordLapTelemetry, null);
+  assert.notEqual(selection.state.currentGenomes[0], selection.state.currentGenomes[1]);
+});
+
+test('startup raises lower generations to Gen 5K and preserves local Gen 5K and higher saves exactly', () => {
+  const lower = { generation: 123, history: [{ generation: 122, bestLap: 9 }], bestLapEver: 9,
+    capturedPresets: [], mutationRate: 0.12, trackPreset: 'simple-loop' };
+  const before = structuredClone(lower);
+  const selected = resolveStartupState(lower, CONFIG, PRESET_BRAINS);
+  assert.equal(selected.state.generation, 5000);
+  assert.equal(selected.state.trackPreset, 'grand-prix');
+  assert.equal(selected.state.mutationRate, 0.12);
+  assert.deepEqual(lower, before);
+  for (const generation of [5000, 5001, 130322]) {
+    const local = { ...lower, generation, currentGenomes: [new Float32Array(230).fill(0.5)] };
+    const result = resolveStartupState(local, CONFIG, PRESET_BRAINS);
+    assert.equal(result.source, 'local');
+    assert.equal(result.state, local);
+  }
+  assert.equal(resolveStartupState(lower, CONFIG, {}).state, lower);
+});
 
 test('pre-crash recorder wraps without growing and preserves the final two seconds in order', () => {
   const car = new Simulation(track(), CONFIG).cars[0];

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.11 — 2026-10-21
+
+- Start new profiles and local saves below generation 5,000 from the genuine bundled Gen 5K neural checkpoint. Resume local Gen 5K and higher saves with their population, records and settings intact.
+- Initialize checkpoint-based sessions with empty race history and no inherited lap record, telemetry or personally earned milestones. Keep compatible existing personal captures and show an accurate startup message.
+- Preserve first-time onboarding and explicit reset behavior. Verify checkpoint weights, independent population buffers, lower-generation fallback, unchanged higher-generation state, and 83 passing regression checks.
+
 ## 1.5.10 — 2026-10-20
 
 - Add an optional Experimental Planner Race from Mode & Track: a separate 20-car, five-lap non-contact mode using a map-based path and speed plan. Include onboard, chase and helicopter cameras, car selection, pause and restart, plus the saved-brain comparison view.
