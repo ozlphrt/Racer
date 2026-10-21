@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.20 — 2026-10-21
+
+- Remove the floating lap/name label above the race ghost in 3D and 2D. Keep the cyan ghost body, transparency, skidmark layering and playback unchanged.
+- Remove unused ghost-label textures and updates; verify label-free loaded and fallback models, 104 regression checks and the production build.
+
+
 ## 1.5.19 — 2026-10-21
 
 - Insert new points into the nearest section of the existing smoothed track instead of appending them to the end. Preserve the start/finish point and keep initial freehand sketching available.

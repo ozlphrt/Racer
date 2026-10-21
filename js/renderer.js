@@ -428,7 +428,7 @@ export class Renderer {
     if (opts.recordGhost !== false && sim && Number.isFinite(sim.raceGhostLap) && sim.raceGhostLap < 60 && sim.getRecordGhostState) {
       const ghostState = sim.getRecordGhostRenderState(opts.renderAlpha);
       if (ghostState) {
-        this.drawRecordGhost(ghostState, sim.raceGhostLap);
+        this.drawRecordGhost(ghostState);
       }
     }
 
@@ -837,7 +837,7 @@ export class Renderer {
     }
   }
 
-  drawRecordGhost(ghost, bestLap) {
+  drawRecordGhost(ghost) {
     const ctx = this.ctx;
     ctx.save();
     ctx.translate(ghost.x, ghost.y);
@@ -858,27 +858,6 @@ export class Renderer {
 
     ctx.restore();
 
-    ctx.save();
-    ctx.font = 'bold 9px "JetBrains Mono", monospace';
-    const txt = `⚡ RACE ${bestLap.toFixed(2)}s`;
-    const tw = ctx.measureText(txt).width;
-    const pad = 4;
-    const bx = ghost.x - tw / 2 - pad;
-    const by = ghost.y - 18;
-
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.roundRect(bx, by - 8, tw + pad * 2, 14, 3);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#00e5ff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(txt, ghost.x, by - 1);
-    ctx.restore();
   }
 
   drawCar(car, teamOrColor, isLeader = false, isPlayer = false, carNum = 1, posRank = null) {

@@ -4075,73 +4075,13 @@ export class Renderer3D {
     mesh.position.set(pose.x, -pose.y, 0.12);
     mesh.rotation.order = 'ZYX';
     mesh.rotation.set(0, 0, -pose.angle);
-    const source = sim.raceGhostSource;
-    const carLabel = Number.isFinite(source?.carNumber) ? ` #${source.carNumber}` : '';
-    this.updateRecordGhostBadgeText(`⚡ GHOST${carLabel} · ${sim.raceGhostLap.toFixed(2)}s`);
-    if (mesh.userData.badgeSprite) mesh.userData.badgeSprite.visible = true;
     if (!this._ghostNdc) this._ghostNdc = new THREE.Vector3();
     this._ghostNdc.set(pose.x, -pose.y, 2).project(this.camera);
     this.recordGhostStatus = Math.abs(this._ghostNdc.x) <= 1.1 && Math.abs(this._ghostNdc.y) <= 1.1 &&
       this._ghostNdc.z >= -1 && this._ghostNdc.z <= 1 ? 'visible' : 'outside-view';
   }
 
-  createRecordGhostBadgeSprite(text = '⚡ RACE GHOST') {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-
-    // Glass pill background
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.70)';
-    ctx.beginPath();
-    ctx.roundRect(8, 8, 240, 48, 24);
-    ctx.fill();
-
-    // Neon cyan glow border
-    ctx.strokeStyle = 'rgba(0, 229, 255, 0.80)';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Text
-    ctx.fillStyle = '#00e5ff';
-    ctx.font = 'bold 20px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 32);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.needsUpdate = true;
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      depthTest: false,
-      depthWrite: false,
-      transparent: true,
-      opacity: 0.85,
-    });
-    const sprite = new THREE.Sprite(mat);
-    sprite.renderOrder = 1000;
-    sprite.scale.set(28, 7, 1);
-    sprite.position.set(0, 0, 10);
-    return sprite;
-  }
-
-  updateRecordGhostBadgeText(text) {
-    if (!this.recordGhostMesh) return;
-    if (this._lastGhostBadgeText === text) return;
-    this._lastGhostBadgeText = text;
-    const oldBadge = this.recordGhostMesh.userData.badgeSprite;
-    if (oldBadge) {
-      this.recordGhostMesh.remove(oldBadge);
-      if (oldBadge.material && oldBadge.material.map) oldBadge.material.map.dispose();
-      if (oldBadge.material) oldBadge.material.dispose();
-    }
-    const newBadge = this.createRecordGhostBadgeSprite(text);
-    this.recordGhostMesh.userData.badgeSprite = newBadge;
-    this.recordGhostMesh.add(newBadge);
-  }
-
   setupRecordGhostMesh(template) {
-    this._lastGhostBadgeText = null;
     if (!this.recordGhostMesh) {
       this.recordGhostMesh = new THREE.Group();
       this.recordGhostMesh.visible = false;
@@ -4214,9 +4154,6 @@ export class Renderer3D {
       this.recordGhostMesh.add(ghostSub);
     }
 
-    const badge = this.createRecordGhostBadgeSprite('⚡ RACE GHOST');
-    this.recordGhostMesh.userData.badgeSprite = badge;
-    this.recordGhostMesh.add(badge);
   }
 
   createF1CarMesh(template, color, isPlayer = false, carIdx = 0, carNumber = 1) {
