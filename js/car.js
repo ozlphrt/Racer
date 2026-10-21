@@ -187,6 +187,9 @@ export class Car {
       this.finished = true;
       this.finishTime = this.time;
       this.deathReason = 'finished';
+      this.throttle = this.targetThrottle = 0;
+      this.steer = this.targetSteer = 0;
+      this.wheelSpin = this.brakeLock = 0;
       return;
     }
     if (reason === 'crash' && !this.crashed) {
@@ -238,6 +241,8 @@ export class Car {
 
     // If car has crossed finish line: smooth F1 in-lap cooldown cruise around the track
     if (this.finished) {
+      this.throttle = this.targetThrottle = 0;
+      this.wheelSpin = this.brakeLock = this.slipAngle = 0;
       const targetCooldownSpeed = 130; // ~25% of top speed: smooth in-lap parade/cooldown pace
 
       if (this.speed > targetCooldownSpeed) {

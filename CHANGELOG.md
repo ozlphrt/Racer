@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.12 — 2026-10-21
+
+- Release racing throttle, steering and traction effects at the finish line. Keep cooldown movement while preventing stale throttle, wheelspin, lockup or slip values from carrying into the post-race presentation.
+- Set finished-car engine voices to quiet idle rather than revving and shifting against cooldown speed. Reduce finished-car engine gain and suppress post-finish tire scrub while keeping racing audio unchanged.
+- Verify control release, frozen finish results, quiet idle despite stale inputs, restored racing audio, and 85 passing regression checks.
+
 ## 1.5.11 — 2026-10-21
 
 - Start new profiles and local saves below generation 5,000 from the genuine bundled Gen 5K neural checkpoint. Resume local Gen 5K and higher saves with their population, records and settings intact.

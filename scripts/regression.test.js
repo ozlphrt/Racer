@@ -28,6 +28,47 @@ import { CrashApproachRecorder, analyzeApproach, summarizeApproaches } from '../
 import { validateChampion } from '../js/championValidation.js';
 import { physicsSignature } from '../js/milestones.js';
 import { resolveStartupState } from '../js/startupState.js';
+import { RealtimeEngineVoice } from '../js/audio.js';
+
+test('finished cars release racing controls and keep their finish result during cooldown', () => {
+  const car = new Car(track(), { forward: () => { throw new Error('Finished cars must not request racing controls'); } });
+  Object.assign(car, { time: 60, laps: 5, lapTimes: [12, 12, 12, 12, 12], speed: 350,
+    throttle: 1, targetThrottle: 1, steer: 0.8, targetSteer: 0.8, wheelSpin: 1, brakeLock: 1 });
+  car.die('finished');
+  assert.equal(car.throttle, 0); assert.equal(car.targetThrottle, 0);
+  assert.equal(car.steer, 0); assert.equal(car.targetSteer, 0);
+  const fitness = car.fitness, finishTime = car.finishTime, laps = [...car.lapTimes];
+  for (let i = 0; i < 120; i++) car.update(CONFIG.dt);
+  assert.equal(car.throttle, 0); assert.equal(car.targetThrottle, 0);
+  assert.equal(car.wheelSpin, 0); assert.equal(car.brakeLock, 0); assert.equal(car.slipAngle, 0);
+  assert.ok(car.speed < 350);
+  assert.equal(car.finishTime, finishTime); assert.equal(car.fitness, fitness);
+  assert.deepEqual(car.lapTimes, laps);
+});
+
+test('finished engine voices settle to quiet idle despite stale speed, throttle and slip', () => {
+  const parameter = () => ({ value: 0, setTargetAtTime(value) { this.value = value; } });
+  const voice = Object.create(RealtimeEngineVoice.prototype);
+  Object.assign(voice, { ctx: { currentTime: 0 }, currentRpm: 6500, lastGear: 6,
+    shiftCutTimer: 0, pannerNode: null, gainNode: { gain: parameter() }, tireGain: { gain: parameter() } });
+  for (const key of ['airFilter', 'airFilterNoise', 'exhaustResonator', 'oscSub', 'oscPulse', 'oscHarmonic', 'tireFilter']) {
+    voice[key] = { frequency: parameter() };
+  }
+  const car = { alive: true, finished: false, crashed: false, speed: CONFIG.car.maxSpeed, throttle: 1, slipAngle: 0.8 };
+  voice.update(car, 50, 0, 2000, true);
+  const racingGain = voice.gainNode.gain.value;
+  assert.ok(voice.tireGain.gain.value > 0);
+  car.finished = true;
+  for (let i = 0; i < 120; i++) voice.update(car, 50, 0, 2000, true);
+  assert.ok(Math.abs(voice.currentRpm - 1150) < 0.01);
+  assert.ok(voice.gainNode.gain.value < racingGain * 0.15);
+  assert.equal(voice.tireGain.gain.value, 0);
+  assert.equal(voice.shiftCutTimer, 0);
+  car.finished = false;
+  for (let i = 0; i < 120; i++) voice.update(car, 50, 0, 2000, true);
+  assert.ok(voice.oscPulse.frequency.value > 150);
+  assert.equal(voice.gainNode.gain.value, racingGain);
+});
 
 test('startup uses the real bundled Gen 5K without fabricating records or personal captures', () => {
   const selection = resolveStartupState(null, CONFIG, PRESET_BRAINS);

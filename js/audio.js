@@ -39,7 +39,7 @@ function generateBrownNoise(ctx, duration = 2.0) {
 /**
  * An individual car's deep physical acoustic voice.
  */
-class RealtimeEngineVoice {
+export class RealtimeEngineVoice {
   constructor(ctx, masterCompressor, distortionCurve, brownNoiseBuffer) {
     this.ctx = ctx;
     this.activeCar = null;
@@ -210,9 +210,12 @@ class RealtimeEngineVoice {
 
     // 3. Realistic 6-Speed V8 Gearbox Engine RPM Model (1,100 RPM – 6,800 RPM)
     const maxSpeed = CONFIG.car.maxSpeed || 440;
-    const speed = Math.max(0, car.speed || 0);
+    const coolingDown = Boolean(car.finished);
+    // Cooldown motion is separate from racing power. Do not rev or downshift
+    // against its scripted speed, or reuse a stale final-lap pedal command.
+    const speed = coolingDown ? 0 : Math.max(0, car.speed || 0);
     const speedRatio = Math.min(1.10, speed / maxSpeed);
-    const throttle = Math.max(0, car.throttle || 0);
+    const throttle = coolingDown ? 0 : Math.max(0, car.throttle || 0);
 
     const gearMaxSpeeds = [0.16, 0.32, 0.50, 0.68, 0.88, 1.15];
     let gear = 1;
@@ -228,7 +231,10 @@ class RealtimeEngineVoice {
       }
     }
 
-    if (gear !== this.lastGear) {
+    if (coolingDown) {
+      this.lastGear = 1;
+      this.shiftCutTimer = 0;
+    } else if (gear !== this.lastGear) {
       this.lastGear = gear;
       this.shiftCutTimer = 0.06;
     }
@@ -267,12 +273,12 @@ class RealtimeEngineVoice {
 
     // 5. Dynamic Organic Volume Modulation
     const throttleBoost = isFocused ? (0.85 + throttle * 0.35) : (0.75 + throttle * 0.25);
-    const voiceVol = distGain * baseMixGain * throttleBoost;
+    const voiceVol = distGain * baseMixGain * throttleBoost * (coolingDown ? 0.12 : 1);
     this.gainNode.gain.setTargetAtTime(voiceVol, now, ramp);
 
     // 6. Deep Tire Road Texture & Scrub
     const slipSpeed = Math.abs(car.slipAngle || 0) * speed;
-    const isDrifting = slipSpeed > 22 || (car.crashed && speed > 20);
+    const isDrifting = !coolingDown && (slipSpeed > 22 || (car.crashed && speed > 20));
     if (isDrifting) {
       const scrubFactor = Math.min(1, (slipSpeed - 20) / 60);
       const scrubVol = scrubFactor * (isFocused ? 0.32 : distGain * 0.10);
