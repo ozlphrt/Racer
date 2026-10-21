@@ -53,7 +53,10 @@ export function createChampionValidationPanel(sim, getTrackKey, getLaps) {
         refresh();
       };
       worker.onerror = () => { if (job !== startedJob) return; job.error = 'Could not run the champion test. Try again.'; worker?.terminate(); worker = null; refresh(); };
-      worker.postMessage({ config, genome: Array.from(source.genome), trackKey, signature: physicsSignature(sim.track, config) });
+      const preset = TRACK_PRESETS[trackKey];
+      worker.postMessage({ config, genome: Array.from(source.genome), trackKey,
+        customTrack: preset?.custom ? { name: preset.name, points: preset.points } : undefined,
+        signature: physicsSignature(sim.track, config) });
     } catch (error) { job.error = error.message; worker?.terminate(); worker = null; }
     refresh();
   });

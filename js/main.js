@@ -22,11 +22,18 @@ import { PRESET_BRAINS } from './presetBrains.js';
 import { createChampionValidationPanel } from './championValidationUi.js';
 import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
 import { resolveStartupState } from './startupState.js';
+import { registerCustomTracks, savedCircuitMatches } from './customTracks.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
 
 // ---------- Startup restoration (Immediate) ----------
+// Register local circuit geometry before restoring a save that references it.
+for (const custom of registerCustomTracks(localStorage, CONFIG.track.width)) {
+  const option = document.createElement('option');
+  option.value = custom.id; option.textContent = `${custom.name} · Custom`;
+  $('track-select').append(option);
+}
 // Recovery links are explicit and apply once in this browser/origin. A normal
 // refresh must always retain subsequent training progress.
 const startupUrl = new URL(window.location.href);
@@ -65,6 +72,12 @@ if (savedState) {
     }
   }
   sim.resumeState(savedState);
+  if (!savedCircuitMatches(savedState)) {
+    // An edited/deleted custom circuit cannot inherit the old layout's records.
+    // Retain the trained population and generation, as with an ordinary track switch.
+    currentTrack = new Track(TRACK_PRESETS[initialPreset].points, CONFIG.track.width, CONFIG.track.samples);
+    sim.setTrack(currentTrack, true);
+  }
 } else {
   // Clean fresh learning experience: random neural weights, Generation 1, clean history
   sim.reset();
@@ -3420,6 +3433,13 @@ setMaxLaps(savedLaps !== null ? parseInt(savedLaps, 10) : (CONFIG.generation?.ma
 
 // Every session starts with Auto Director; manual camera choices last this session.
 setCameraPreset('auto', false);
+const requestedTrack = startupUrl.searchParams.get('track');
+if (requestedTrack && TRACK_PRESETS[requestedTrack]) {
+  $('track-select').value = requestedTrack;
+  $('track-select').dispatchEvent(new Event('change'));
+  startupUrl.searchParams.delete('track');
+  window.history.replaceState(null, '', startupUrl);
+}
 renderGenPresetsRibbon();
 updateHud(sim.leader);
 chart.draw(sim.history, sim.bestLapEver);

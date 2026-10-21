@@ -4,12 +4,15 @@ import { NeuralNetwork } from './neuralNetwork.js';
 import { Track, TRACK_PRESETS } from './track.js';
 import { TireBarrierSystem } from './tireBarriers.js';
 import { physicsSignature } from './milestones.js';
+import { inspectCustomTrack } from './customTracks.js';
 
 // Runs in a dedicated worker. Each start uses a fresh car and tire barriers;
 // there are no opponents, breeding, record writes, or browser saves.
 export async function validateChampion(request, progress = () => {}, yieldTask = () => Promise.resolve()) {
   const { config, genome, trackKey, signature } = request;
-  if (!TRACK_PRESETS[trackKey] || !Array.isArray(genome) || !genome.every(Number.isFinite) ||
+  const custom = typeof trackKey === 'string' && trackKey.startsWith('custom-') && request.customTrack;
+  const preset = TRACK_PRESETS[trackKey] || (custom && inspectCustomTrack(custom.points, config?.track?.width).valid ? custom : null);
+  if (!preset || !Array.isArray(genome) || !genome.every(Number.isFinite) ||
       !config || genome.length !== NeuralNetwork.genomeSize(config.nn.layers) ||
       JSON.stringify(config.sensors.angles) !== JSON.stringify(CONFIG.sensors.angles) ||
       !(config.dt > 0 && config.dt <= 0.1) || !(config.generation.timeLimit > 0 && config.generation.timeLimit <= 3600) ||
@@ -17,7 +20,7 @@ export async function validateChampion(request, progress = () => {}, yieldTask =
   const previous = { ...CONFIG };
   try {
     Object.assign(CONFIG, config);
-    const track = new Track(TRACK_PRESETS[trackKey].points, config.track.width, config.track.samples);
+    const track = new Track(preset.points, config.track.width, config.track.samples);
     if (physicsSignature(track, config) !== signature) throw new Error('Track or physics changed. Start a new test.');
     const results = [];
     for (let slot = 0; slot < 20; slot++) {

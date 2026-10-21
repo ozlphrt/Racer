@@ -81,6 +81,7 @@ export const TRACK_POINTS = TRACK_PRESETS['grand-prix'].points;
  */
 export class Track {
   constructor(controlPoints, width, samples) {
+    this.controlPoints = controlPoints.map(p => ({ x: p.x, y: p.y }));
     this.width = width;
     this.half = width / 2;
     this.N = samples;

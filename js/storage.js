@@ -103,6 +103,7 @@ export function saveTrainingState(simState, layers, trackKey = 'grand-prix', isE
       currentGenomes,
       mutationRate: typeof simState.mutationRate === 'number' ? simState.mutationRate : null,
       trackPreset: trackKey,
+      trackPoints: simState.track?.controlPoints || null,
       savedAt: new Date().toISOString(),
     };
 
@@ -163,7 +164,7 @@ export function loadTrainingState(layers) {
         history: Array.isArray(data.history) ? data.history : [], bestLapEver,
         recordLapTelemetry: real ? data.recordLapTelemetry : null, isRealCarTelemetry: real,
         mutationRate: typeof data.mutationRate === 'number' ? data.mutationRate : null,
-        trackPreset: data.trackPreset || 'grand-prix', savedAt: data.savedAt || null });
+        trackPreset: data.trackPreset || 'grand-prix', trackPoints: data.trackPoints || null, savedAt: data.savedAt || null });
     } catch { /* Invalid primary data must not hide intact backups. */ }
   }
   // Prefer the newest intact snapshot, not the largest historical counter.

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="application-version" content="1.5.18">
+  <title>Track Studio · AI Racer</title>
+  <link rel="stylesheet" href="./css/track-editor.css">
+</head>
+<body>
+  <header class="studio-header">
+    <div><span class="eyebrow">AI RACER / TRACK STUDIO</span><h1>Draw your next circuit.</h1></div>
+    <a href="./" class="button quiet">Back to race ↗</a>
+  </header>
+  <main class="studio-layout">
+    <aside class="studio-sidebar">
+      <div class="sidebar-scroll">
+      <section>
+        <label for="track-name">CIRCUIT NAME</label>
+        <input id="track-name" maxlength="40" placeholder="My first circuit" autocomplete="off">
+        <p class="hint">Drag to draw a loop, or click to place corners. We smooth and close the road for you.</p>
+        <div class="tool-grid">
+          <button id="undo" class="button quiet" type="button">↶ Undo</button>
+          <button id="clear" class="button quiet" type="button">Clear</button>
+          <button id="reverse" class="button quiet" type="button">Reverse direction</button>
+          <button id="new-track" class="button quiet" type="button">New circuit</button>
+        </div>
+      </section>
+      <section class="studio-details">
+        <div><span>Road length</span><strong id="track-length">—</strong></div>
+        <div><span>Control points</span><strong id="point-count">0 / 80</strong></div>
+        <div><span>Road width</span><strong>84 units</strong></div>
+        <p id="track-status" role="status">Draw a loop to get started.</p>
+      </section>
+      <section>
+        <h2>REFINE YOUR LINE</h2>
+        <p class="hint">Drag any blue point to reshape a corner. The arrow marks your driving direction.</p>
+        <div class="tool-grid">
+          <button id="set-start" class="button quiet" type="button" disabled>Start here</button>
+          <button id="remove-point" class="button quiet" type="button" disabled>Remove point</button>
+        </div>
+        <details class="keyboard-hint"><summary>Keyboard controls</summary><p>Focus the drawing, use arrows to move the cursor, Space to add a point. Delete removes the selected point.</p></details>
+      </section>
+      <section class="track-library">
+        <h2>YOUR CIRCUITS <span id="saved-count">0 / 12</span></h2>
+        <div id="saved-tracks"></div>
+      </section>
+      </div>
+      <div class="save-actions">
+        <button id="save-race" class="button primary" type="button" disabled>Save & race →</button>
+        <button id="save-track" class="button quiet" type="button" disabled>Save circuit</button>
+        <span id="save-status" role="status">Saved in this browser. Your existing drivers can learn the new layout.</span>
+      </div>
+    </aside>
+    <section class="drawing-panel" aria-label="Track drawing workspace">
+      <div class="drawing-heading"><span id="draft-label">NEW CIRCUIT</span><span>FIRST POINT = START / FINISH</span></div>
+      <svg id="track-drawing" viewBox="0 0 1600 1000" tabindex="0" role="application" aria-label="Draw a closed race circuit. Drag to draw, or click to place corners. Arrow keys move the cursor; Space adds a point.">
+        <defs>
+          <pattern id="drawing-grid" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M 80 0 L 0 0 0 80" fill="none" stroke="#233c45" stroke-width="1"/></pattern>
+          <marker id="direction-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#4ce6b0"/></marker>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#drawing-grid)"/>
+        <rect x="60" y="60" width="1480" height="880" rx="16" fill="none" stroke="#3a5761" stroke-width="2" stroke-dasharray="10 10"/>
+        <g id="road-preview"></g>
+        <path id="draft-stroke" fill="none" stroke="#4ce6b0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <g id="control-points"></g>
+        <g id="keyboard-cursor" visibility="hidden" pointer-events="none" stroke="#f8cc68" stroke-width="3"><path d="M-14 0H14 M0-14V14"/></g>
+        <g id="empty-hint" pointer-events="none" text-anchor="middle" fill="#78959e"><text x="800" y="465" font-size="31" font-family="system-ui">A blank canvas. Your racing line.</text><text x="800" y="510" font-size="20" font-family="system-ui">Draw a loop with your mouse, pen or finger.</text></g>
+      </svg>
+      <footer class="drawing-footer"><span>Keep the road inside the boundary. Avoid crossings and overlapping corners.</span><span>1600 × 1000</span></footer>
+    </section>
+  </main>
+  <script type="module" src="./js/trackEditor.js"></script>
+</body>
+</html>

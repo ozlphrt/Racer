@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         corneringLab: fileURLToPath(new URL('./cornering-lab.html', import.meta.url)),
+        trackEditor: fileURLToPath(new URL('./track-editor.html', import.meta.url)),
       },
     },
   },

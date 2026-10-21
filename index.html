@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AI Racer · Neuroevolution Car Racing Lab</title>
   <meta name="description" content="Watch a population of neural-network-driven cars learn to stay on track and race faster every generation with a genetic algorithm, live in your browser.">
-  <meta name="application-version" content="1.5.17">
+  <meta name="application-version" content="1.5.18">
   <meta name="theme-color" content="#05070f">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -308,6 +308,10 @@
                 <button class="settings-popover-close" id="btn-settings-close" type="button" aria-label="Close settings">✕</button>
               </div>
               <div class="settings-menu-list">
+                <a class="settings-menu-item" href="./track-editor.html">
+                  <span aria-hidden="true">✎</span><span>Draw a new track</span>
+                  <span class="settings-item-badge">New</span>
+                </a>
                 <button class="settings-menu-item" id="btn-settings-shortcuts" type="button">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="20" height="14" x="2" y="5" rx="3"></rect>
@@ -553,6 +557,7 @@
             <option value="simple-loop">Simple Peanut Loop</option>
           </select>
         </div>
+        <a class="btn" href="./track-editor.html" style="display:block;margin:8px 0;text-align:center;">✎ Draw a new track</a>
         <div class="btn-row">
           <button class="btn btn-primary" id="btn-pause" type="button">❚❚ Pause</button>
           <button class="btn" id="btn-reset" type="button">↺ Restart Lap</button>

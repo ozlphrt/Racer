@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.18 — 2026-10-21
+
+- Add Track Studio: draw a closed circuit freehand or place corners, drag points to reshape it, undo edits, reverse direction and move start/finish. Support mouse, pen, touch and keyboard drawing.
+- Preview the smoothed road, kerbs, start line and direction. Validate road length, bounds, turning room and non-overlapping geometry before saving.
+- Save up to 12 named circuits and retain drafts in the browser. Launch saved circuits in the existing 3D race and restore custom-track selection on reload.
+- Include custom geometry in training snapshots and champion-worker requests. Preserve trained populations while clearing incompatible records when switching, editing or deleting a circuit.
+- Add Settings and circuit-selector entry links, responsive editor layout, documentation and seven custom-track regression tests. Verify 102 passing regression checks, browser drawing/editing/save/race/reload, and the production build.
+
+
 ## 1.5.17 — 2026-10-21
 
 - Fit Champion Test status, details and its action within the population-completion tile. Size text to the tile width, keep status on one line and compact spacing and button padding.
