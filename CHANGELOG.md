@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.21 — 2026-10-21
+
+- Save and load custom circuits only on request. Open Track Studio with a blank canvas and keep named circuits in the library behind explicit Load actions.
+- Add Save JSON and Load JSON for portable track files. Validate file size, format and geometry; importing opens a drawing without automatically adding a library entry.
+- Require an explicit race request or circuit selection to load a custom race track. Normal refresh falls back to Grand Prix while retaining the trained population and generation and clearing incompatible records.
+- Verify JSON round-trip, manual library loading, blank editor refresh, startup selection, 106 regression checks and the production build.
+
+
 ## 1.5.20 — 2026-10-21
 
 - Remove the floating lap/name label above the race ghost in 3D and 2D. Keep the cyan ghost body, transparency, skidmark layering and playback unchanged.

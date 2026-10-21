@@ -22,7 +22,7 @@ import { PRESET_BRAINS } from './presetBrains.js';
 import { createChampionValidationPanel } from './championValidationUi.js';
 import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
 import { resolveStartupState } from './startupState.js';
-import { registerCustomTracks, savedCircuitMatches } from './customTracks.js';
+import { registerCustomTracks, savedCircuitMatches, initialCircuitKey } from './customTracks.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
@@ -50,12 +50,8 @@ if (startupUrl.searchParams.get('repair-generation') === '5000') {
 const localSavedState = storage.loadTrainingState(LAYERS);
 const startup = resolveStartupState(localSavedState, CONFIG, PRESET_BRAINS);
 const savedState = startup.state;
-let initialPreset = 'grand-prix';
-if (savedState?.trackPreset && TRACK_PRESETS[savedState.trackPreset]) {
-  initialPreset = savedState.trackPreset;
-  const trackSel = $('track-select');
-  if (trackSel) trackSel.value = initialPreset;
-}
+let initialPreset = initialCircuitKey(savedState, startupUrl.searchParams.get('track'));
+$('track-select').value = initialPreset;
 
 // ---------- Core objects ----------
 let currentTrack = new Track(TRACK_PRESETS[initialPreset].points, CONFIG.track.width, CONFIG.track.samples);
@@ -72,7 +68,7 @@ if (savedState) {
     }
   }
   sim.resumeState(savedState);
-  if (!savedCircuitMatches(savedState)) {
+  if (!savedCircuitMatches(savedState) || (savedState.trackPreset && savedState.trackPreset !== initialPreset)) {
     // An edited/deleted custom circuit cannot inherit the old layout's records.
     // Retain the trained population and generation, as with an ordinary track switch.
     currentTrack = new Track(TRACK_PRESETS[initialPreset].points, CONFIG.track.width, CONFIG.track.samples);
@@ -3434,7 +3430,7 @@ setMaxLaps(savedLaps !== null ? parseInt(savedLaps, 10) : (CONFIG.generation?.ma
 // Every session starts with Auto Director; manual camera choices last this session.
 setCameraPreset('auto', false);
 const requestedTrack = startupUrl.searchParams.get('track');
-if (requestedTrack && TRACK_PRESETS[requestedTrack]) {
+if (requestedTrack && Object.hasOwn(TRACK_PRESETS, requestedTrack)) {
   $('track-select').value = requestedTrack;
   $('track-select').dispatchEvent(new Event('change'));
   startupUrl.searchParams.delete('track');

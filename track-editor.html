@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="application-version" content="1.5.20">
+  <meta name="application-version" content="1.5.21">
   <title>Track Studio · AI Racer</title>
   <link rel="stylesheet" href="./css/track-editor.css">
 </head>
@@ -49,7 +49,12 @@
       <div class="save-actions">
         <button id="save-race" class="button primary" type="button" disabled>Save & race →</button>
         <button id="save-track" class="button quiet" type="button" disabled>Save circuit</button>
-        <span id="save-status" role="status">Saved in this browser. Your existing drivers can learn the new layout.</span>
+        <div class="tool-grid">
+          <button id="save-json" class="button quiet" type="button" disabled>Save JSON</button>
+          <button id="load-json" class="button quiet" type="button">Load JSON</button>
+        </div>
+        <input id="track-file" type="file" accept=".json,application/json" hidden>
+        <span id="save-status" role="status">Save circuits to this browser or a JSON file. Load a saved circuit when you want to use it.</span>
       </div>
     </aside>
     <section class="drawing-panel" aria-label="Track drawing workspace">

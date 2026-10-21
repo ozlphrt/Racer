@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { CONFIG } from '../js/config.js';
 import { Track, TRACK_PRESETS } from '../js/track.js';
 import { CUSTOM_TRACKS_KEY, inspectCustomTrack, simplifyStroke, readCustomTracks,
-  saveCustomTrack, registerCustomTracks, savedCircuitMatches, insertTrackPoint } from '../js/customTracks.js';
+  saveCustomTrack, registerCustomTracks, savedCircuitMatches, insertTrackPoint,
+  initialCircuitKey, parseCustomTrackJSON, serializeCustomTrack } from '../js/customTracks.js';
 import { catmullRom } from '../js/math.js';
 import { validateChampion } from '../js/championValidation.js';
 import { physicsSignature } from '../js/milestones.js';
@@ -19,6 +20,32 @@ function storage() {
   const data = new Map();
   return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, String(v)), removeItem: k => data.delete(k) };
 }
+
+test('custom circuits load only on explicit request while builtin startup selection is preserved', () => {
+  const presets = { ...TRACK_PRESETS, 'custom-manual': { name: 'Manual', custom: true, points: oval() } };
+  const state = { trackPreset: 'custom-manual' };
+  assert.equal(initialCircuitKey(state, null, presets), 'grand-prix');
+  assert.equal(initialCircuitKey(state, 'custom-manual', presets), 'custom-manual');
+  assert.equal(initialCircuitKey({ trackPreset: 'simple-loop' }, null, presets), 'simple-loop');
+  assert.equal(initialCircuitKey(state, 'missing', presets), 'grand-prix');
+  assert.equal(initialCircuitKey(state, '__proto__', presets), 'grand-prix');
+});
+
+test('track JSON files round-trip exact geometry without importing library ids or saving implicitly', () => {
+  const local = storage(), track = { id: 'custom-manual', name: 'Portable circuit', points: oval() };
+  saveCustomTrack(track, local);
+  const before = local.getItem(CUSTOM_TRACKS_KEY);
+  const json = serializeCustomTrack(track);
+  assert.equal(JSON.parse(json).kind, 'ai-racer-track');
+  const loaded = parseCustomTrackJSON(json);
+  assert.deepEqual(loaded, { name: track.name, points: track.points });
+  assert.equal(loaded.id, undefined, 'loading a file must not overwrite an existing library entry');
+  assert.equal(local.getItem(CUSTOM_TRACKS_KEY), before);
+  for (const bad of ['invalid', JSON.stringify({ genome: [1, 2] }), ' '.repeat(262145),
+    JSON.stringify({ kind: 'ai-racer-track', version: 1, name: 'Bad circuit', points: [] })]) {
+    assert.throws(() => parseCustomTrackJSON(bad));
+  }
+});
 
 test('adding a corner inserts it into the closest track span instead of appending it', () => {
   const points = oval(), original = structuredClone(points);

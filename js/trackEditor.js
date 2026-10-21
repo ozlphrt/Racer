@@ -1,10 +1,10 @@
 import { CONFIG } from './config.js';
-import { CUSTOM_TRACKS_KEY, DRAWING_SIZE, inspectCustomTrack, insertTrackPoint, readCustomTracks, saveCustomTrack, simplifyStroke } from './customTracks.js';
+import { CUSTOM_TRACKS_KEY, DRAWING_SIZE, inspectCustomTrack, insertTrackPoint, readCustomTracks, saveCustomTrack, simplifyStroke,
+  parseCustomTrackJSON, serializeCustomTrack } from './customTracks.js';
 
 const $ = id => document.getElementById(id);
 const drawing = $('track-drawing'), nameInput = $('track-name');
 const pointMenu = $('point-context-menu'), menuRemove = $('point-menu-remove');
-const DRAFT_KEY = 'ai-racer:track-draft:v1';
 const ns = 'http://www.w3.org/2000/svg';
 const make = (tag, attributes) => {
   const element = document.createElementNS(ns, tag);
@@ -15,9 +15,6 @@ let points = [], editingId = null, selected = -1, undo = [], gesture = null, ins
 let cursor = { x: 300, y: 500 }, pendingFrame = false;
 const copy = list => list.map(p => ({ ...p }));
 function checkpoint() { undo.push({ points: copy(points), selected }); if (undo.length > 50) undo.shift(); }
-function saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ points, name: nameInput.value, editingId })); } catch {}
-}
 function status(message) { $('save-status').textContent = message; }
 function refreshLibrary() {
   const tracks = readCustomTracks(localStorage, CONFIG.track.width);
@@ -30,7 +27,7 @@ function refreshLibrary() {
   for (const track of tracks) {
     const row = document.createElement('div'); row.className = `saved-row${track.id === editingId ? ' active' : ''}`;
     const load = document.createElement('button'); load.type = 'button'; load.className = 'button quiet load-track';
-    load.textContent = track.name; load.title = `Edit ${track.name}`;
+    load.textContent = `Load · ${track.name}`; load.title = `Load ${track.name}`;
     load.addEventListener('click', () => {
       points = copy(track.points); editingId = track.id; nameInput.value = track.name; selected = -1; undo = [];
       status('Editing a saved circuit. Save to apply your changes.'); refreshLibrary(); render();
@@ -55,7 +52,7 @@ function render() {
   $('track-length').textContent = inspection.track ? `${Math.round(inspection.track.length).toLocaleString()} units` : '—';
   $('track-status').textContent = inspection.message;
   $('track-status').classList.toggle('ready', inspection.valid);
-  $('save-race').disabled = $('save-track').disabled = !inspection.valid || !nameInput.value.trim();
+  $('save-race').disabled = $('save-track').disabled = $('save-json').disabled = !inspection.valid || !nameInput.value.trim();
   $('undo').disabled = !undo.length;
   $('clear').disabled = $('reverse').disabled = points.length === 0;
   $('set-start').disabled = selected < 0 || selected === 0;
@@ -88,7 +85,6 @@ function render() {
   $('draft-stroke').setAttribute('d', gesture?.stroke ? gesture.stroke.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ') :
     !track && points.length ? points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ') : '');
   $('keyboard-cursor').setAttribute('transform', `translate(${cursor.x} ${cursor.y})`);
-  saveDraft();
 }
 function scheduleRender() {
   if (pendingFrame) return;
@@ -211,12 +207,25 @@ function save(race) {
 }
 $('save-track').addEventListener('click', () => save(false));
 $('save-race').addEventListener('click', () => save(true));
-try {
-  const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-  if (draft && Array.isArray(draft.points) && draft.points.length <= 80 && draft.points.every(p =>
-    p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1600 && p.y >= 0 && p.y <= 1000)) {
-    points = copy(draft.points); nameInput.value = typeof draft.name === 'string' ? draft.name.slice(0, 40) : '';
-    editingId = readCustomTracks().some(t => t.id === draft.editingId) ? draft.editingId : null;
-  }
-} catch {}
+$('save-json').addEventListener('click', () => {
+  try {
+    const json = serializeCustomTrack({ name: nameInput.value, points }, CONFIG.track.width);
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url;
+    link.download = `ai-racer-track-${nameInput.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'custom'}.json`;
+    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status('Track JSON downloaded. Load it again with Load JSON.');
+  } catch (error) { status(error.message); }
+});
+$('load-json').addEventListener('click', () => $('track-file').click());
+$('track-file').addEventListener('change', async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try {
+    if (file.size > 262144) throw new Error('Choose a track JSON file smaller than 256 KB.');
+    const track = parseCustomTrackJSON(await file.text(), CONFIG.track.width);
+    points = track.points; nameInput.value = track.name; editingId = null; selected = -1; undo = [];
+    closePointMenu(); refreshLibrary(); render(); status(`Loaded “${track.name}”. Save circuit to add it to your library.`);
+  } catch (error) { status(error.message); }
+  event.target.value = '';
+});
 refreshLibrary(); render();

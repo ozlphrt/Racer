@@ -5,8 +5,10 @@ Open **Settings & Tools → Draw a new track**, or the same link beneath the cir
 - Draw a continuous loop with a mouse, pen or finger, or click to place corners. The editor simplifies freehand input and uses the same closed Catmull–Rom road geometry as the race.
 - Click to insert a new point into the nearest section of the smoothed track. Drag blue points to reshape corners. Right-click a point and choose **Remove point** to delete it; removal supports Undo. Select a point and choose **Start here** to move the start/finish line. **Reverse direction** keeps the start point and reverses driving direction.
 - **Undo** reverses drawing and point edits. **Clear** empties the canvas and can be undone. **New circuit** starts a separate blank draft.
-- Name the circuit, then choose **Save circuit** or **Save & race**. Up to 12 circuits appear in the local library and the game's circuit selector. Opening an existing circuit edits its saved layout.
-- The editor retains its draft across refreshes. Circuits and drafts are stored in this browser and origin; localhost and the live site have separate libraries.
+- Name the circuit, then choose **Save circuit** or **Save & race**. Up to 12 circuits appear in the local library and the game's circuit selector. Choose **Load · name** to open an existing circuit for editing.
+- **Save JSON** downloads a portable track file. **Load JSON** opens that file in the editor without saving it to the library; choose **Save circuit** when you want to keep it there.
+- Opening or refreshing the editor starts with a blank canvas. Drawings are saved only when requested. The browser library persists across reloads; localhost and the live site have separate libraries, and JSON files can transfer tracks between them.
+- Custom race tracks also load only when requested through **Save & race** or the circuit selector. A normal game refresh returns to Grand Prix if the previous circuit was custom. Built-in circuit selections keep their existing resume behavior, and the trained population and generation are retained.
 
 The road uses the standard 84-unit width. Saving requires 4–80 points, 1,000–6,500 units of track length, enough turning room, a road inside the drawing boundary, and no crossings or overlapping road sections. Validation checks the smoothed road as well as the input points.
 

@@ -120,3 +120,26 @@ export function savedCircuitMatches(state, presets = TRACK_PRESETS) {
   if (!preset) return false;
   return !preset.custom || JSON.stringify(state.trackPoints) === JSON.stringify(preset.points);
 }
+
+export function initialCircuitKey(state, requestedKey, presets = TRACK_PRESETS) {
+  if (requestedKey && Object.hasOwn(presets, requestedKey)) return requestedKey;
+  const saved = state?.trackPreset;
+  return saved && Object.hasOwn(presets, saved) && !presets[saved].custom ? saved : 'grand-prix';
+}
+
+export function parseCustomTrackJSON(text, width = 84) {
+  if (typeof text !== 'string' || text.length > 262144) throw new Error('Choose a track JSON file smaller than 256 KB.');
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error('This file is not valid JSON.'); }
+  if (data?.kind !== 'ai-racer-track' || data.version !== 1 || typeof data.name !== 'string' ||
+      !data.name.trim() || data.name.length > 40) throw new Error('Choose an AI Racer track JSON file.');
+  const inspection = inspectCustomTrack(data.points, width);
+  if (!inspection.valid) throw new Error(inspection.message);
+  return { name: data.name.trim(), points: data.points.map(p => ({ x: p.x, y: p.y })) };
+}
+
+export function serializeCustomTrack(track, width = 84) {
+  const result = { kind: 'ai-racer-track', version: 1, name: track.name, points: track.points };
+  parseCustomTrackJSON(JSON.stringify(result), width);
+  return JSON.stringify(result, null, 2);
+}
