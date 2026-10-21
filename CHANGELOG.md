@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.14 — 2026-10-21
+
+- Draw the transparent race ghost body after road skidmarks, for both the loaded F1 model and procedural fallback. Keep depth testing enabled so solid scenery and real cars still occlude the ghost normally, with smoke rendered afterward.
+- Preserve skidmarks and ghost opacity. Verify the production build and 90 regression checks.
+
 ## 1.5.13 — 2026-10-21
 
 - Stop the historical generation anchor from elevating startup generations, changing the live-generation label or blocking current saves. Gen 5K remains the fallback when no usable local population or brain exists.

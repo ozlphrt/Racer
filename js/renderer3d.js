@@ -4161,7 +4161,9 @@ export class Renderer3D {
           mat.emissive?.set(0x0099cc);
           mat.emissiveIntensity = 0.65;
           mat.depthWrite = false;
+          mat.depthTest = true;
           child.material = mat;
+          child.renderOrder = 400; // After road skid ribbons (350), before airborne smoke (450).
         }
       });
       this.recordGhostMesh.add(proceduralGhost);
@@ -4181,6 +4183,7 @@ export class Renderer3D {
         roughness: 0.30,
         metalness: 0.50,
         depthWrite: false,
+        depthTest: true,
       });
 
       cloned.traverse((child) => {
@@ -4198,6 +4201,7 @@ export class Renderer3D {
 
         if (child.isMesh) {
           child.material = ghostMat;
+          child.renderOrder = 400; // Transparent body must composite over skidmarks on the road.
           child.castShadow = false;
           child.receiveShadow = false;
         }
