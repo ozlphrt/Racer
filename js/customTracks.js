@@ -29,37 +29,184 @@ export function insertTrackPoint(points, point) {
   return { points: result, index };
 }
 
-/** Validate the actual smoothed road, rather than just its control polygon. */
-export function inspectCustomTrack(points, width = 84) {
-  if (!Array.isArray(points) || points.length < 4) return { valid: false, message: 'Draw a loop with at least four points.' };
-  if (points.length > 80 || !points.every(validPoint)) return { valid: false, message: 'Use up to 80 points inside the drawing area.' };
-  if (points.some((p, i) => Math.hypot(p.x - points[(i + 1) % points.length].x,
-    p.y - points[(i + 1) % points.length].y) < 15)) return { valid: false, message: 'Move neighboring points farther apart.' };
-  const track = new Track(points, width, 320);
-  if (!Number.isFinite(track.length) || track.length < 1000 || track.length > 6500) {
-    return { valid: false, track, message: 'Make a circuit between 1,000 and 6,500 units long.' };
+function findNearestControlIndex(points, x, y) {
+  let best = 0, bestDistSq = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const dSq = (points[i].x - x) ** 2 + (points[i].y - y) ** 2;
+    if (dSq < bestDistSq) { bestDistSq = dSq; best = i; }
   }
-  if (track.curvature.some(k => Math.abs(k) > 1 / (width / 2 + 8))) {
-    return { valid: false, track, message: 'Open up the tightest corner so the road has room to turn.' };
+  return best;
+}
+
+function detectTightCorners(track, points, width) {
+  const minRadius = width / 2 + 8;
+  const maxCurvature = 1 / minRadius;
+  const tightCorners = [];
+  const N = track.N;
+  const visited = new Uint8Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const absK = Math.abs(track.curvature[i]);
+    if (visited[i] || absK <= maxCurvature) continue;
+
+    const indices = [i];
+    visited[i] = 1;
+
+    let step = 1;
+    while (step < N) {
+      const idx = (i + step) % N;
+      if (Math.abs(track.curvature[idx]) > maxCurvature * 0.82) {
+        indices.push(idx);
+        visited[idx] = 1;
+        step++;
+      } else break;
+    }
+
+    step = 1;
+    while (step < N) {
+      const idx = (i - step + N) % N;
+      if (visited[idx]) break;
+      if (Math.abs(track.curvature[idx]) > maxCurvature * 0.82) {
+        indices.unshift(idx);
+        visited[idx] = 1;
+        step++;
+      } else break;
+    }
+
+    let apexIdx = indices[0];
+    let maxClusterK = Math.abs(track.curvature[apexIdx]);
+    for (const idx of indices) {
+      const k = Math.abs(track.curvature[idx]);
+      if (k > maxClusterK) { maxClusterK = k; apexIdx = idx; }
+    }
+
+    const radius = Math.round(1 / maxClusterK);
+    const apexX = track.cx[apexIdx], apexY = track.cy[apexIdx];
+    const nearestControlIndex = findNearestControlIndex(points, apexX, apexY);
+
+    tightCorners.push({
+      type: 'tight-corner',
+      severity: 'error',
+      apexIndex: apexIdx,
+      apex: { x: apexX, y: apexY },
+      radius,
+      minRadius: Math.round(minRadius),
+      curvature: track.curvature[apexIdx],
+      sampleIndices: indices,
+      nearestControlIndex,
+      nearestControlPoint: points[nearestControlIndex],
+      message: `Corner ${nearestControlIndex === 0 ? 'Start/Finish' : nearestControlIndex}: Turn radius ${radius}u is too tight (minimum ${Math.round(minRadius)}u).`
+    });
   }
-  const b = track.bounds, margin = 60;
-  if (b.minX < margin || b.maxX > DRAWING_SIZE.width - margin ||
-      b.minY < margin || b.maxY > DRAWING_SIZE.height - margin) {
-    return { valid: false, track, message: 'Keep the road inside the dashed boundary.' };
-  }
-  // Compare nonlocal portions of the sampled spline. This also rejects road
-  // overlap near a crossing, even when the input control polygon looks clear.
+
+  tightCorners.sort((a, b) => a.radius - b.radius);
+  return tightCorners;
+}
+
+function detectNarrowPassages(track, points, width) {
   const minArc = width * 2.1;
-  for (let i = 0; i < track.N; i++) {
-    for (let j = i + 1; j < track.N; j++) {
-      if (Math.min(j - i, track.N - (j - i)) * track.spacing < minArc) continue;
-      const k = (j + 1) % track.N;
-      if (distPointSegSq(track.cx[i], track.cy[i], track.cx[j], track.cy[j], track.cx[k], track.cy[k]) < (width + 12) ** 2) {
-        return { valid: false, track, message: 'Separate crossing or overlapping roads. Leave room between corners.' };
+  const clearanceLimit = width + 12;
+  const N = track.N;
+  const rawOverlaps = [];
+
+  for (let i = 0; i < N; i++) {
+    for (let j = i + 1; j < N; j++) {
+      if (Math.min(j - i, N - (j - i)) * track.spacing < minArc) continue;
+      const k = (j + 1) % N;
+      const dSq = distPointSegSq(track.cx[i], track.cy[i], track.cx[j], track.cy[j], track.cx[k], track.cy[k]);
+      if (dSq < clearanceLimit ** 2) {
+        rawOverlaps.push({ i, j, k, distSq: dSq, dist: Math.sqrt(dSq) });
       }
     }
   }
-  return { valid: true, track, message: 'Ready to race · closed circuit' };
+
+  if (!rawOverlaps.length) return [];
+
+  const passages = [];
+  rawOverlaps.sort((a, b) => a.distSq - b.distSq);
+
+  for (const item of rawOverlaps) {
+    const ax = track.cx[item.i], ay = track.cy[item.i];
+    const exists = passages.some(p => {
+      const d1 = (p.pointA.x - ax) ** 2 + (p.pointA.y - ay) ** 2;
+      return d1 < (width * 1.5) ** 2;
+    });
+    if (exists) continue;
+
+    const bx1 = track.cx[item.j], by1 = track.cy[item.j];
+    const bx2 = track.cx[item.k], by2 = track.cy[item.k];
+    const ex = bx2 - bx1, ey = by2 - by1;
+    const lenSq = ex * ex + ey * ey;
+    const t = lenSq > 0 ? Math.max(0, Math.min(1, ((ax - bx1) * ex + (ay - by1) * ey) / lenSq)) : 0;
+    const projX = bx1 + ex * t;
+    const projY = by1 + ey * t;
+
+    const controlA = findNearestControlIndex(points, ax, ay);
+    const controlB = findNearestControlIndex(points, projX, projY);
+
+    passages.push({
+      type: 'narrow-passage',
+      severity: 'error',
+      pointA: { x: ax, y: ay, index: item.i },
+      pointB: { x: projX, y: projY, index: item.j },
+      distance: Math.round(item.dist),
+      clearance: Math.round(item.dist - width),
+      minDistance: Math.round(clearanceLimit),
+      nearestControlIndexA: controlA,
+      nearestControlIndexB: controlB,
+      message: `Roads too close (${Math.round(item.dist)}u apart, requires ${Math.round(clearanceLimit)}u clearance).`
+    });
+
+    if (passages.length >= 6) break;
+  }
+
+  return passages;
+}
+
+/** Validate the actual smoothed road, rather than just its control polygon. */
+export function inspectCustomTrack(points, width = 84) {
+  if (!Array.isArray(points) || points.length < 4) return { valid: false, message: 'Draw a loop with at least four points.', attention: { tightCorners: [], narrowPassages: [], hasIssues: false } };
+  if (points.length > 80 || !points.every(validPoint)) return { valid: false, message: 'Use up to 80 points inside the drawing area.', attention: { tightCorners: [], narrowPassages: [], hasIssues: false } };
+  if (points.some((p, i) => Math.hypot(p.x - points[(i + 1) % points.length].x,
+    p.y - points[(i + 1) % points.length].y) < 15)) return { valid: false, message: 'Move neighboring points farther apart.', attention: { tightCorners: [], narrowPassages: [], hasIssues: false } };
+  const track = new Track(points, width, 320);
+  if (!Number.isFinite(track.length) || track.length < 1000 || track.length > 6500) {
+    return { valid: false, track, message: 'Make a circuit between 1,000 and 6,500 units long.', attention: { tightCorners: [], narrowPassages: [], hasIssues: false } };
+  }
+
+  const tightCorners = detectTightCorners(track, points, width);
+  const narrowPassages = detectNarrowPassages(track, points, width);
+  const hasTight = tightCorners.length > 0;
+  const hasNarrow = narrowPassages.length > 0;
+
+  const b = track.bounds, margin = 60;
+  const outOfBounds = b.minX < margin || b.maxX > DRAWING_SIZE.width - margin ||
+      b.minY < margin || b.maxY > DRAWING_SIZE.height - margin;
+
+  let valid = true;
+  let message = 'Ready to race · closed circuit';
+
+  if (hasTight) {
+    valid = false;
+    message = 'Open up the tightest corner so the road has room to turn.';
+  } else if (outOfBounds) {
+    valid = false;
+    message = 'Keep the road inside the dashed boundary.';
+  } else if (hasNarrow) {
+    valid = false;
+    message = 'Separate crossing or overlapping roads. Leave room between corners.';
+  }
+
+  return {
+    valid,
+    track,
+    message,
+    attention: {
+      tightCorners,
+      narrowPassages,
+      hasIssues: hasTight || hasNarrow
+    }
+  };
 }
 
 /** Reduce a hand-drawn stroke without replacing it with a preset shape. */
@@ -106,6 +253,15 @@ export function saveCustomTrack(track, storage = localStorage, width = 84) {
   if (at === -1) tracks.push(saved); else tracks[at] = saved;
   storage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(tracks));
   return saved;
+}
+
+export function deleteCustomTrack(trackId, storage = localStorage, width = 84) {
+  if (typeof trackId !== 'string') return [];
+  const tracks = readCustomTracks(storage, width);
+  const remaining = tracks.filter(t => t.id !== trackId);
+  storage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(remaining));
+  delete TRACK_PRESETS[trackId];
+  return remaining;
 }
 
 export function registerCustomTracks(storage = localStorage, width = 84) {

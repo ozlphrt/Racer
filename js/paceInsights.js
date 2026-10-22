@@ -85,35 +85,51 @@ function drawPaceInsightsAtHeight(chart, h) {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
   };
   const gapDirection = model.gapChange === null ? 'Need more laps' : Math.abs(model.gapChange) < 0.005 ? 'Gap unchanged' :
-    `Gap ${model.gapChange < 0 ? 'narrowing' : 'widening'} ${seconds(Math.abs(model.gapChange))}`;
+    `Gap ${model.gapChange < 0 ? 'narrowing' : 'widening'}`;
+  const gapValue = model.gapChange === null ? '—' : seconds(Math.abs(model.gapChange));
+  // [title, subtitle, accent color, large headline value shown on the right]
   const cards = [
-    [model.recordGain === null ? 'No record yet' : `${seconds(model.recordGain)} record gain`, `${model.sinceRecord ?? '—'} gens since last record`, '#38bdf8'],
-    [gapDirection, `First vs last ${model.comparisonSize} gens · median gap`, model.gapChange > 0 ? '#fbbf24' : '#34d399'],
-    [model.finishRate === null ? 'Population finish unavailable' : `${Math.round(model.finishRate * 100)}% population finish`,
-      `${model.finished}/${model.starters} cars · last ${model.finishWindow} gens`, '#c4b5fd'],
+    [model.recordGain === null ? 'No record yet' : 'Record gain', `${model.sinceRecord ?? '—'} gens since last record`, '#38bdf8',
+      model.recordGain === null ? '—' : seconds(model.recordGain)],
+    [gapDirection, `First vs last ${model.comparisonSize} gens · median gap`, model.gapChange > 0 ? '#f59e0b' : '#38bdf8', gapValue],
+    [model.finishRate === null ? 'Population finish unavailable' : 'Population finish',
+      `${model.finished}/${model.starters} cars · last ${model.finishWindow} gens`, '#94a3b8',
+      model.finishRate === null ? '—' : `${Math.round(model.finishRate * 100)}%`],
   ];
   const portrait = w < 650;
   const cardWidth = portrait ? w - 8 : (w - 16) / 3;
-  const cardHeight = portrait ? 34 : 45;
-  cards.forEach(([title, subtitle, color], i) => {
+  const cardHeight = portrait ? 38 : 48;
+  cards.forEach(([title, subtitle, color, big], i) => {
     const x = portrait ? 4 : 4 + i * (cardWidth + 4);
     const y = portrait ? i * (cardHeight + 3) : 0;
-    ctx.fillStyle = 'rgba(148,163,184,0.045)'; ctx.fillRect(x, y, cardWidth, cardHeight);
-    ctx.fillStyle = color; ctx.fillRect(x, y, 2, cardHeight);
-    text(title, x + 10, y + (portrait ? 10 : 15), color, portrait ? 10 : 12);
-    text(subtitle, x + 10, y + (portrait ? 25 : 33), '#8796aa', portrait ? 8 : 9);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)'; ctx.fillRect(x, y, cardWidth, cardHeight);
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)'; ctx.lineWidth = 1; ctx.strokeRect(x, y, cardWidth, cardHeight);
+    ctx.fillStyle = color; ctx.fillRect(x, y, 2.5, cardHeight);
+    text(title, x + 10, y + (portrait ? 12 : 16), color, portrait ? 11 : 11.5);
+    text(subtitle, x + 10, y + (portrait ? 28 : 35), '#64748b', portrait ? 8.5 : 9);
+    // Headline number: large, right-aligned, so the key figure reads at a glance and fills the card
+    ctx.fillStyle = '#f8fafc'; ctx.font = `700 ${portrait ? 20 : 19}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(big, x + cardWidth - 12, y + cardHeight / 2);
   });
   const usable = Math.max(50, h - (portrait ? 216 : 150));
   const champion = { top: portrait ? 138 : 72, height: usable * 0.43 };
   const pack = { top: champion.top + champion.height + 29, height: usable * 0.43 };
   const survival = { top: pack.top + pack.height + 24, height: Math.max(12, usable * 0.14) };
-  const paceValues = rows.flatMap(r => [r.best, r.record]).filter(v => v !== null);
-  const paceMin = Math.min(...paceValues), paceMax = Math.max(...paceValues);
-  const paceMargin = Math.max(0.025, (paceMax - paceMin) * 0.12);
-  const min = paceMin - paceMargin, max = paceMax + paceMargin;
-  const PY = (v) => champion.top + champion.height * (v - min) / (max - min);
-  const gapMax = Math.max(0.1, ...rows.map(r => r.gap ?? 0)) * 1.1;
-  const GY = (v) => pack.top + pack.height * (1 - v / gapMax);
+  // Robust axes: a few collapsed generations (e.g. a 110 s timeout) must not flatten the real trend,
+  // so the scale follows the typical range and outliers are clipped and marked at the panel edge.
+  const bests = rows.map(r => r.best).filter(v => v !== null);
+  const recordValues = rows.map(r => r.record).filter(v => v !== null);
+  const paceMin = Math.min(...recordValues, quantile(bests, 0.02));
+  const typicalMax = Math.max(quantile(bests, 0.95), paceMin + 0.05);
+  const paceMargin = Math.max(0.025, (typicalMax - paceMin) * 0.15);
+  const min = paceMin - paceMargin, max = typicalMax + paceMargin;
+  const PY = (v) => champion.top + champion.height * (Math.min(max, Math.max(min, v)) - min) / (max - min);
+  const slowOutlier = (r) => r.best !== null && r.best > max;
+  const noLap = rows.filter(r => r.best === null);
+  const collapses = rows.filter(slowOutlier);
+  const gapValues = rows.map(r => r.gap).filter(v => v !== null);
+  const gapMax = Math.max(0.1, gapValues.length ? quantile(gapValues, 0.95) : 0, ...rows.map(r => r.gapMedian ?? 0)) * 1.15;
+  const GY = (v) => pack.top + pack.height * (1 - Math.min(gapMax, v) / gapMax);
   const grid = (panel, values, format) => {
     for (let i = 0; i < 3; i++) {
       const y = panel.top + panel.height * i / 2;
@@ -122,9 +138,18 @@ function drawPaceInsightsAtHeight(chart, h) {
     }
   };
   text('CHAMPION PACE', left, champion.top - 15, '#38bdf8', 10);
-  text(w < 650 ? 'raw · 25-gen median · record' : 'Faint: each gen  /  Cyan: 25-gen median  /  Gold: record  ·  Lower is faster', w - right, champion.top - 15, '#8796aa', w < 650 ? 7 : 9, 'right');
+  text(w < 650 ? 'raw · 25-gen median · record' : 'Faint: each gen  /  Cyan: 25-gen median  /  Gold: record  ·  Lower is faster  ·  Axis fits typical laps; ▼ = slower than axis', w - right, champion.top - 15, '#8796aa', w < 650 ? 7 : 9, 'right');
+  // Shade generations where nobody completed a valid lap: these are the training failures.
+  const bandWidth = Math.max(1, width / rows.length);
+  ctx.fillStyle = 'rgba(239,68,68,0.13)';
+  for (const r of noLap) ctx.fillRect(Math.max(left, X(r) - bandWidth / 2), champion.top, bandWidth, champion.height);
   grid(champion, i => min + (max - min) * i / 2, v => `${v.toFixed(2)}s`);
-  text('PACK GAP', left, pack.top - 15, '#34d399', 10);
+  // Anomaly summary pinned inside the panel so a failing run is obvious at a glance.
+  const warnings = [];
+  if (noLap.length) warnings.push([`${noLap.length}/${rows.length} gens: no car completed a lap`, '#f87171']);
+  if (collapses.length) warnings.push([`${collapses.length} gens slower than axis (slowest ${Math.max(...collapses.map(r => r.best)).toFixed(1)}s) ▼`, '#fbbf24']);
+  warnings.forEach(([msg, color], i) => text(`⚠ ${msg}`, left + 6, champion.top + 10 + i * 12, color, w < 650 ? 8 : 9));
+  text('PACK GAP', left, pack.top - 15, '#2dd4bf', 10);
   text(w < 650 ? 'mean best lap − champion' : 'Mean car best lap − champion  /  Band: middle 50% of gaps over 25 gens', w - right, pack.top - 15, '#8796aa', w < 650 ? 7 : 9, 'right');
   grid(pack, i => gapMax * (1 - i / 2), v => `+${v.toFixed(1)}s`);
   const series = (field, Y, color, weight = 1, dashed = false, stepped = false, validField = field) => {
@@ -139,9 +164,15 @@ function drawPaceInsightsAtHeight(chart, h) {
     ctx.lineWidth = weight; ctx.strokeStyle = color;
     ctx.setLineDash(dashed ? [4, 4] : []); ctx.stroke(); ctx.setLineDash([]);
   };
-  series('best', PY, 'rgba(56,189,248,0.23)');
+  series('best', PY, 'rgba(56,189,248,0.20)');
   series('championMedian', PY, '#38bdf8', 2, false, false, 'best');
-  series('record', PY, '#fbbf24', 1.2, true, true);
+  series('record', PY, '#f59e0b', 1.2, true, true);
+  // Mark clipped slow generations at the bottom edge instead of letting them stretch the axis.
+  ctx.fillStyle = 'rgba(251,191,36,0.9)';
+  for (const r of collapses) {
+    const x = X(r), y = champion.top + champion.height;
+    ctx.beginPath(); ctx.moveTo(x - 3, y - 6); ctx.lineTo(x + 3, y - 6); ctx.lineTo(x, y); ctx.closePath(); ctx.fill();
+  }
   // Separate polygons preserve gaps instead of drawing through missing generations.
   let segment = [];
   const fillBand = () => {
@@ -149,19 +180,19 @@ function drawPaceInsightsAtHeight(chart, h) {
     ctx.beginPath();
     segment.forEach((r, i) => i ? ctx.lineTo(X(r), GY(r.gapHigh)) : ctx.moveTo(X(r), GY(r.gapHigh)));
     [...segment].reverse().forEach(r => ctx.lineTo(X(r), GY(r.gapLow)));
-    ctx.closePath(); ctx.fillStyle = 'rgba(52,211,153,0.12)'; ctx.fill(); segment = [];
+    ctx.closePath(); ctx.fillStyle = 'rgba(45,212,191,0.08)'; ctx.fill(); segment = [];
   };
   for (const r of rows) { if (r.gap !== null) segment.push(r); else fillBand(); } fillBand();
-  series('gap', GY, 'rgba(52,211,153,0.27)');
+  series('gap', GY, 'rgba(45,212,191,0.20)');
   // Missing measurements remain visible as gaps even when a rolling median exists.
-  series('gapMedian', GY, '#34d399', 2, false, false, 'gap');
-  text('POPULATION FINISH', left, survival.top - 10, '#c4b5fd', 9);
-  text('Each bar = cars finishing / starters · blank = unavailable', w - right, survival.top - 10, '#8796aa', w < 650 ? 7 : 9, 'right');
-  ctx.fillStyle = 'rgba(196,181,253,0.05)'; ctx.fillRect(left, survival.top, width, survival.height);
+  series('gapMedian', GY, '#2dd4bf', 2, false, false, 'gap');
+  text('POPULATION FINISH', left, survival.top - 10, '#94a3b8', 9);
+  text('Each bar = cars finishing / starters · blank = unavailable', w - right, survival.top - 10, '#64748b', w < 650 ? 7 : 9, 'right');
+  ctx.fillStyle = 'rgba(148,163,184,0.04)'; ctx.fillRect(left, survival.top, width, survival.height);
   const barWidth = Math.max(1, width / rows.length - 1);
   for (const r of rows) {
     if (r.finishRate === null) continue;
-    ctx.fillStyle = r.finishRate >= 0.5 ? '#a78bfa' : '#a17875';
+    ctx.fillStyle = r.finishRate >= 0.5 ? 'rgba(56, 189, 248, 0.70)' : 'rgba(100, 116, 139, 0.40)';
     const barHeight = Math.max(1, survival.height * r.finishRate);
     ctx.fillRect(Math.max(left, Math.min(w - right - barWidth, X(r) - barWidth / 2)), survival.top + survival.height - barHeight, barWidth, barHeight);
   }
@@ -174,22 +205,22 @@ function drawPaceInsightsAtHeight(chart, h) {
   if (selected) {
     const x = X(selected);
     ctx.setLineDash([3, 4]); line(x, champion.top, x, survival.top + survival.height, 'rgba(255,255,255,0.5)'); ctx.setLineDash([]);
-    for (const [value, Y, color] of [[selected.best, PY, '#38bdf8'], [selected.gap, GY, '#34d399']]) {
+    for (const [value, Y, color] of [[selected.best, PY, '#38bdf8'], [selected.gap, GY, '#2dd4bf']]) {
       if (value === null) continue;
       ctx.beginPath(); ctx.arc(x, Y(value), 3, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
     }
     const bw = Math.min(242, w - 12), bx = Math.max(6, Math.min(w - bw - 6, x + 12));
-    ctx.fillStyle = '#101b2c'; ctx.fillRect(bx, champion.top + 3, bw, 84);
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(bx, champion.top + 3, bw, 84);
     ctx.strokeStyle = '#334155'; ctx.strokeRect(bx, champion.top + 3, bw, 84);
     text(`GEN ${selected.generation} · observed`, bx + 10, champion.top + 17, '#f8fafc', 10);
     text(`Champion ${seconds(selected.best)} · pack ${seconds(selected.pack)}`, bx + 10, champion.top + 36, '#38bdf8', 9);
-    text(`Pack gap ${seconds(selected.gap)} · record ${seconds(selected.record)}`, bx + 10, champion.top + 54, '#34d399', 9);
-    text(selected.finishers === null ? 'Finish data unavailable' : `${selected.finishers}/${selected.population} finished (${Math.round(selected.finishRate * 100)}%)`, bx + 10, champion.top + 72, '#c4b5fd', 9);
+    text(`Pack gap ${seconds(selected.gap)} · record ${seconds(selected.record)}`, bx + 10, champion.top + 54, '#2dd4bf', 9);
+    text(selected.finishers === null ? 'Finish data unavailable' : `${selected.finishers}/${selected.population} finished (${Math.round(selected.finishRate * 100)}%)`, bx + 10, champion.top + 72, '#94a3b8', 9);
   }
   const active = selected || last;
   chart.updateKpiStrip([
     { label: selected ? `GEN ${active.generation}` : 'LATEST', val: seconds(active.best), cls: 'cyan', dot: '#38bdf8' },
-    { label: 'PACK GAP', val: active.gap === null ? '—' : `+${seconds(active.gap)}`, cls: 'green' },
+    { label: 'PACK GAP', val: active.gap === null ? '—' : `+${seconds(active.gap)}`, cls: 'teal', dot: '#2dd4bf' },
     { label: 'FINISHED', val: active.finishers === null ? '—' : `${active.finishers}/${active.population}`, cls: 'white' },
   ]);
   chart.canvas.setAttribute('aria-label', `Training pace analysis. ${cards.map(c => c.slice(0, 2).join('. ')).join('. ')}. Champion pace, pack gap and finish rate over ${rows.length} generations.`);

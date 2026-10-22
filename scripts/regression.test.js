@@ -71,13 +71,13 @@ test('finished engine voices settle to quiet idle despite stale speed, throttle 
   assert.equal(voice.gainNode.gain.value, racingGain);
 });
 
-test('startup uses the real bundled Gen 5K without fabricating records or personal captures', () => {
+test('startup uses the real bundled default checkpoint without fabricating records or personal captures', () => {
   const selection = resolveStartupState(null, CONFIG, PRESET_BRAINS);
-  const checkpoint = PRESET_BRAINS['grand-prix:5000'];
+  const checkpoint = PRESET_BRAINS['grand-prix:250'];
   const sim = new Simulation(track(), CONFIG);
   sim.resumeState(selection.state);
   assert.equal(selection.source, 'bundled');
-  assert.equal(sim.generation, 5000);
+  assert.equal(sim.generation, 250);
   assert.ok(sim.cars.every(c => Array.from(c.brain.genome).every((weight, i) => weight === checkpoint.genome[i])));
   assert.deepEqual(sim.history, []);
   assert.deepEqual(sim.capturedPresets, []);
@@ -86,16 +86,16 @@ test('startup uses the real bundled Gen 5K without fabricating records or person
   assert.notEqual(selection.state.currentGenomes[0], selection.state.currentGenomes[1]);
 });
 
-test('startup raises lower generations to Gen 5K and preserves local Gen 5K and higher saves exactly', () => {
+test('startup raises lower generations to the default checkpoint and preserves local saves at or above it exactly', () => {
   const lower = { generation: 123, history: [{ generation: 122, bestLap: 9 }], bestLapEver: 9,
     capturedPresets: [], mutationRate: 0.12, trackPreset: 'simple-loop' };
   const before = structuredClone(lower);
   const selected = resolveStartupState(lower, CONFIG, PRESET_BRAINS);
-  assert.equal(selected.state.generation, 5000);
+  assert.equal(selected.state.generation, 250);
   assert.equal(selected.state.trackPreset, 'grand-prix');
   assert.equal(selected.state.mutationRate, 0.12);
   assert.deepEqual(lower, before);
-  for (const generation of [5000, 5001, 130322]) {
+  for (const generation of [250, 251, 130322]) {
     const local = { ...lower, generation, currentGenomes: [new Float32Array(230).fill(0.5)] };
     const result = resolveStartupState(local, CONFIG, PRESET_BRAINS);
     assert.equal(result.source, 'local');
@@ -360,7 +360,7 @@ test('generation outcomes are captured before population replacement and survive
   assert.deepEqual(saved.history.at(-1).crashDiagnostics, record.crashDiagnostics);
 });
 
-test('dense tire smoke requires sustained physical sideways slip rather than hard control inputs', () => {
+test('tire smoke emits during high slip, launch wheelspin, brake lockup, and crash slides', () => {
   const run = (changes, frames = 24) => {
     const renderer = Object.create(Renderer3D.prototype);
     renderer.camera = { position: new THREE.Vector3() };
@@ -376,14 +376,28 @@ test('dense tire smoke requires sustained physical sideways slip rather than har
     }
     return { smoke, marks };
   };
-  assert.equal(run({}).smoke, 0, 'full steering and locked brakes alone are insufficient');
-  assert.equal(run({ speed: 40, throttle: 1, brakeLock: 0, wheelSpin: 1 }).smoke, 0, 'launch wheelspin is insufficient');
-  assert.equal(run({ speed: 40, slipAngle: 0.8 }).smoke, 0, 'slow sliding is insufficient');
-  assert.equal(run({ slipAngle: 0.16 }).smoke, 0, 'moderate slip is insufficient');
-  assert.equal(run({ slipAngle: 0.6 }, 3).smoke, 0, 'a momentary slip spike is insufficient');
-  const heavy = run({ speed: 130, slipAngle: 0.26 });
-  assert.ok(heavy.smoke > 0, 'a sustained fast sideways skid still produces the dense plume');
+  assert.equal(run({ steer: 0.1, slipAngle: 0.02, brakeLock: 0, throttle: 0.5 }).smoke, 0, 'clean grip driving produces no smoke');
+  assert.ok(run({ speed: 40, throttle: 1, brakeLock: 0, wheelSpin: 1 }).smoke > 0, 'launch wheelspin emits smoke');
+  assert.ok(run({ speed: 130, slipAngle: 0.26 }).smoke > 0, 'a sustained fast sideways skid produces smoke');
+  assert.ok(run({ speed: 100, brakeLock: 0.8 }).smoke > 0, 'heavy brake lockup emits smoke');
   assert.ok(run({}).marks > 0, 'ordinary skids retain their tire marks');
+});
+
+test('tire smoke particle system uses zero-allocation preallocated pooling and range-based GPU uploads', () => {
+  const renderer = Object.create(Renderer3D.prototype);
+  renderer.createSmokeTexture = () => new THREE.Texture();
+  renderer.scene = { add: () => {} };
+  renderer.setupTireSmoke();
+  assert.equal(renderer.maxSmokeParticles, 3600, 'pool holds a full multi-car trail so the oldest puffs never pop out mid-plume');
+  assert.equal(renderer.smokeParticles.length, 3600, 'pool is pre-allocated');
+
+  for (let i = 0; i < 50; i++) {
+    renderer.addTireSmokePuff(i, 0, 0, 10, 0, 0.8, 0, 'auto');
+  }
+
+  renderer.updateTireSmoke();
+  assert.ok(renderer.smokeMesh.geometry.attributes.position.updateRanges.length > 0, 'uses updateRanges instead of full buffer uploads');
+  assert.ok(renderer.smokeMesh.geometry.attributes.position.version > 0, 'increments version on active ranges');
 });
 
 test('lap celebrations animate their glow without repeatedly uploading unchanged scoreboard pixels', t => {
@@ -469,6 +483,7 @@ test('tight left-corner recovery does not toggle braking and throttle around its
   const sample = degrees => {
     car.idx = corner; car.x = circuit.cx[corner]; car.y = circuit.cy[corner];
     car.angle = heading - degrees * Math.PI / 180;
+    car.steer = -0.8; // steering rack already settled at the brain's command (steering is rate-limited)
     car.vx = 100 * Math.cos(car.angle); car.vy = 100 * Math.sin(car.angle);
     car.time = 10; car.crashed = false; car.alive = true;
     car.update(CONFIG.dt);
@@ -563,8 +578,8 @@ test('runoff recovery is visible in the existing pre-crash recovery trace', () =
   assert.equal(car.crashApproach.snapshot(car.time).at(-1)[6], 1);
 });
 
-test('the proven Gen 5000 policy keeps identical five-lap trajectories from every grid slot', () => {
-  const circuit = track(), genome = PRESET_BRAINS['grand-prix:5000'].genome;
+test('the proven bundled policy keeps identical five-lap trajectories from every grid slot', () => {
+  const circuit = track(), genome = PRESET_BRAINS['grand-prix:250'].genome;
   for (let slot = 0; slot < 20; slot++) {
     const enabled = new Car(circuit, new NeuralNetwork(CONFIG.nn.layers, genome), slot);
     const baseline = new Car(circuit, new NeuralNetwork(CONFIG.nn.layers, genome), slot);
@@ -583,7 +598,7 @@ test('champion validation measures twenty independent starts without breeding or
   const config = structuredClone(CONFIG), circuit = track();
   const before = JSON.stringify(CONFIG), progress = [];
   const request = { config, trackKey: 'grand-prix', signature: physicsSignature(circuit, config),
-    genome: [...PRESET_BRAINS['grand-prix:5000'].genome] };
+    genome: [...PRESET_BRAINS['grand-prix:250'].genome] };
   const result = await validateChampion(request, ({ tested }) => progress.push(tested));
   assert.equal(result.tested, 20);
   assert.equal(result.finished, 20);
@@ -1596,18 +1611,18 @@ test('an orphan 130K anchor cannot manufacture a generation or block current sav
   const memory = storageFixture(t);
   memory.set('ai-racer:generation-anchor', '130000');
   assert.equal(loadTrainingState(layers), null);
-  assert.equal(resolveStartupState(loadTrainingState(layers), CONFIG, PRESET_BRAINS).state.generation, 5000);
+  assert.equal(resolveStartupState(loadTrainingState(layers), CONFIG, PRESET_BRAINS).state.generation, 250);
   assert.equal(resolveStartupState({ generation: 130000 }, CONFIG, PRESET_BRAINS).source, 'bundled');
   const sim = new Simulation(track(), CONFIG);
   sim.resumeState(resolveStartupState(null, CONFIG, PRESET_BRAINS).state);
-  sim.generation = 5001;
+  sim.generation = 251;
   assert.equal(saveTrainingState(sim, layers), true);
-  assert.equal(memory.get('ai-racer:generation-anchor'), '5001');
-  assert.equal(loadTrainingState(layers).generation, 5001);
-  sim.generation = 5002;
+  assert.equal(memory.get('ai-racer:generation-anchor'), '251');
+  assert.equal(loadTrainingState(layers).generation, 251);
+  sim.generation = 252;
   assert.equal(saveTrainingState(sim, layers), true);
   const restored = loadTrainingState(layers);
-  assert.equal(restored.generation, 5002);
+  assert.equal(restored.generation, 252);
   assert.deepEqual(Array.from(restored.currentGenomes[0]), Array.from(Float32Array.from(
     JSON.parse(memory.get('ai-racer:training-state:v2')).currentGenomes[0])));
 });

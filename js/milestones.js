@@ -2,7 +2,7 @@ export const PRESET_MILESTONES = [1, 2, 5, 10, 50, 100, 250, 500, 1000, 2000, 50
 
 // Bump this version when physics, sensors, or track-generation algorithms change.
 export function physicsSignature(track, config) {
-  return JSON.stringify({ version: 1, dt: config.dt, car: config.car,
+  return JSON.stringify({ version: 2, dt: config.dt, car: config.car,
     sensors: config.sensors, layers: config.nn.layers, width: track.width,
     centerX: Array.from(track.cx), centerY: Array.from(track.cy) });
 }

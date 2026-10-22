@@ -532,7 +532,13 @@ export class SpatialAudioEngine {
     }
 
     // 3. Subtle background layer for competitors (Voices 1 to 3)
-    const otherCandidates = [];
+    if (!this._candidateSlots) {
+      this._candidateSlots = [];
+      for (let sIdx = 0; sIdx < 64; sIdx++) {
+        this._candidateSlots.push({ car: null, dist: Infinity });
+      }
+    }
+    let candidateCount = 0;
     if (sim.cars) {
       for (let i = 0; i < sim.cars.length; i++) {
         const c = sim.cars[i];
@@ -542,23 +548,43 @@ export class SpatialAudioEngine {
           const dz = (c.elev || 0) - camSimZ;
           const dist = Math.hypot(dx, dy, dz);
           if (dist <= this.maxAudibleDist) {
-            otherCandidates.push({ car: c, dist });
+            if (candidateCount < this._candidateSlots.length) {
+              const slot = this._candidateSlots[candidateCount++];
+              slot.car = c;
+              slot.dist = dist;
+            }
           }
         }
       }
     }
 
-    otherCandidates.sort((a, b) => a.dist - b.dist);
-
     const availableVoices = this.maxVoices - 1;
-    const count = Math.min(otherCandidates.length, availableVoices);
+    const count = Math.min(candidateCount, availableVoices);
+
+    // Partial selection sort for only the top nearest competitors
+    for (let i = 0; i < count; i++) {
+      let minIdx = i;
+      for (let j = i + 1; j < candidateCount; j++) {
+        if (this._candidateSlots[j].dist < this._candidateSlots[minIdx].dist) {
+          minIdx = j;
+        }
+      }
+      if (minIdx !== i) {
+        const tmpCar = this._candidateSlots[i].car;
+        const tmpDist = this._candidateSlots[i].dist;
+        this._candidateSlots[i].car = this._candidateSlots[minIdx].car;
+        this._candidateSlots[i].dist = this._candidateSlots[minIdx].dist;
+        this._candidateSlots[minIdx].car = tmpCar;
+        this._candidateSlots[minIdx].dist = tmpDist;
+      }
+    }
 
     for (let i = 0; i < availableVoices; i++) {
       const voiceIndex = i + 1;
       const voice = this.voices[voiceIndex];
 
       if (i < count) {
-        const item = otherCandidates[i];
+        const item = this._candidateSlots[i];
         const car = item.car;
         const dist = item.dist;
 

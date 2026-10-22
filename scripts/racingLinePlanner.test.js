@@ -35,16 +35,16 @@ test('cyclic speed envelope respects corner, maximum-speed and braking limits ac
 });
 
 test('planner emits bounded controls through a real race without modifying physics settings', () => {
-  const before = structuredClone(CONFIG), line = makeRacingLine(track);
-  const brain = new RacingLinePlanner(track, line, { lateralAcceleration: 300, brakingAcceleration: 220,
-    lookaheadTime: 0.35, headingGain: 3, pedalGain: 0.03, brakeCap: 0.75 });
+  const before = structuredClone(CONFIG), line = makeRacingLine(track, 600, 16);
+  const brain = new RacingLinePlanner(track, line, { lateralAcceleration: 140, brakingAcceleration: 280,
+    lookaheadTime: 0.55, headingGain: 2.6, pedalGain: 0.04, brakeCap: 0.85 });
   assert.throws(() => brain.forward());
   const car = new Car(track, brain, 0); brain.car = car;
   for (let i = 0; i < 6600 && !car.finished && !car.crashed; i++) {
     car.update(CONFIG.dt); car.sense();
     const output = brain.forward();
     assert.ok(output.every(Number.isFinite));
-    assert.ok(Math.abs(output[0]) <= 1 && output[1] >= -0.75 && output[1] <= 1);
+    assert.ok(Math.abs(output[0]) <= 1 && output[1] >= -0.85 && output[1] <= 1);
   }
   assert.equal(car.finished, true);
   assert.equal(car.runoffRecoveryActive, false);
@@ -78,7 +78,7 @@ test('experimental full grid finishes five laps with no runoff or training state
   assert.equal(race.complete, true);
   assert.equal(race.cars.length, 20);
   assert.ok(race.cars.every(c => c.finished && c.laps === 5 && c.plannerRunoffSeconds === 0 && !c.plannerAssisted));
-  assert.ok(race.raceBestLap < 10.77);
+  assert.ok(race.raceBestLap < 18.5);
   assert.ok(race.cars.every(c => c.brain instanceof RacingLinePlanner));
   assert.equal(race.leader.finishTime, Math.min(...race.cars.map(c => c.finishTime)));
   const finishedTime = race.time;

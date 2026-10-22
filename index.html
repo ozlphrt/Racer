@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AI Racer · Neuroevolution Car Racing Lab</title>
   <meta name="description" content="Watch a population of neural-network-driven cars learn to stay on track and race faster every generation with a genetic algorithm, live in your browser.">
-  <meta name="application-version" content="1.5.21">
+  <meta name="application-version" content="1.5.22">
   <meta name="theme-color" content="#05070f">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -270,6 +270,15 @@
               </div>
             </div>
           </div>
+
+          <!-- Track Selector & Circuit Designer Icon Button -->
+          <button class="circle-btn glass" id="btn-track-menu" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="track-modal" aria-label="Track Selector &amp; Designer" title="Tracks &amp; Circuit Designer">
+            <svg class="circle-btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 15c-1.5-2-1.5-6 0-8 1.5-2 4.5-3 8-3s8 2 8 5-1.5 5-4 5-3 2-4 4c-1 2-2.5 2.5-4 2-1.5-.5-2.5-3-4-5z"></path>
+              <circle cx="16" cy="8" r="1.5" fill="currentColor"></circle>
+            </svg>
+            <span class="circle-btn-dot" id="track-active-dot" style="background:#06b6d4;"></span>
+          </button>
 
           <button class="circle-btn glass is-active" id="btn-toggle-leaderboard" type="button" aria-label="Toggle Leaderboard" title="Leaderboard (L)">
             <svg class="circle-btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -819,7 +828,7 @@
                   <span id="hyper-prog-state">SIMULATION STANDBY</span>
                 </div>
                 <div class="prog-label-right">
-                  <span id="hyper-target-info">GEN <strong id="hyper-cur-gen">1</strong> · CONTINUOUS EVOLUTION</span>
+                  <span id="hyper-target-info">GEN <strong id="hyper-cur-gen">1</strong><span>CONTINUOUS EVOLUTION</span></span>
                   <span class="prog-badge" id="hyper-prog-pct">READY</span>
                 </div>
               </div>
@@ -1182,6 +1191,67 @@
             </svg>
             <span>LAUNCH SHOWDOWN</span>
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TRACK SELECTOR & CIRCUIT DESIGNER MODAL ================= -->
+  <div class="track-modal-backdrop" id="track-modal" hidden>
+    <div class="track-modal glass" role="dialog" aria-modal="true" aria-labelledby="track-modal-title">
+      <!-- Modal Header -->
+      <div class="track-modal-header">
+        <div class="track-modal-title-wrap">
+          <div class="track-modal-title" id="track-modal-title">
+            <span class="track-modal-header-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 15c-1.5-2-1.5-6 0-8 1.5-2 4.5-3 8-3s8 2 8 5-1.5 5-4 5-3 2-4 4c-1 2-2.5 2.5-4 2-1.5-.5-2.5-3-4-5z"></path>
+                <circle cx="16" cy="8" r="1.5" fill="currentColor"></circle>
+              </svg>
+            </span>
+            <span>CIRCUIT SELECTOR &amp; DESIGNER</span>
+          </div>
+          <span class="track-modal-subtitle">Choose a championship circuit, race custom tracks, or build a new layout</span>
+        </div>
+        <button class="track-modal-close" id="btn-track-modal-close" type="button" aria-label="Close circuit selector">✕</button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="track-modal-body">
+        <!-- Hero Action: Draw New Track -->
+        <a class="track-new-design-card" id="btn-track-new-design" href="./track-editor.html">
+          <div class="track-new-design-blueprint">
+            <div class="track-new-design-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </div>
+            <div class="track-new-design-plus">+</div>
+          </div>
+          <div class="track-new-design-info">
+            <div class="track-new-design-title">
+              <span>Draw New Track</span>
+              <span class="track-badge-new">CIRCUIT DESIGNER</span>
+            </div>
+            <div class="track-new-design-desc">
+              Design a custom racing track with spline curvature, boundary checks, and start grid placement.
+            </div>
+          </div>
+          <div class="track-new-design-action">
+            <span class="track-launch-btn">Open Designer ➔</span>
+          </div>
+        </a>
+
+        <!-- Section Heading -->
+        <div class="track-section-divider">
+          <span class="track-section-heading">AVAILABLE CIRCUITS</span>
+          <span class="track-count-badge" id="track-modal-count">4 Tracks</span>
+        </div>
+
+        <!-- Built-in & Custom Tracks Grid -->
+        <div class="track-cards-grid" id="track-cards-grid">
+          <!-- Populated dynamically via JS with SVG silhouettes, length, and names -->
         </div>
       </div>
     </div>

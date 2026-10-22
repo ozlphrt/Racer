@@ -4,6 +4,13 @@ import { CrashApproachRecorder, analyzeApproach } from './crashApproach.js';
 
 export const RAY_ANGLES = CONFIG.sensors.angles.map((a) => (a * Math.PI) / 180);
 
+// AI steering command conditioning: first-order smoothing time constant (seconds) and a
+// maximum change rate per second (40/s = full lock to full lock in 0.05 s, a safety cap only).
+// Tuned by headless sweeps: the raw network chatters lock-to-lock ~13x/s; 0.05 s removes that
+// while all lap-capable bundled brains still finish (0.08 s and above begins to crash them).
+export const STEER_LIMITS = { smoothingSec: 0.05, slewPerSec: 40 };
+
+
 /**
  * Arcade car. Driven either by a NeuralNetwork brain or by manual controls.
  * Inputs for the next decision are computed at the end of each update so the
@@ -92,6 +99,7 @@ export class Car {
     this.deathTimer = 0;
     this.spinRate = 0;
     this.yawRate = 0;
+    this.yawCmd = 0;
     this.wrongWayRecoveryActive = false;
     this.runoffRecoveryActive = false;
     this.recoveryTurnDirection = 0;
@@ -320,7 +328,18 @@ export class Car {
         this.throttle = 0.8;
       } else {
         const out = this.brain.forward(this.inputs);
-        this.steer = clamp(out[0], -1, 1);
+        // A real steering rack moves at a finite rate; limiting the slew stops the network
+        // from flipping lock-to-lock every tick (visible as stutter in car, camera and wheel).
+        const prevSteer = Number.isFinite(this.steer) ? this.steer : 0;
+        const desiredSteer = clamp(out[0], -1, 1);
+        // Low-pass the command: a network that chatters around its target every few ticks
+        // averages out to its intended steering instead of shaking the car, camera and wheel.
+        const tau = STEER_LIMITS.smoothingSec;
+        const smoothed = tau > 0
+          ? prevSteer + (desiredSteer - prevSteer) * (1 - Math.exp(-dt / tau))
+          : desiredSteer;
+        const maxSteerStep = STEER_LIMITS.slewPerSec * dt;
+        this.steer = prevSteer + clamp(smoothed - prevSteer, -maxSteerStep, maxSteerStep);
         this.throttle = clamp(out[1], -1, 1);
         this.applyRunoffRecovery();
       }
@@ -381,7 +400,17 @@ export class Car {
       ? 1.0 - (Math.abs(this.steer) - 0.65) * (c.understeerFactor * vFwd)
       : 1.0;
     const turnAuthority = Math.min(1.0, vFwd / c.minTurnSpeed) * speedRackScale * lockupLoss * Math.max(0.35, highSpeedScrub);
-    let dAngle = this.steer * c.turnRate * turnAuthority * dt;
+    // Yaw demand (rad/s) from the steering rack, then limited like a real chassis:
+    //  - lateral grip cap: |yaw rate| * speed cannot exceed the tyres' lateral acceleration
+    //    (mechanical grip + downforce growing with speed)
+    //  - yaw inertia: the chassis rotation rate follows the demand with a finite response time
+    let yawDemand = this.steer * c.turnRate * turnAuthority;
+    const maxLatAccel = c.latGripBase + c.latGripPerSpeed * vFwd;
+    const maxYawRate = maxLatAccel / Math.max(vFwd, 30);
+    yawDemand = clamp(yawDemand, -maxYawRate, maxYawRate);
+    const yawTau = c.yawResponseSec;
+    this.yawCmd = (this.yawCmd || 0) + (yawDemand - (this.yawCmd || 0)) * (yawTau > 0 ? 1 - Math.exp(-dt / yawTau) : 1);
+    let dAngle = this.yawCmd * dt;
 
     // Apply & damp dynamic impact yaw rate (restorative tire self-aligning moment)
     if (this.yawRate) {
@@ -583,9 +612,12 @@ export class Car {
     // 1. Distance Progress along track
     let s = this.maxIdx * this.track.spacing;
 
-    // 2. Continuous Average Speed Pace Reward (rewards sustained high velocity)
+    // 2. Continuous Average Speed Pace Reward (rewards sustained high velocity across corners)
+    // For crashed cars, pace reward is dampened so that suicidal high-speed wall impacts are never
+    // favored over cars that brake, navigate deeper into the corner, and learn survival.
     const avgSpeed = (this.maxIdx * this.track.spacing) / Math.max(1, raceTime);
-    s += avgSpeed * 7.5;
+    const paceWeight = this.crashed ? (f.speedPaceWeight ?? 7.5) * 0.15 : (f.speedPaceWeight ?? 7.5);
+    s += avgSpeed * paceWeight;
 
     // 3. Lap Completion Bonus
     s += this.laps * (f.lapBonus || 4500);
@@ -641,6 +673,12 @@ export class Car {
     // 9. Wall crash penalty (strict penalty for going deep off-track)
     if (this.crashed) {
       s -= f.crashPenalty || 600;
+    }
+
+    // 10. Timeout penalty: un-finished cars that time out creeping are penalized so that
+    // carrying pace through corners is rewarded over slow, hesitant survival.
+    if (!this.finished && !this.crashed && raceTime >= ((g.timeLimit || 110) - 0.5) && f.timeoutPenalty) {
+      s *= Math.max(0.1, 1 - f.timeoutPenalty);
     }
 
     return Math.max(0, s);

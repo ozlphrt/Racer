@@ -233,6 +233,12 @@ export class Track {
     const start = idx - win;
     const end = idx + win;
 
+    // Ray bounding box (padded) – segments entirely outside it cannot be hit.
+    const EPS = 1e-6;
+    const exr = x + dx * maxLen, eyr = y + dy * maxLen;
+    const bxMin = (x < exr ? x : exr) - EPS, bxMax = (x > exr ? x : exr) + EPS;
+    const byMin = (y < eyr ? y : eyr) - EPS, byMax = (y > eyr ? y : eyr) + EPS;
+
     for (let o = start; o <= end; o++) {
       let i = o % N;
       if (i < 0) i += N;
@@ -243,7 +249,9 @@ export class Track {
       const bx1 = ix[j], by1 = iy[j];
       const ex1 = bx1 - ax1, ey1 = by1 - ay1;
       const den1 = dx * ey1 - dy * ex1;
-      if (den1 !== 0) {
+      if (den1 !== 0 &&
+          !((ax1 < bxMin && bx1 < bxMin) || (ax1 > bxMax && bx1 > bxMax) ||
+            (ay1 < byMin && by1 < byMin) || (ay1 > byMax && by1 > byMax))) {
         const fx1 = ax1 - x, fy1 = ay1 - y;
         const t1 = (fx1 * ey1 - fy1 * ex1) / den1;
         if (t1 >= 0 && t1 < best) {
@@ -257,7 +265,9 @@ export class Track {
       const bx2 = ox[j], by2 = oy[j];
       const ex2 = bx2 - ax2, ey2 = by2 - ay2;
       const den2 = dx * ey2 - dy * ex2;
-      if (den2 !== 0) {
+      if (den2 !== 0 &&
+          !((ax2 < bxMin && bx2 < bxMin) || (ax2 > bxMax && bx2 > bxMax) ||
+            (ay2 < byMin && by2 < byMin) || (ay2 > byMax && by2 > byMax))) {
         const fx2 = ax2 - x, fy2 = ay2 - y;
         const t2 = (fx2 * ey2 - fy2 * ex2) / den2;
         if (t2 >= 0 && t2 < best) {

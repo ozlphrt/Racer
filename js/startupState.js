@@ -1,7 +1,7 @@
 import { Track, TRACK_PRESETS } from './track.js';
 import { compatibleCaptures } from './milestones.js';
 
-export const DEFAULT_START_GENERATION = 5000;
+export const DEFAULT_START_GENERATION = 250;
 
 /** Select the startup checkpoint without modifying browser saves or inventing history. */
 export function resolveStartupState(localState, config, bundled) {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="application-version" content="1.5.21">
+  <meta name="application-version" content="1.5.22">
   <title>Track Studio · AI Racer</title>
   <link rel="stylesheet" href="./css/track-editor.css">
 </head>
@@ -31,6 +31,13 @@
         <div><span>Control points</span><strong id="point-count">0 / 80</strong></div>
         <div><span>Road width</span><strong>84 units</strong></div>
         <p id="track-status" role="status">Draw a loop to get started.</p>
+        <div id="attention-panel" class="attention-panel" hidden>
+          <div class="attention-title">
+            <span class="attention-icon">⚠️</span>
+            <span id="attention-summary-text">Attention needed</span>
+          </div>
+          <div id="attention-items" class="attention-items"></div>
+        </div>
       </section>
       <section>
         <h2>REFINE YOUR LINE</h2>
@@ -67,8 +74,10 @@
         <rect width="1600" height="1000" fill="url(#drawing-grid)"/>
         <rect x="60" y="60" width="1480" height="880" rx="16" fill="none" stroke="#3a5761" stroke-width="2" stroke-dasharray="10 10"/>
         <g id="road-preview"></g>
+        <g id="road-highlights" pointer-events="none"></g>
         <path id="draft-stroke" fill="none" stroke="#4ce6b0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
         <g id="control-points"></g>
+        <g id="attention-markers"></g>
         <g id="keyboard-cursor" visibility="hidden" pointer-events="none" stroke="#f8cc68" stroke-width="3"><path d="M-14 0H14 M0-14V14"/></g>
         <g id="empty-hint" pointer-events="none" text-anchor="middle" fill="#78959e"><text x="800" y="465" font-size="31" font-family="system-ui">A blank canvas. Your racing line.</text><text x="800" y="510" font-size="20" font-family="system-ui">Draw a loop with your mouse, pen or finger.</text></g>
       </svg>

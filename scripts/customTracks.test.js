@@ -4,7 +4,7 @@ import { CONFIG } from '../js/config.js';
 import { Track, TRACK_PRESETS } from '../js/track.js';
 import { CUSTOM_TRACKS_KEY, inspectCustomTrack, simplifyStroke, readCustomTracks,
   saveCustomTrack, registerCustomTracks, savedCircuitMatches, insertTrackPoint,
-  initialCircuitKey, parseCustomTrackJSON, serializeCustomTrack } from '../js/customTracks.js';
+  initialCircuitKey, parseCustomTrackJSON, serializeCustomTrack, deleteCustomTrack } from '../js/customTracks.js';
 import { catmullRom } from '../js/math.js';
 import { validateChampion } from '../js/championValidation.js';
 import { physicsSignature } from '../js/milestones.js';
@@ -163,3 +163,47 @@ test('champion worker validates supplied custom geometry and rejects a mismatche
   await assert.rejects(validateChampion({ ...request, customTrack: { ...customTrack,
     points: oval().map(p => ({ x: p.x, y: p.y + 10 })) } }), /Track or physics changed/);
 });
+
+test('inspectCustomTrack identifies tight corners and narrow passages requiring attention', () => {
+  // Circuit with a pinched hairpin corner that exceeds max curvature
+  const hairpinPoints = [
+    { x: 300, y: 300 },
+    { x: 700, y: 200 },
+    { x: 1100, y: 200 },
+    { x: 1400, y: 320 },
+    { x: 1450, y: 550 },
+    { x: 1350, y: 780 },
+    { x: 1050, y: 860 },
+    { x: 650, y: 860 },
+    { x: 300, y: 320 }
+  ];
+  const inspection = inspectCustomTrack(hairpinPoints, 84);
+  assert.equal(inspection.valid, false);
+  assert.equal(inspection.message, 'Open up the tightest corner so the road has room to turn.');
+  assert.ok(inspection.attention?.hasIssues);
+  assert.ok(inspection.attention.tightCorners.length >= 1);
+  const worst = inspection.attention.tightCorners[0];
+  assert.ok(worst.radius < worst.minRadius);
+  assert.ok(Number.isFinite(worst.apex.x) && Number.isFinite(worst.apex.y));
+  assert.ok(worst.nearestControlIndex >= 0 && worst.nearestControlIndex < hairpinPoints.length);
+
+  // Normal oval has no issues
+  const validInspection = inspectCustomTrack(oval(), 84);
+  assert.equal(validInspection.valid, true);
+  assert.equal(validInspection.attention?.hasIssues, false);
+  assert.equal(validInspection.attention.tightCorners.length, 0);
+  assert.equal(validInspection.attention.narrowPassages.length, 0);
+});
+
+test('deleteCustomTrack removes a saved circuit from storage and presets', () => {
+  const local = storage(), track = { id: 'custom-to-delete', name: 'Temporary', points: oval() };
+  saveCustomTrack(track, local);
+  TRACK_PRESETS['custom-to-delete'] = { name: track.name, points: track.points, custom: true };
+  assert.ok(readCustomTracks(local).some(t => t.id === 'custom-to-delete'));
+  assert.ok(TRACK_PRESETS['custom-to-delete']);
+
+  deleteCustomTrack('custom-to-delete', local);
+  assert.ok(!readCustomTracks(local).some(t => t.id === 'custom-to-delete'));
+  assert.equal(TRACK_PRESETS['custom-to-delete'], undefined);
+});
+

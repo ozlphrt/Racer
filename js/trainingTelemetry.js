@@ -431,20 +431,20 @@ export function drawLapStepDown(canvas, history, bestLapEver) {
   ctx.closePath();
 
   const fillGrad = ctx.createLinearGradient(0, padYTop, 0, h);
-  fillGrad.addColorStop(0, 'rgba(52, 211, 153, 0.22)');
-  fillGrad.addColorStop(0.65, 'rgba(16, 185, 129, 0.06)');
-  fillGrad.addColorStop(1, 'rgba(6, 78, 59, 0.0)');
+  fillGrad.addColorStop(0, 'rgba(56, 189, 248, 0.20)');
+  fillGrad.addColorStop(0.65, 'rgba(2, 132, 199, 0.06)');
+  fillGrad.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
   ctx.fillStyle = fillGrad;
   ctx.fill();
 
-  // 2. Smooth continuous racing stroke with glow
+  // 2. Smooth continuous racing stroke with subtle cyan glow
   ctx.beginPath();
   traceCurve(ctx, pts);
-  ctx.strokeStyle = '#34d399';
+  ctx.strokeStyle = '#38bdf8';
   ctx.lineWidth = 1.9;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(52, 211, 153, 0.5)';
+  ctx.shadowColor = 'rgba(56, 189, 248, 0.45)';
   ctx.shadowBlur = 4;
   ctx.stroke();
   ctx.shadowBlur = 0;
@@ -492,13 +492,13 @@ export function drawLapStepDown(canvas, history, bestLapEver) {
   const lastPt = pts[pts.length - 1];
   ctx.beginPath();
   ctx.arc(lastPt.x, lastPt.y, 3.8, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(52, 211, 153, 0.25)';
+  ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
   ctx.fill();
 
   ctx.beginPath();
   ctx.arc(lastPt.x, lastPt.y, 2.2, 0, Math.PI * 2);
-  ctx.fillStyle = '#34d399';
-  ctx.shadowColor = '#34d399';
+  ctx.fillStyle = '#38bdf8';
+  ctx.shadowColor = '#38bdf8';
   ctx.shadowBlur = 4;
   ctx.fill();
   ctx.shadowBlur = 0;
@@ -1363,49 +1363,34 @@ export function drawGeneticDiversityBar(canvas, history = [], diversityScore = 5
   const x100 = padX + usableW;
   const inTarget = diversityScore >= 25 && diversityScore <= 75;
 
-  // 2. Zone 1: Converged / Low Risk (0 - 25%)
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
-  ctx.beginPath();
-  ctx.roundRect(x0, trackY, x25 - x0, trackH, [3.5, 0, 0, 3.5]);
-  ctx.fill();
-
-  // 3. Zone 2: Sweet Spot Target Range (25 - 75%)
-  ctx.fillStyle = inTarget ? 'rgba(16, 185, 129, 0.35)' : 'rgba(16, 185, 129, 0.16)';
+  // 2. Sweet spot target zone (25 - 75%) with subtle cyan telemetry highlight
+  ctx.fillStyle = inTarget ? 'rgba(56, 189, 248, 0.16)' : 'rgba(148, 163, 184, 0.08)';
   ctx.fillRect(x25, trackY, x75 - x25, trackH);
 
-  // Sweet spot illuminated boundary frame
-  ctx.strokeStyle = inTarget ? 'rgba(52, 211, 153, 0.85)' : 'rgba(52, 211, 153, 0.35)';
+  // Target frame border
+  ctx.strokeStyle = inTarget ? 'rgba(56, 189, 248, 0.5)' : 'rgba(148, 163, 184, 0.2)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x25, trackY, x75 - x25, trackH);
 
-  // 4. Zone 3: High Mutation / Divergent (75 - 100%)
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
-  ctx.beginPath();
-  ctx.roundRect(x75, trackY, x100 - x75, trackH, [0, 3.5, 3.5, 0]);
-  ctx.fill();
-
-  // 5. Target Bracket Boundary Ticks at 25% and 75%
-  ctx.strokeStyle = inTarget ? 'rgba(52, 211, 153, 0.9)' : 'rgba(255, 255, 255, 0.35)';
+  // 3. Subtle bracket boundary ticks at 25% and 75%
+  ctx.strokeStyle = inTarget ? '#38bdf8' : 'rgba(148, 163, 184, 0.35)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x25, trackY - 3);
-  ctx.lineTo(x25, trackY + trackH + 3);
-  ctx.moveTo(x75, trackY - 3);
-  ctx.lineTo(x75, trackY + trackH + 3);
+  ctx.moveTo(x25, trackY - 2);
+  ctx.lineTo(x25, trackY + trackH + 2);
+  ctx.moveTo(x75, trackY - 2);
+  ctx.lineTo(x75, trackY + trackH + 2);
   ctx.stroke();
 
-  // 6. Sub-labels (Centered TARGET zone label without overlapping side text)
-  const labelY = trackY + trackH + 12;
-  ctx.font = '700 7px var(--mono, monospace)';
-
-  // Centered Sweet Spot label
+  // 4. Sub-labels (Centered TARGET zone label)
+  const labelY = trackY + trackH + 11;
+  ctx.font = '600 7px var(--mono, monospace)';
   ctx.textAlign = 'center';
-  ctx.fillStyle = inTarget ? '#34d399' : 'rgba(52, 211, 153, 0.7)';
+  ctx.fillStyle = inTarget ? '#38bdf8' : '#94a3b8';
   ctx.fillText('TARGET', padX + usableW * 0.5, labelY);
 
-  // Subtle 0% and 100% scale endpoints if width allows
   if (usableW >= 70) {
-    ctx.font = '600 6.5px var(--mono, monospace)';
+    ctx.font = '500 6.5px var(--mono, monospace)';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
     ctx.textAlign = 'left';
     ctx.fillText('0%', x0, labelY);
@@ -1413,10 +1398,10 @@ export function drawGeneticDiversityBar(canvas, history = [], diversityScore = 5
     ctx.fillText('100%', x100, labelY);
   }
 
-  // 7. Active Pointer Needle & Glowing Status Bead
+  // 5. Active Pointer Needle & Sleek Cyan / Amber Status Bead
   const clampedScore = Math.max(2, Math.min(98, diversityScore));
   const pointerX = padX + (clampedScore / 100) * usableW;
-  const pointerColor = inTarget ? '#34d399' : '#ef4444';
+  const pointerColor = inTarget ? '#38bdf8' : '#f59e0b';
 
   // Vertical needle bar
   ctx.strokeStyle = pointerColor;
@@ -1553,7 +1538,7 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
       stagnationClass: 'improving',
       diversityScore: 50,
       diversityText: '50%',
-      diversityBadge: 'Optimal Spread',
+      diversityBadge: 'Optimal',
       diversityClass: 'improving',
       message: 'Running initial generation baseline...',
       deltas: {
@@ -1568,7 +1553,7 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
         curvature: { text: 'Wall Scrub', type: 'neutral' },
         progress: { text: 'Tight Steering', type: 'neutral' },
         stagnation: { text: 'Active Tuning', type: 'improving' },
-        diversity: { text: 'Optimal Spread', type: 'improving' },
+        diversity: { text: 'Optimal', type: 'improving' },
       },
       series: {
         fitness: [],
@@ -1911,7 +1896,7 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
   const relativeSpread = bestF > 0 ? Math.max(0, Math.min(1, (bestF - medF) / bestF)) : 0.5;
   // Map smoothly to 20% - 85% range centered around 50% target sweet spot
   const diversityScore = Math.round(Math.max(10, Math.min(95, 20 + relativeSpread * 60)));
-  let diversityBadge = 'Optimal Spread';
+  let diversityBadge = 'Optimal';
   let diversityClass = 'improving';
   let diversityText = `${diversityScore}%`;
   if (diversityScore < 25) {

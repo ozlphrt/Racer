@@ -22,45 +22,47 @@ export class TireBarrierSystem {
     const t = this.track;
     const N = t.N;
 
-    // 1. Detect sharp curve zones matching track kerbs
-    const minCurv = 1 / 200;
-    const rawKerb = new Array(N).fill(false);
+    // 1. Detect high-risk corner zones:
+    // Low-speed and gentle curves (radius > 120m) do not need tire barriers.
+    // Only corners with tight radius (curvature >= 1/120) and meaningful length present crash hazard.
+    const minCurv = 1 / 120;
+    const isSharp = new Array(N).fill(false);
     for (let k = 0; k < N; k++) {
-      rawKerb[k] = Math.abs(t.curvature[k]) >= minCurv;
+      isSharp[k] = Math.abs(t.curvature[k]) >= minCurv;
     }
 
-    // Dilate by 2 samples to match full kerb coverage
-    const isKerb = new Array(N).fill(false);
+    // Dilate by 1 sample for contiguous corner grouping
+    const isCurve = new Array(N).fill(false);
     for (let k = 0; k < N; k++) {
-      if (rawKerb[k]) {
-        for (let d = -2; d <= 2; d++) {
-          isKerb[(k + d + N) % N] = true;
+      if (isSharp[k]) {
+        for (let d = -1; d <= 1; d++) {
+          isCurve[(k + d + N) % N] = true;
         }
       }
     }
 
-    // Find all contiguous sharp curve / kerb runs
+    // Find all contiguous sharp curve runs
     const visited = new Uint8Array(N);
-    const kerbRuns = [];
+    const curveRuns = [];
     for (let k = 0; k < N; k++) {
       const prev = (k - 1 + N) % N;
-      if (isKerb[k] && !isKerb[prev] && !visited[k]) {
+      if (isCurve[k] && !isCurve[prev] && !visited[k]) {
         const runIndices = [];
         let curr = k;
-        while (isKerb[curr] && !visited[curr]) {
+        while (isCurve[curr] && !visited[curr]) {
           visited[curr] = 1;
           runIndices.push(curr);
           curr = (curr + 1) % N;
         }
-        if (runIndices.length >= 4) {
-          kerbRuns.push(runIndices);
+        if (runIndices.length >= 5) {
+          curveRuns.push(runIndices);
         }
       }
     }
 
     // Colors for FIA safety barriers: Alternating bold Red, White, and Graphite
     const colors = [
-      { r: 0.58, g: 0.16, b: 0.18 }, // Weathered Safety Red (less saturated, darker)
+      { r: 0.58, g: 0.16, b: 0.18 }, // Weathered Safety Red
       { r: 0.96, g: 0.96, b: 0.98 }, // Pure White
       { r: 0.14, g: 0.16, b: 0.20 }, // Dark Graphite
     ];
@@ -75,23 +77,29 @@ export class TireBarrierSystem {
     const outerRadius = 2.10;
     const tireDiameter = outerRadius * 2.0; // 4.20m
     const stackSpacing = tireDiameter;      // Stacks touching each other: 4.20m center-to-center
-    const rowDepth = outerRadius * Math.sqrt(3); // 3.637m for close triangular packing
-    const baseMargin = 4.6; // Runoff distance outside the kerb/track edge
+    const baseMargin = 4.8; // Runoff distance outside the track edge
 
-    for (let c = 0; c < kerbRuns.length; c++) {
-      const run = kerbRuns[c];
+    for (let c = 0; c < curveRuns.length; c++) {
+      const run = curveRuns[c];
       const L = run.length;
 
-      // Determine turn direction: Outside of LEFT turn is outer edge (ox, oy); Outside of RIGHT turn is inner edge (ix, iy)
+      // Filter out low-speed curves: require peak curvature >= minCurv
+      let maxCurv = 0;
       let avgCurv = 0;
-      for (const idx of run) avgCurv += t.curvature[idx];
+      for (const idx of run) {
+        const cur = Math.abs(t.curvature[idx]);
+        avgCurv += t.curvature[idx];
+        if (cur > maxCurv) maxCurv = cur;
+      }
       avgCurv /= L;
+      if (maxCurv < minCurv) continue;
 
+      // Determine turn direction: Outside of LEFT turn is outer edge (ox, oy); Outside of RIGHT turn is inner edge (ix, iy)
       const isLeftTurn = avgCurv > 0;
       const edgeXs = isLeftTurn ? t.ox : t.ix;
       const edgeYs = isLeftTurn ? t.oy : t.iy;
 
-      // Extract continuous centerline & edge coordinates along the outside of the sharp curve
+      // Extract continuous centerline & edge coordinates along the outside of the curve
       const rawPts = [];
       for (let i = 0; i < L; i++) {
         const k = run[i];
@@ -115,7 +123,7 @@ export class TireBarrierSystem {
 
       if (rawPts.length < 2) continue;
 
-      // Compute cumulative arc length along this kerb run
+      // Compute cumulative arc length along this curve run
       const cumD = [0];
       for (let i = 1; i < rawPts.length; i++) {
         const d = Math.hypot(rawPts[i].x - rawPts[i - 1].x, rawPts[i].y - rawPts[i - 1].y);
@@ -123,15 +131,16 @@ export class TireBarrierSystem {
       }
       const totalKerbLen = cumD[cumD.length - 1];
 
-      // Trim 10% from the start and 10% from the end of the kerbs
-      const trimStart = totalKerbLen * 0.10;
-      const trimEnd = totalKerbLen * 0.90;
+      // REAL-WORLD FIA RUNOFF PLACEMENT:
+      // High-speed crashes happen at the entry/turn-in tangent into the outside runoff pocket.
+      // The slow apex, inner track, and exit parts of the curve do NOT need tires.
+      const trimStart = totalKerbLen * 0.05;
+      const trimEnd = Math.min(totalKerbLen * 0.42, trimStart + 45.0);
       const barrierLen = trimEnd - trimStart;
 
       if (barrierLen < stackSpacing * 0.8) continue;
 
-      // Sample along trimmed range [trimStart, trimEnd] so adjacent stacks touch each other
-      const numStacks = Math.max(2, Math.round(barrierLen / stackSpacing));
+      const numStacks = Math.max(3, Math.round(barrierLen / stackSpacing));
       const actualStep = barrierLen / numStacks;
 
       const sampledStacks = [];
@@ -173,82 +182,71 @@ export class TireBarrierSystem {
         });
       }
 
-      // Build continuous 2-row touching barrier wall with 4-6 tyres per stack
+      // Single crisp row of touching stacks in the impact zone (instead of heavy double rows)
       for (let sIdx = 0; sIdx < sampledStacks.length; sIdx++) {
         const st = sampledStacks[sIdx];
+        const stackTiers = 3 + Math.floor(rand() * 2); // 3 to 4 tyres per stack (clean, professional barrier)
+        const stackX = st.x + st.outNx * baseMargin;
+        const stackY = st.y + st.outNy * baseMargin;
 
-        for (let row = 0; row < 2; row++) {
-          // Exactly 3, 4, 5, or 6 tyres high with irregular heights along the barrier wall
-          const stackTiers = 3 + Math.floor(rand() * 4);
-          const rowOffset = row * rowDepth;
-          const staggerTang = (row === 1) ? stackSpacing * 0.5 : 0;
-          const stackX = st.x + st.outNx * (baseMargin + rowOffset) + st.tx * staggerTang;
-          const stackY = st.y + st.outNy * (baseMargin + rowOffset) + st.ty * staggerTang;
+        const colorGroup = (sIdx + c) % 2;
+        const stackBaseColor = colors[colorGroup];
+        const stackId = id++;
 
-          // Alternating FIA colors: Red / White with occasional graphite
-          const colorGroup = (sIdx + row + c) % 2;
-          const stackBaseColor = colors[colorGroup];
-          const stackId = id++;
+        const stackLeanAngle = rand() * Math.PI * 2;
+        const stackLeanMag = rand() * 0.40 + 0.15;
+        const stackLeanX = Math.cos(stackLeanAngle) * stackLeanMag;
+        const stackLeanY = Math.sin(stackLeanAngle) * stackLeanMag;
 
-          // Natural organic lean direction and magnitude for this stack column
-          const stackLeanAngle = rand() * Math.PI * 2;
-          const stackLeanMag = rand() * 0.55 + 0.20;
-          const stackLeanX = Math.cos(stackLeanAngle) * stackLeanMag;
-          const stackLeanY = Math.sin(stackLeanAngle) * stackLeanMag;
+        for (let tier = 0; tier < stackTiers; tier++) {
+          const tierFrac = tier / Math.max(1, stackTiers - 1);
+          const tierJitterAngle = rand() * Math.PI * 2;
+          const tierJitterMag = rand() * 0.40 + 0.12;
+          const jitterX = stackLeanX * tierFrac + Math.cos(tierJitterAngle) * tierJitterMag;
+          const jitterY = stackLeanY * tierFrac + Math.sin(tierJitterAngle) * tierJitterMag;
 
-          for (let tier = 0; tier < stackTiers; tier++) {
-            // Pronounced per-tier misalignment (steps in/out laterally by 0.45m - 0.95m)
-            const tierFrac = tier / Math.max(1, stackTiers - 1);
-            const tierJitterAngle = rand() * Math.PI * 2;
-            const tierJitterMag = rand() * 0.55 + 0.18;
-            const jitterX = stackLeanX * tierFrac + Math.cos(tierJitterAngle) * tierJitterMag;
-            const jitterY = stackLeanY * tierFrac + Math.sin(tierJitterAngle) * tierJitterMag;
+          const isTop = tier === stackTiers - 1;
+          const tiltMax = isTop ? 0.24 : (0.08 + tierFrac * 0.12);
+          const pitch = (rand() - 0.5) * tiltMax * 2.0;
+          const roll = (rand() - 0.5) * tiltMax * 2.0;
+          const yaw = rand() * Math.PI * 2;
 
-            // Organic tilt: tyres lean and tilt noticeably (up to 15-20 degrees on upper/top tyres)
-            const isTop = tier === stackTiers - 1;
-            const tiltMax = isTop ? 0.32 : (0.10 + tierFrac * 0.16);
-            const pitch = (rand() - 0.5) * tiltMax * 2.0;
-            const roll = (rand() - 0.5) * tiltMax * 2.0;
-            // Fully randomized rotational angle
-            const yaw = rand() * Math.PI * 2;
+          const z = 0.66 + tier * 1.25 + (rand() - 0.5) * 0.12;
+          const tireColor = (isTop && rand() < 0.20) ? colors[2] : stackBaseColor;
+          const posX = stackX + jitterX;
+          const posY = stackY + jitterY;
 
-            // Varied compression and natural sag in height
-            const z = 0.66 + tier * 1.25 + (rand() - 0.5) * 0.14;
-            const tireColor = (isTop && rand() < 0.25) ? colors[2] : stackBaseColor;
-            const posX = stackX + jitterX;
-            const posY = stackY + jitterY;
-
-            this.tires.push({
-              id: id++,
-              stackId: stackId,
-              stackBaseX: stackX,
-              stackBaseY: stackY,
-              x: posX,
-              y: posY,
-              z: z,
-              vx: 0,
-              vy: 0,
-              vz: 0,
-              yaw: yaw,
-              pitch: pitch,
-              roll: roll,
-              vyaw: 0,
-              vpitch: 0,
-              vroll: 0,
-              baseX: posX,
-              baseY: posY,
-              baseZ: z,
-              baseYaw: yaw,
-              basePitch: pitch,
-              baseRoll: roll,
-              radius: outerRadius,
-              height: 1.32,
-              mass: 1.0,
-              color: tireColor,
-              sleeping: true,
-              needsRenderUpdate: true,
-            });
-          }
+          this.tires.push({
+            id: id++,
+            stackId: stackId,
+            stackBaseX: stackX,
+            stackBaseY: stackY,
+            x: posX,
+            y: posY,
+            z: z,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            yaw: yaw,
+            pitch: pitch,
+            roll: roll,
+            vyaw: 0,
+            vpitch: 0,
+            vroll: 0,
+            baseX: posX,
+            baseY: posY,
+            baseZ: z,
+            baseYaw: yaw,
+            basePitch: pitch,
+            baseRoll: roll,
+            radius: outerRadius,
+            height: 1.32,
+            color: tireColor,
+            sleeping: true,
+            needsRenderUpdate: true,
+            displaced: false,
+            despawnTimer: 0,
+          });
         }
       }
     }

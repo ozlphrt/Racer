@@ -1,10 +1,13 @@
 import { CONFIG } from './config.js';
+import { Track, TRACK_PRESETS } from './track.js';
 import { CUSTOM_TRACKS_KEY, DRAWING_SIZE, inspectCustomTrack, insertTrackPoint, readCustomTracks, saveCustomTrack, simplifyStroke,
   parseCustomTrackJSON, serializeCustomTrack } from './customTracks.js';
 
 const $ = id => document.getElementById(id);
 const drawing = $('track-drawing'), nameInput = $('track-name');
 const pointMenu = $('point-context-menu'), menuRemove = $('point-menu-remove');
+const roadHighlights = $('road-highlights'), attentionMarkers = $('attention-markers');
+const attentionPanel = $('attention-panel'), attentionSummaryText = $('attention-summary-text'), attentionItems = $('attention-items');
 const ns = 'http://www.w3.org/2000/svg';
 const make = (tag, attributes) => {
   const element = document.createElementNS(ns, tag);
@@ -59,7 +62,23 @@ function render() {
   $('remove-point').disabled = selected < 0;
   $('draft-label').textContent = editingId ? 'EDITING SAVED CIRCUIT' : 'NEW CIRCUIT';
   const road = $('road-preview'); road.replaceChildren();
+  if (roadHighlights) roadHighlights.replaceChildren();
+  if (attentionMarkers) attentionMarkers.replaceChildren();
+
   const track = inspection.track;
+  const attention = inspection.attention;
+  const tightCorners = attention?.tightCorners || [];
+  const narrowPassages = attention?.narrowPassages || [];
+  const attentionPointMap = new Map();
+
+  for (const c of tightCorners) {
+    if (!attentionPointMap.has(c.nearestControlIndex)) attentionPointMap.set(c.nearestControlIndex, c);
+  }
+  for (const p of narrowPassages) {
+    if (!attentionPointMap.has(p.nearestControlIndexA)) attentionPointMap.set(p.nearestControlIndexA, p);
+    if (!attentionPointMap.has(p.nearestControlIndexB)) attentionPointMap.set(p.nearestControlIndexB, p);
+  }
+
   if (track) {
     const path = Array.from({ length: track.N }, (_, i) => `${i ? 'L' : 'M'}${track.cx[i].toFixed(1)},${track.cy[i].toFixed(1)}`).join(' ') + ' Z';
     for (const attrs of [
@@ -74,14 +93,198 @@ function render() {
     road.append(make('line', { x1: x + track.tx[0] * 50, y1: y + track.ty[0] * 50,
       x2: x + track.tx[0] * 110, y2: y + track.ty[0] * 110,
       stroke: '#4ce6b0', 'stroke-width': 4, 'marker-end': 'url(#direction-arrow)' }));
+
+    // Render road highlights for tight corners and narrow passages
+    if (roadHighlights) {
+      for (const corner of tightCorners) {
+        if (!corner.sampleIndices || !corner.sampleIndices.length) continue;
+        const pathD = corner.sampleIndices.map((idx, i) =>
+          `${i ? 'L' : 'M'}${track.cx[idx].toFixed(1)},${track.cy[idx].toFixed(1)}`).join(' ');
+
+        roadHighlights.append(make('path', {
+          d: pathD, fill: 'none', stroke: '#ff2233', 'stroke-width': track.width + 14,
+          'stroke-linecap': 'round', class: 'attention-glow'
+        }));
+        roadHighlights.append(make('path', {
+          d: pathD, fill: 'none', stroke: '#ffa726', 'stroke-width': track.width * 0.72,
+          class: 'attention-center-hazard'
+        }));
+
+        const wallX = corner.curvature > 0 ? track.ix : track.ox;
+        const wallY = corner.curvature > 0 ? track.iy : track.oy;
+        const pinchD = corner.sampleIndices.map((idx, i) =>
+          `${i ? 'L' : 'M'}${wallX[idx].toFixed(1)},${wallY[idx].toFixed(1)}`).join(' ');
+        roadHighlights.append(make('path', {
+          d: pinchD, fill: 'none', 'stroke-width': '6', class: 'attention-edge-pinch'
+        }));
+      }
+
+      for (const passage of narrowPassages) {
+        roadHighlights.append(make('line', {
+          x1: passage.pointA.x, y1: passage.pointA.y,
+          x2: passage.pointB.x, y2: passage.pointB.y,
+          class: 'clearance-line'
+        }));
+        for (const pt of [passage.pointA, passage.pointB]) {
+          roadHighlights.append(make('circle', {
+            cx: pt.x, cy: pt.y, r: 5, fill: '#ff334b', stroke: '#ffffff', 'stroke-width': 1.5
+          }));
+        }
+      }
+    }
   }
+
   const handles = $('control-points'); handles.replaceChildren();
   points.forEach((p, i) => {
-    const handle = make('circle', { cx: p.x, cy: p.y, r: i === selected ? 13 : 9,
-      fill: i === 0 ? '#4ce6b0' : '#55c4f0', stroke: '#0b1923', 'stroke-width': 4 });
-    const title = make('title', {}); title.textContent = i === 0 ? 'Start / finish' : `Corner ${i}`;
+    const isProblemPoint = attentionPointMap.has(i);
+    if (isProblemPoint) {
+      handles.append(make('circle', { cx: p.x, cy: p.y, r: 18, class: 'handle-attention-halo' }));
+    }
+
+    const handle = make('circle', {
+      cx: p.x, cy: p.y, r: i === selected ? 13 : 9,
+      fill: isProblemPoint ? '#ff4d61' : (i === 0 ? '#4ce6b0' : '#55c4f0'),
+      stroke: isProblemPoint ? '#ffffff' : '#0b1923',
+      'stroke-width': isProblemPoint ? 3 : 4
+    });
+
+    const prob = attentionPointMap.get(i);
+    const info = prob ? ` · Attention required: ${prob.type === 'tight-corner' ? `Turn radius ${prob.radius}u is too tight (minimum ${prob.minRadius}u)` : 'Road clearance is too narrow'}` : '';
+    const title = make('title', {}); title.textContent = (i === 0 ? 'Start / finish' : `Corner ${i}`) + info;
     handle.append(title); handles.append(handle);
   });
+
+  // Render interactive attention markers at apexes and narrow bottlenecks
+  if (track && attentionMarkers) {
+    for (const corner of tightCorners) {
+      const g = make('g', { class: 'attention-badge' });
+      g.append(make('circle', {
+        cx: corner.apex.x, cy: corner.apex.y, r: 12,
+        fill: 'none', stroke: '#ff3838', 'stroke-width': 3, class: 'attention-beacon'
+      }));
+      g.append(make('circle', {
+        cx: corner.apex.x, cy: corner.apex.y, r: 9,
+        fill: '#ff3838', stroke: '#ffffff', 'stroke-width': 2
+      }));
+      const ex = make('text', {
+        x: corner.apex.x, y: corner.apex.y + 3.5,
+        'text-anchor': 'middle', fill: '#ffffff',
+        'font-size': '11', 'font-weight': '900', 'font-family': 'system-ui',
+        'pointer-events': 'none'
+      });
+      ex.textContent = '!';
+      g.append(ex);
+
+      const nx = -track.ty[corner.apexIndex], ny = track.tx[corner.apexIndex];
+      const offsetDist = track.half + 34;
+      const dir = corner.curvature > 0 ? -1 : 1;
+      let lx = corner.apex.x + nx * offsetDist * dir;
+      let ly = corner.apex.y + ny * offsetDist * dir;
+      lx = Math.max(90, Math.min(DRAWING_SIZE.width - 240, lx));
+      ly = Math.max(80, Math.min(DRAWING_SIZE.height - 50, ly));
+
+      const labelText = `⚠️ Radius ${corner.radius}u · Min ${corner.minRadius}u`;
+      const bg = make('rect', {
+        x: lx - 6, y: ly - 16, width: 175, height: 26, rx: 6,
+        fill: '#1a0d11', stroke: '#ff3838', 'stroke-width': 1.5
+      });
+      const txt = make('text', {
+        x: lx + 6, y: ly + 1,
+        fill: '#ffd0d6', 'font-size': '11', 'font-weight': '700',
+        'font-family': 'system-ui', 'pointer-events': 'none'
+      });
+      txt.textContent = labelText;
+
+      const title = make('title', {});
+      title.textContent = `Click to select Corner ${corner.nearestControlIndex} and widen this turn.`;
+      g.append(title, bg, txt);
+
+      g.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selected = corner.nearestControlIndex;
+        cursor = { ...points[selected] };
+        status(`Selected Corner ${selected}. Drag outward or use arrow keys to open up this turn.`);
+        render();
+      });
+
+      attentionMarkers.append(g);
+    }
+
+    for (const passage of narrowPassages) {
+      const g = make('g', { class: 'attention-badge' });
+      const midX = (passage.pointA.x + passage.pointB.x) / 2;
+      const midY = (passage.pointA.y + passage.pointB.y) / 2;
+
+      const bg = make('rect', {
+        x: midX - 85, y: midY - 14, width: 170, height: 26, rx: 6,
+        fill: '#1a0d11', stroke: '#ff3838', 'stroke-width': 1.5
+      });
+      const txt = make('text', {
+        x: midX, y: midY + 3,
+        'text-anchor': 'middle', fill: '#ffd0d6', 'font-size': '11', 'font-weight': '700',
+        'font-family': 'system-ui', 'pointer-events': 'none'
+      });
+      txt.textContent = `⚠️ Gap ${passage.distance}u · Min ${passage.minDistance}u`;
+
+      const title = make('title', {});
+      title.textContent = `Roads too close. Click to select Corner ${passage.nearestControlIndexA} to separate them.`;
+      g.append(title, bg, txt);
+
+      g.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selected = passage.nearestControlIndexA;
+        cursor = { ...points[selected] };
+        status(`Selected Corner ${selected}. Move away to increase road clearance.`);
+        render();
+      });
+
+      attentionMarkers.append(g);
+    }
+  }
+
+  // Update sidebar attention panel
+  if (attentionPanel) {
+    const totalIssues = tightCorners.length + narrowPassages.length;
+    if (totalIssues > 0) {
+      attentionPanel.hidden = false;
+      attentionSummaryText.textContent = `${totalIssues} ${totalIssues === 1 ? 'passage requires' : 'passages require'} attention`;
+      attentionItems.replaceChildren();
+
+      for (const corner of tightCorners) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'attention-item-btn';
+        const label = corner.nearestControlIndex === 0 ? 'Start / finish' : `Corner ${corner.nearestControlIndex}`;
+        btn.innerHTML = `<span><strong>${label}</strong> · R: ${corner.radius}u <small>(min ${corner.minRadius}u)</small></span><span class="item-action">Widen →</span>`;
+        btn.title = `Select ${label} to open up this turn`;
+        btn.addEventListener('click', () => {
+          selected = corner.nearestControlIndex;
+          cursor = { ...points[selected] };
+          status(`Selected ${label}. Drag outward or use arrow keys to open up this turn.`);
+          render();
+        });
+        attentionItems.append(btn);
+      }
+
+      for (const passage of narrowPassages) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'attention-item-btn';
+        btn.innerHTML = `<span><strong>Corners ${passage.nearestControlIndexA} & ${passage.nearestControlIndexB}</strong> · ${passage.distance}u</span><span class="item-action">Separate →</span>`;
+        btn.title = `Select Corner ${passage.nearestControlIndexA} to increase clearance`;
+        btn.addEventListener('click', () => {
+          selected = passage.nearestControlIndexA;
+          cursor = { ...points[selected] };
+          status(`Selected Corner ${selected}. Move away to separate roads.`);
+          render();
+        });
+        attentionItems.append(btn);
+      }
+    } else {
+      attentionPanel.hidden = true;
+    }
+  }
+
   $('draft-stroke').setAttribute('d', gesture?.stroke ? gesture.stroke.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ') :
     !track && points.length ? points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ') : '');
   $('keyboard-cursor').setAttribute('transform', `translate(${cursor.x} ${cursor.y})`);
@@ -228,4 +431,37 @@ $('track-file').addEventListener('change', async event => {
   } catch (error) { status(error.message); }
   event.target.value = '';
 });
+
+function loadFromUrl() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const editId = urlParams.get('edit') || urlParams.get('track');
+  if (!editId) return false;
+
+  const tracks = readCustomTracks(localStorage, CONFIG.track.width);
+  const customTarget = tracks.find(t => t.id === editId);
+  if (customTarget) {
+    points = copy(customTarget.points);
+    editingId = customTarget.id;
+    nameInput.value = customTarget.name;
+    selected = -1;
+    undo = [];
+    status(`Editing “${customTarget.name}”. Save to apply your changes.`);
+    return true;
+  }
+
+  if (TRACK_PRESETS && TRACK_PRESETS[editId]) {
+    const preset = TRACK_PRESETS[editId];
+    points = copy(preset.points);
+    editingId = null;
+    const cleanName = (preset.name || editId).replace(/\s*\(Default\)/i, '');
+    nameInput.value = `${cleanName} (Custom)`;
+    selected = -1;
+    undo = [];
+    status(`Loaded “${cleanName}” as template. Edit and save to your library.`);
+    return true;
+  }
+  return false;
+}
+
+loadFromUrl();
 refreshLibrary(); render();

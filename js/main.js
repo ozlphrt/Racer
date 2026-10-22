@@ -22,7 +22,7 @@ import { PRESET_BRAINS } from './presetBrains.js';
 import { createChampionValidationPanel } from './championValidationUi.js';
 import { triggerExplorationBurst, getBurstGensRemaining } from './genetics.js';
 import { resolveStartupState } from './startupState.js';
-import { registerCustomTracks, savedCircuitMatches, initialCircuitKey } from './customTracks.js';
+import { registerCustomTracks, savedCircuitMatches, initialCircuitKey, deleteCustomTrack } from './customTracks.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
@@ -818,6 +818,9 @@ $('track-select').addEventListener('change', (e) => {
   hubChart?.draw(sim.history, sim.bestLapEver);
   hyperChart?.draw(sim.history, sim.bestLapEver);
   persistState();
+  if (trackModal && !trackModal.hidden) {
+    renderTrackModalCards();
+  }
   toast(`Switched to ${preset.name}`);
 });
 
@@ -1424,6 +1427,238 @@ function switchTargetCar(direction) {
 setTelemetryOpen(isTelemetryOpen);
 btnToggleLeaderboard?.classList.toggle('is-active', !leaderboard.isCollapsed);
 
+// ---------- Track Selector & Designer Modal ----------
+const btnTrackMenu = $('btn-track-menu');
+const trackModal = $('track-modal');
+const btnTrackModalClose = $('btn-track-modal-close');
+const trackCardsGrid = $('track-cards-grid');
+const trackModalCount = $('track-modal-count');
+
+function generateTrackSvgSilhouette(presetKey, points, isActive = false) {
+  const safePoints = (Array.isArray(points) && points.length >= 3) ? points : TRACK_PRESETS['grand-prix'].points;
+  const t = new Track(safePoints, CONFIG.track.width, 120);
+  const b = t.bounds;
+  const w = 240, h = 130, pad = 16;
+  const s = Math.min((w - pad * 2) / (b.w || 1), (h - pad * 2) / (b.h || 1));
+  const ox = (w - b.w * s) / 2 - b.minX * s;
+  const oy = (h - b.h * s) / 2 - b.minY * s;
+
+  let d = '';
+  for (let i = 0; i < t.N; i++) {
+    const px = (t.cx[i] * s + ox).toFixed(1);
+    const py = (t.cy[i] * s + oy).toFixed(1);
+    d += (i === 0 ? 'M ' : ' L ') + px + ' ' + py;
+  }
+  d += ' Z';
+
+  const sx = t.cx[0] * s + ox;
+  const sy = t.cy[0] * s + oy;
+  const nx = -t.ty[0];
+  const ny = t.tx[0];
+  const x1 = (sx - nx * 8).toFixed(1);
+  const y1 = (sy - ny * 8).toFixed(1);
+  const x2 = (sx + nx * 8).toFixed(1);
+  const y2 = (sy + ny * 8).toFixed(1);
+
+  const primaryGlow = isActive ? 'rgba(34, 197, 94, 0.35)' : 'rgba(56, 189, 248, 0.25)';
+  const primaryLine = isActive ? '#22c55e' : '#38bdf8';
+  const markerColor = isActive ? '#22c55e' : '#f59e0b';
+
+  return `
+    <svg class="track-silhouette-svg" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+      <g stroke="rgba(255, 255, 255, 0.04)" stroke-width="1">
+        <line x1="0" y1="32" x2="${w}" y2="32"/>
+        <line x1="0" y1="65" x2="${w}" y2="65"/>
+        <line x1="0" y1="98" x2="${w}" y2="98"/>
+        <line x1="60" y1="0" x2="60" y2="${h}"/>
+        <line x1="120" y1="0" x2="120" y2="${h}"/>
+        <line x1="180" y1="0" x2="180" y2="${h}"/>
+      </g>
+      <path d="${d}" fill="none" stroke="${primaryGlow}" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${d}" fill="none" stroke="#0b1329" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${d}" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${d}" fill="none" stroke="${primaryLine}" stroke-width="1.8" stroke-dasharray="${isActive ? 'none' : '4 3'}" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${markerColor}" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="2.8" fill="${markerColor}" stroke="#0b1329" stroke-width="1"/>
+    </svg>
+  `;
+}
+
+export function renderTrackModalCards() {
+  if (!trackCardsGrid) return;
+  const currentKey = $('track-select')?.value || initialPreset;
+  const entries = Object.entries(TRACK_PRESETS);
+
+  const builtinOrder = ['grand-prix', 'speedway-oval', 'technical-complex', 'simple-loop'];
+  entries.sort(([keyA, a], [keyB, b]) => {
+    const idxA = builtinOrder.indexOf(keyA);
+    const idxB = builtinOrder.indexOf(keyB);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  if (trackModalCount) {
+    trackModalCount.textContent = `${entries.length} Track${entries.length === 1 ? '' : 's'}`;
+  }
+
+  trackCardsGrid.innerHTML = '';
+  for (const [key, preset] of entries) {
+    const isActive = key === currentKey;
+    const isCustom = Boolean(preset.custom);
+    const t = new Track(preset.points, CONFIG.track.width, 100);
+    const lengthText = t.length >= 1000 ? `${(t.length / 1000).toFixed(2)} km` : `${Math.round(t.length)} m`;
+    const cleanName = (preset.name || key).replace(/\s*\(Default\)/i, '');
+    const turnCount = preset.points.length;
+
+    const card = document.createElement('div');
+    card.className = `track-card${isActive ? ' is-active' : ''}${isCustom ? ' is-custom' : ''}`;
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('data-track-key', key);
+
+    card.innerHTML = `
+      <div class="track-silhouette-box">
+        <span class="track-card-type-pill">${isCustom ? 'Custom' : 'Championship'}</span>
+        ${isActive ? '<span class="track-card-active-ribbon">✓ Selected</span>' : ''}
+        ${generateTrackSvgSilhouette(key, preset.points, isActive)}
+      </div>
+      <div class="track-card-info">
+        <div class="track-card-header">
+          <span class="track-card-name" title="${cleanName}">${cleanName}</span>
+          <span class="track-card-length">${lengthText}</span>
+        </div>
+        <div class="track-card-meta">
+          <span>${turnCount} Control Turns</span>
+          <span>${isCustom ? 'User Layout' : 'Preset Circuit'}</span>
+        </div>
+        <div class="track-card-action-bar">
+          <button class="track-btn-select${isActive ? ' is-active' : ''}" type="button" data-action="select">
+            ${isActive ? '✓ Currently Racing' : 'Select Circuit ➔'}
+          </button>
+          <div class="track-card-tools-row">
+            <button class="track-card-tool-btn btn-track-edit" type="button" title="Edit ${cleanName} in Circuit Designer" data-action="edit">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+              <span>Edit</span>
+            </button>
+            <button class="track-card-tool-btn btn-track-delete${!isCustom ? ' is-disabled' : ''}" type="button" title="${isCustom ? `Delete ${cleanName} from library` : 'Championship presets cannot be deleted'}" data-action="delete" ${!isCustom ? 'disabled' : ''}>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const selectTrack = () => {
+      if (key !== $('track-select')?.value) {
+        if ($('track-select')) {
+          $('track-select').value = key;
+          $('track-select').dispatchEvent(new Event('change'));
+        }
+      }
+      closeTrackModal();
+    };
+
+    const editTrack = (e) => {
+      e?.stopPropagation();
+      closeTrackModal();
+      window.location.href = `./track-editor.html?edit=${encodeURIComponent(key)}`;
+    };
+
+    const deleteTrack = (e) => {
+      e?.stopPropagation();
+      if (!isCustom) {
+        toast('Championship circuits are built-in presets and cannot be deleted.', 'info');
+        return;
+      }
+      const confirmed = window.confirm(`Delete "${cleanName}" from your circuit library?\nThis cannot be undone.`);
+      if (!confirmed) return;
+
+      deleteCustomTrack(key);
+
+      const selectEl = $('track-select');
+      if (selectEl) {
+        const opt = selectEl.querySelector(`option[value="${key}"]`);
+        if (opt) opt.remove();
+        if (selectEl.value === key) {
+          selectEl.value = 'grand-prix';
+          selectEl.dispatchEvent(new Event('change'));
+        }
+      }
+      toast(`Deleted "${cleanName}" from circuit library`, 'info');
+      renderTrackModalCards();
+    };
+
+    const btnSelect = card.querySelector('.track-btn-select');
+    const btnEdit = card.querySelector('.btn-track-edit');
+    const btnDelete = card.querySelector('.btn-track-delete');
+
+    btnSelect?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectTrack();
+    });
+    btnEdit?.addEventListener('click', editTrack);
+    btnDelete?.addEventListener('click', deleteTrack);
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      selectTrack();
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.target.closest('button')) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectTrack();
+      }
+    });
+
+    trackCardsGrid.appendChild(card);
+  }
+}
+
+export function openTrackModal() {
+  if (!trackModal) return;
+  renderTrackModalCards();
+  trackModal.hidden = false;
+  btnTrackMenu?.setAttribute('aria-expanded', 'true');
+  btnTrackMenu?.classList.add('is-active');
+  btnTrackModalClose?.focus();
+}
+
+export function closeTrackModal() {
+  if (!trackModal) return;
+  trackModal.hidden = true;
+  btnTrackMenu?.setAttribute('aria-expanded', 'false');
+  btnTrackMenu?.classList.remove('is-active');
+}
+
+btnTrackMenu?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (trackModal && !trackModal.hidden) {
+    closeTrackModal();
+  } else {
+    openTrackModal();
+  }
+});
+
+btnTrackModalClose?.addEventListener('click', () => closeTrackModal());
+
+trackModal?.addEventListener('click', (e) => {
+  if (e.target === trackModal) {
+    closeTrackModal();
+  }
+});
+
 // ---------- First-Time User Experience & Onboarding Guide ----------
 const welcomeGuide = $('welcome-guide-backdrop');
 const btnWelcomeClose = $('btn-welcome-close');
@@ -1483,6 +1718,11 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key === 'Esc') {
     if (welcomeGuide && !welcomeGuide.hidden) {
       closeWelcomeGuide(true);
+      e.preventDefault();
+      return;
+    }
+    if (trackModal && !trackModal.hidden) {
+      closeTrackModal();
       e.preventDefault();
       return;
     }
@@ -1624,7 +1864,17 @@ window.addEventListener('keydown', (e) => {
     case 'h':
       openHyperModal();
       break;
+    case 'k':
+      if (trackModal && !trackModal.hidden) {
+        closeTrackModal();
+      } else {
+        openTrackModal();
+      }
+      break;
     case 'escape':
+      if (trackModal && !trackModal.hidden) {
+        closeTrackModal();
+      }
       const modalEl = hyperModal || $('hyper-modal');
       if (modalEl && !modalEl.hidden) {
         closeHyperModal();
@@ -1963,7 +2213,7 @@ function updateHyperControlsUi() {
     if (progBadge) progBadge.textContent = 'STANDBY';
     if (targetInfo) {
       const modeDesc = hyperLaps === 1 ? '1-LAP SPRINT' : (hyperLaps === 2 ? '2-LAP FLYING BENCHMARK' : `${hyperLaps}-LAP FULL GP`);
-      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · ${modeDesc}`;
+      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong><span>${modeDesc}</span>`;
     }
     if (barFill) {
       barFill.classList.remove('is-active');
@@ -2296,7 +2546,7 @@ function setHyperLaps(laps) {
   const targetInfo = $('hyper-target-info');
   if (targetInfo) {
     const modeDesc = hyperLaps === 1 ? '1-LAP SPRINT' : (hyperLaps === 2 ? '2-LAP FLYING BENCHMARK' : `${hyperLaps}-LAP FULL GP`);
-    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · ${modeDesc}`;
+    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong><span>${modeDesc}</span>`;
   }
 
   if (hyperRunning && CONFIG.generation) {
@@ -2357,7 +2607,7 @@ function startHyperTraining() {
   const targetInfo = $('hyper-target-info');
   if (targetInfo) {
     const modeDesc = hyperLaps === 1 ? '1-LAP SPRINT' : (hyperLaps === 2 ? '2-LAP FLYING BENCHMARK' : `${hyperLaps}-LAP FULL GP`);
-    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · ${modeDesc}`;
+    targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong><span>${modeDesc}</span>`;
   }
 
   if (hyperRunningView) hyperRunningView.hidden = false;
@@ -2449,7 +2699,7 @@ function runHyperBatch() {
     if (curGen) curGen.textContent = sim.generation;
     const targetInfo = $('hyper-target-info');
     if (targetInfo) {
-      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong> · <span>+${gensDone} gens simulated</span>`;
+      targetInfo.innerHTML = `GEN <strong id="hyper-cur-gen">${sim.generation}</strong><span>+${gensDone} gens simulated</span>`;
     }
     const barFill = $('hyper-bar-fill');
     if (barFill) barFill.style.width = '100%';

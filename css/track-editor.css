@@ -49,6 +49,131 @@ input { width: 100%; padding: 12px; background: #101d29; color: #f1f7f8; border:
 .point-context-menu[hidden] { display: none; }
 .point-context-menu button { display: block; width: 100%; border: 0; border-radius: 4px; padding: 10px 18px; color: #f1ced0; background: transparent; cursor: pointer; text-align: left; font-size: 12px; }
 .point-context-menu button:hover, .point-context-menu button:focus-visible { background: #243a48; }
+
+/* Attention & Narrow passage highlighting */
+.attention-glow {
+  stroke: #ff3838;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.38;
+}
+.attention-edge-pinch {
+  stroke: #ff334b;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 8 5;
+  animation: attention-dash 1.2s linear infinite;
+}
+.attention-center-hazard {
+  stroke: #ffab00;
+  stroke-dasharray: 10 8;
+  opacity: 0.85;
+}
+.clearance-line {
+  stroke: #ff334b;
+  stroke-width: 3;
+  stroke-dasharray: 6 5;
+  animation: attention-dash 1.2s linear infinite;
+}
+@keyframes attention-dash {
+  to { stroke-dashoffset: -26; }
+}
+
+/* Control point attention halo */
+.handle-attention-halo {
+  fill: none;
+  stroke: #ff334b;
+  stroke-width: 3;
+  stroke-dasharray: 5 4;
+  animation: halo-pulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes halo-pulse {
+  0% { r: 16px; opacity: 1; stroke-width: 3.5px; }
+  50% { r: 24px; opacity: 0.35; stroke-width: 2px; }
+  100% { r: 16px; opacity: 1; stroke-width: 3.5px; }
+}
+
+/* Apex attention badges */
+.attention-badge {
+  cursor: pointer;
+}
+.attention-badge rect {
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+  transition: all 0.15s ease;
+}
+.attention-badge:hover rect {
+  stroke: #ff7588;
+  fill: #261116;
+}
+.attention-beacon {
+  animation: beacon-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+@keyframes beacon-ping {
+  0% { r: 10px; opacity: 0.95; }
+  75%, 100% { r: 28px; opacity: 0; }
+}
+
+/* Sidebar attention panel */
+.attention-panel {
+  background: #1e1014;
+  border: 1px solid #66202b;
+  border-radius: 9px;
+  padding: 10px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.attention-panel[hidden] { display: none; }
+.attention-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #ff7b8a;
+}
+.attention-items {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.attention-item-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 9px;
+  background: #2b1419;
+  border: 1px solid #571e27;
+  border-radius: 6px;
+  color: #fed7dc;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+.attention-item-btn:hover {
+  background: #3e1b23;
+  border-color: #ff475f;
+  color: #ffffff;
+}
+.attention-item-btn strong {
+  color: #ff99a6;
+}
+.attention-item-btn small {
+  color: #aa7d84;
+}
+.attention-item-btn .item-action {
+  color: #ff7588;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
 @media (max-width: 800px) {
   body { padding: 14px; height: auto; min-height: 100dvh; }
   .studio-layout { grid-template-columns: 1fr; gap: 16px; }

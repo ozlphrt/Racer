@@ -20,9 +20,12 @@ export const CONFIG = {
     turnRate: 3.8, // Agile apex steering
     minTurnSpeed: 45, // Steering response onset
     highSpeedTurnLoss: 0.32,
-    tireGrip: 8.2, // Calibrated lateral tire grip: authentic progressive slip and drift dynamics (down from 14.2)
+    tireGrip: 6.8, // Calibrated lateral tire grip: authentic progressive slip and drift dynamics (down from 8.2)
     understeerFactor: 0.0035, // High-speed front tire scrub on aggressive corner entry
     oversteerFactor: 0.32, // Power oversteer and throttle-steer rotation on corner exit
+    yawResponseSec: 0.12, // Chassis yaw-rate response time: rotation builds up with inertia instead of snapping
+    latGripBase: 120, // Peak lateral acceleration at standstill (units/s², ~57 units/s² per g)
+    latGripPerSpeed: 0.6, // Extra lateral acceleration per unit speed from aerodynamic downforce
   },
 
   collision: {
@@ -45,8 +48,8 @@ export const CONFIG = {
     population: 20, // 20-Car F1 Grid (blistering fast simulation speed & clean racing lines)
     elites: 2, // Keep top 2 champions unchanged (guarantees proven race pace survival)
     tournamentK: 3, // Tournament selection size
-    mutationRate: 0.16, // Elevated mutation rate to discover new braking and apex lines
-    mutationSigma: 0.24, // Expanded precision micro-tuning
+    mutationRate: 0.20, // Elevated mutation rate to discover new braking and apex lines
+    mutationSigma: 0.28, // Expanded precision micro-tuning
   },
 
   generation: {
@@ -63,6 +66,8 @@ export const CONFIG = {
     lapBonus: 4500, // Large reward per completed lap
     fullRaceBonus: 30000, // Milestone bonus for completing the selected race distance
     targetLapTime: 8.54, // Benchmark target lap time matching historic 8.54s record; exponentially rewards sub-9.0s pace
+    speedPaceWeight: 22, // Reward for sustained high velocity across sectors (beats crawling)
+    timeoutPenalty: 0.35, // Penalize cars that time out without finishing so slow creeping is an evolutionary dead-end
     crashPenalty: 600, // Strict penalty for crashing into walls/runoff (rewards staying on track)
     contactPenalty: 50, // Penalty per contact after grace period (penalizes collisions)
     cleanRaceBonus: 3500, // Massive bonus for completing laps with 0 collision contacts

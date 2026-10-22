@@ -8,7 +8,7 @@ import { PRESET_BRAINS } from '../js/presetBrains.js';
 import { LookaheadBrain, upgradeGenome, LOOKAHEAD_LAYERS } from './lookaheadBrain.js';
 
 const circuit = () => new Track(TRACK_PRESETS['grand-prix'].points, CONFIG.track.width, CONFIG.track.samples);
-const genome = PRESET_BRAINS['grand-prix:5000'].genome;
+const genome = (PRESET_BRAINS['grand-prix:250'] || PRESET_BRAINS['grand-prix:5000']).genome;
 
 test('adding zero-weight lookahead inputs preserves existing policy outputs exactly', () => {
   const original = new NeuralNetwork(CONFIG.nn.layers, genome), brain = new LookaheadBrain(upgradeGenome(genome));

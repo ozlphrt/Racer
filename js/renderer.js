@@ -1165,7 +1165,7 @@ export class Renderer {
           if (curInt > 0.30) {
             const normX = -sin;
             const normY = -cos;
-            const smokeAlpha = (curInt - 0.30) / 0.70 * 0.35;
+            const u = Math.min(1.0, Math.max(0, (curInt - 0.28) / 0.45)); const smokeAlpha = u * u * (3 - 2 * u) * 0.18;
             this.tireSmokes.push({
               p0x: track.lx, p0y: track.ly,
               p1x: lx, p1y: ly,
@@ -1269,7 +1269,7 @@ export class Renderer {
       s.w0 += 2.8 * dt;
       s.w1 += 2.8 * dt;
 
-      const alpha = s.alpha * Math.pow(s.life, 1.25) * 0.40;
+      const alpha = s.alpha * Math.pow(s.life, 1.25) * 0.25;
 
       const p0lx = s.p0x - s.nx * s.w0;
       const p0ly = s.p0y - s.ny * s.w0;

@@ -342,7 +342,8 @@ export class Renderer3D {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.w, this.h, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.0));
-    this.renderer.shadowMap.enabled = false; // Disables redundant shadow depth pass (cars use dedicated high-res AO contact shadows)
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     // 2. OrbitControls with smooth auto spin
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -614,9 +615,9 @@ export class Renderer3D {
 
     // Bright, crisp warm golden-white afternoon sunlight
     this.dirLight = new THREE.DirectionalLight(0xfff6e8, 2.05);
-    this.dirLight.castShadow = false;
-    this.dirLight.shadow.mapSize.width = 1024;
-    this.dirLight.shadow.mapSize.height = 1024;
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 2048;
+    this.dirLight.shadow.mapSize.height = 2048;
     this.dirLight.shadow.camera.near = 100;
     this.dirLight.shadow.camera.far = 8000;
     this.dirLight.shadow.bias = -0.0001;
@@ -1656,7 +1657,7 @@ export class Renderer3D {
     });
 
     this.terrainMesh = new THREE.Mesh(geo, mat);
-    this.terrainMesh.receiveShadow = false;
+    this.terrainMesh.receiveShadow = true;
     this.terrainMesh.castShadow = false;
     this.terrainMesh.matrixAutoUpdate = false;
     this.terrainMesh.updateMatrix();
@@ -1828,7 +1829,7 @@ export class Renderer3D {
 
     this.trackMesh = new THREE.Mesh(geo, mat);
     this.trackMesh.castShadow = false;
-    this.trackMesh.receiveShadow = false;
+    this.trackMesh.receiveShadow = true;
     this.trackMesh.matrixAutoUpdate = false;
     this.trackMesh.updateMatrix();
     this.trackMesh.renderOrder = 1;
@@ -1845,6 +1846,7 @@ export class Renderer3D {
       metalness: 0.05,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -4,
       polygonOffsetUnits: -4,
       depthTest: true,
@@ -1918,6 +1920,7 @@ export class Renderer3D {
       opacity: 0.85,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -3,
       polygonOffsetUnits: -3,
       depthTest: true,
@@ -2157,6 +2160,7 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -4,
       polygonOffsetUnits: -4,
       depthTest: true,
@@ -2167,6 +2171,7 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -4,
       polygonOffsetUnits: -4,
       depthTest: true,
@@ -2223,6 +2228,7 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -5,
       polygonOffsetUnits: -5,
       depthTest: true,
@@ -2246,6 +2252,7 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -6,
       polygonOffsetUnits: -6,
       depthTest: true,
@@ -2704,6 +2711,7 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -5,
       polygonOffsetUnits: -5,
       depthTest: true,
@@ -2715,6 +2723,7 @@ export class Renderer3D {
       metalness: 0.1,
       side: THREE.DoubleSide,
       polygonOffset: true,
+      depthWrite: false,
       polygonOffsetFactor: -6,
       polygonOffsetUnits: -6,
       depthTest: true,
@@ -3355,52 +3364,34 @@ export class Renderer3D {
   }
 
   createCarContactShadowTexture() {
+    if (typeof document === 'undefined') return new THREE.Texture();
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 512, 256);
 
-    // 1. Soft overall underbody ambient shadow
-    const grad = ctx.createRadialGradient(256, 128, 15, 256, 128, 220);
-    grad.addColorStop(0, 'rgba(0, 0, 0, 0.88)');
-    grad.addColorStop(0.50, 'rgba(0, 0, 0, 0.58)');
-    grad.addColorStop(0.82, 'rgba(0, 0, 0, 0.20)');
+    // Soft, realistic undertray ambient occlusion
+    // Naturally grounds the car floor without fake disjointed tire circles or harsh black blotches
+    const grad = ctx.createRadialGradient(256, 128, 20, 256, 128, 215);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.68)');
+    grad.addColorStop(0.35, 'rgba(0, 0, 0, 0.44)');
+    grad.addColorStop(0.65, 'rgba(0, 0, 0, 0.18)');
+    grad.addColorStop(0.85, 'rgba(0, 0, 0, 0.05)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(256, 128, 235, 115, 0, 0, Math.PI * 2);
+    ctx.ellipse(256, 128, 200, 75, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Heavy dark contact occlusion footprint directly beneath the 4 tire contact patches
-    // Plane: 35.1 x 18.85. Front wheels: X = 392.5, Y = 46.8 & 209.2. Rear wheels: X = 123.2, Y = 46.8 & 209.2
-    const tirePatches = [
-      { x: 393, y: 47, rx: 32, ry: 20 },
-      { x: 393, y: 209, rx: 32, ry: 20 },
-      { x: 123, y: 47, rx: 36, ry: 24 },
-      { x: 123, y: 209, rx: 36, ry: 24 },
-    ];
-
-    for (const tp of tirePatches) {
-      const tGrad = ctx.createRadialGradient(tp.x, tp.y, 4, tp.x, tp.y, tp.rx);
-      tGrad.addColorStop(0, 'rgba(0, 0, 0, 1.0)');
-      tGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.85)');
-      tGrad.addColorStop(0.85, 'rgba(0, 0, 0, 0.35)');
-      tGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = tGrad;
-      ctx.beginPath();
-      ctx.ellipse(tp.x, tp.y, tp.rx, tp.ry, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 3. Central floor & diffuser dense core ambient occlusion
-    const coreGrad = ctx.createRadialGradient(240, 128, 12, 240, 128, 120);
-    coreGrad.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
-    coreGrad.addColorStop(0.65, 'rgba(0, 0, 0, 0.60)');
+    // Denser core underbody floorboard directly beneath sidepods and cockpit
+    const coreGrad = ctx.createRadialGradient(246, 128, 10, 246, 128, 110);
+    coreGrad.addColorStop(0, 'rgba(0, 0, 0, 0.58)');
+    coreGrad.addColorStop(0.50, 'rgba(0, 0, 0, 0.28)');
     coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = coreGrad;
     ctx.beginPath();
-    ctx.ellipse(240, 128, 160, 60, 0, 0, Math.PI * 2);
+    ctx.ellipse(246, 128, 130, 42, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -3409,29 +3400,40 @@ export class Renderer3D {
     return tex;
   }
 
+  createContactShadowMesh() {
+    if (typeof document === 'undefined') return null;
+    if (!this.contactShadowTexture) {
+      this.contactShadowTexture = this.createCarContactShadowTexture();
+    }
+    if (!this.contactShadowMat) {
+      this.contactShadowMat = new THREE.MeshBasicMaterial({
+        map: this.contactShadowTexture,
+        transparent: true,
+        opacity: 0.38,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1.0,
+        polygonOffsetUnits: -1.0,
+      });
+    }
+    const L = CONFIG.car.length; // 26
+    const W = CONFIG.car.width;  // 13
+    const shadowGeo = new THREE.PlaneGeometry(L * 1.02, W * 0.88);
+    const contactShadow = new THREE.Mesh(shadowGeo, this.contactShadowMat);
+    contactShadow.position.set(-0.3, 0, 0.06);
+    contactShadow.renderOrder = 30;
+    contactShadow.castShadow = false;
+    contactShadow.receiveShadow = false;
+    return contactShadow;
+  }
+
   createCarMesh(color, isPlayer = false, carIdx = 0, carNumber = 1) {
     const group = new THREE.Group();
     const L = CONFIG.car.length; // 26
     const W = CONFIG.car.width;  // 13
 
-    // 0. UNDERBODY AMBIENT OCCLUSION CONTACT SHADOW (Locks tires solidly to tarmac)
-    if (!this.contactShadowTexture) {
-      this.contactShadowTexture = this.createCarContactShadowTexture();
-      this.contactShadowMat = new THREE.MeshBasicMaterial({
-        map: this.contactShadowTexture,
-        transparent: true,
-        opacity: 0.96,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1.5,
-        polygonOffsetUnits: -1.5,
-      });
-    }
-    const shadowGeo = new THREE.PlaneGeometry(L * 1.35, W * 1.45);
-    const contactShadow = new THREE.Mesh(shadowGeo, this.contactShadowMat);
-    contactShadow.position.set(0, 0, 0.015);
-    contactShadow.renderOrder = 2;
-    group.add(contactShadow);
+    const contactShadow = this.createContactShadowMesh();
+    if (contactShadow) group.add(contactShadow);
 
     // Primary, Secondary, Accent, & Quad color palette (1 to 4 colors per team)
     const teamIdx = isPlayer ? 1 : (Math.floor(carIdx / 2) % TEAM_PALETTE.length);
@@ -3795,6 +3797,7 @@ export class Renderer3D {
           child.castShadow = true;
           child.receiveShadow = true;
         }
+        child.renderOrder = child === contactShadow ? 30 : 100;
       }
     });
 
@@ -4057,6 +4060,9 @@ export class Renderer3D {
     const badge = this.createBadgeSprite();
     group.userData.badgeSprite = badge;
     group.add(badge);
+
+    const contactShadow = this.createContactShadowMesh();
+    if (contactShadow) group.add(contactShadow);
   }
 
   updateRecordGhost(sim, opts) {
@@ -4196,8 +4202,9 @@ export class Renderer3D {
       }
 
       if (child.isMesh) {
-        child.castShadow = false;
+        child.castShadow = true;
         child.receiveShadow = false;
+        child.renderOrder = 100;
 
         const isFrontWheelsMesh = child.name === 'Object_8';
         const isRearWheelsMesh = child.name === 'Object_10';
@@ -4389,6 +4396,7 @@ export class Renderer3D {
 
     // Yaw 180Â° so the car's nose points forward along velocity vector +X
     carSubGroup.rotation.z = Math.PI;
+    
     group.add(carSubGroup);
     return group;
   }
@@ -5872,6 +5880,23 @@ export class Renderer3D {
   setupBursts() {
     this.maxBurstSparks = 400;
     this.burstSparks = [];
+    for (let i = 0; i < this.maxBurstSparks; i++) {
+      this.burstSparks.push({
+        alive: false,
+        x: 0,
+        y: 0,
+        z: 1.5,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        life: 0,
+        decay: 1.0,
+        r: 1.0,
+        g: 0.5,
+        b: 0.1,
+      });
+    }
+    this.burstHead = 0;
     this.burstPosArr = new Float32Array(this.maxBurstSparks * 3);
     this.burstColArr = new Float32Array(this.maxBurstSparks * 3);
 
@@ -5896,7 +5921,12 @@ export class Renderer3D {
   }
 
   clearBursts() {
-    this.burstSparks = [];
+    this.burstHead = 0;
+    if (this.burstSparks) {
+      for (let i = 0; i < this.burstSparks.length; i++) {
+        this.burstSparks[i].alive = false;
+      }
+    }
     if (this.burstPointsMesh) this.burstPointsMesh.geometry.setDrawRange(0, 0);
   }
 
@@ -5911,29 +5941,29 @@ export class Renderer3D {
   }
 
   addBurst(evt) {
+    if (!this.burstSparks || this.maxBurstSparks === 0) return;
     const { x, y, speed } = evt;
     const count = 12;
     const baseSpeed = Math.min(140, Math.max(40, (speed || 45) * 0.7));
 
     for (let i = 0; i < count; i++) {
-      if (this.burstSparks.length >= this.maxBurstSparks) {
-        this.burstSparks.shift(); // recycle oldest
-      }
+      const p = this.burstSparks[this.burstHead];
+      this.burstHead = (this.burstHead + 1) % this.maxBurstSparks;
+
       const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
       const spd = baseSpeed * (0.6 + Math.random() * 0.8);
-      this.burstSparks.push({
-        x: x,
-        y: -y,
-        z: 1.5,
-        vx: Math.cos(angle) * spd,
-        vy: Math.sin(angle) * spd,
-        vz: 16 + Math.random() * 28,
-        life: 1.0,
-        decay: 1.8 + Math.random() * 0.8,
-        r: 1.0,
-        g: 0.45 + Math.random() * 0.4,
-        b: 0.1,
-      });
+      p.alive = true;
+      p.x = x;
+      p.y = -y;
+      p.z = 1.5;
+      p.vx = Math.cos(angle) * spd;
+      p.vy = Math.sin(angle) * spd;
+      p.vz = 16 + Math.random() * 28;
+      p.life = 1.0;
+      p.decay = 1.8 + Math.random() * 0.8;
+      p.r = 1.0;
+      p.g = 0.45 + Math.random() * 0.4;
+      p.b = 0.1;
     }
   }
 
@@ -5945,11 +5975,12 @@ export class Renderer3D {
     const dt = 1 / 60;
     let writeIdx = 0;
 
-    for (let i = this.burstSparks.length - 1; i >= 0; i--) {
+    for (let i = 0; i < this.burstSparks.length; i++) {
       const p = this.burstSparks[i];
+      if (!p.alive) continue;
       p.life -= p.decay * dt;
       if (p.life <= 0) {
-        this.burstSparks.splice(i, 1);
+        p.alive = false;
         continue;
       }
 
@@ -5971,9 +6002,17 @@ export class Renderer3D {
       writeIdx++;
     }
 
-    this.burstPointsMesh.geometry.attributes.position.needsUpdate = true;
-    this.burstPointsMesh.geometry.attributes.color.needsUpdate = true;
-    this.burstPointsMesh.geometry.setDrawRange(0, writeIdx);
+    if (this.burstPointsMesh) {
+      if (writeIdx > 0) {
+        const posAttr = this.burstPointsMesh.geometry.attributes.position;
+        const colAttr = this.burstPointsMesh.geometry.attributes.color;
+        posAttr.addUpdateRange(0, writeIdx * 3);
+        colAttr.addUpdateRange(0, writeIdx * 3);
+        posAttr.needsUpdate = true;
+        colAttr.needsUpdate = true;
+      }
+      this.burstPointsMesh.geometry.setDrawRange(0, writeIdx);
+    }
   }
 
   createSmokeTexture() {
@@ -5987,21 +6026,31 @@ export class Renderer3D {
 
     const half = size / 2; // 256
 
-    // Multi-octave fractal noise generator
+    // Irregular hashed value noise with domain warping (no repeating sine pattern)
+    function hash2(ix, iy, seed) {
+      const h = Math.sin(ix * 127.1 + iy * 311.7 + seed * 74.7) * 43758.5453;
+      return h - Math.floor(h);
+    }
+    function vnoise(x, y, seed) {
+      const ix = Math.floor(x), iy = Math.floor(y);
+      const fx = x - ix, fy = y - iy;
+      const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+      const a = hash2(ix, iy, seed), b = hash2(ix + 1, iy, seed);
+      const c = hash2(ix, iy + 1, seed), d = hash2(ix + 1, iy + 1, seed);
+      return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+    }
     function fbm(x, y, seed = 0) {
-      let val = 0;
-      let amp = 0.5;
-      let freq = 1.0;
-      for (let o = 0; o < 4; o++) {
-        const nx = x * freq + seed * 17.13 + o * 5.71;
-        const ny = y * freq + seed * 31.41 + o * 9.17;
-        const s0 = Math.sin(nx * 1.8 + Math.cos(ny * 2.3));
-        const s1 = Math.cos(ny * 1.7 + Math.sin(nx * 2.1));
-        val += ((s0 + s1) * 0.5 + 0.5) * amp;
+      // Domain warp: bend the sample point with low-frequency noise for wispy, torn edges
+      const wx = (vnoise(x * 0.9 + 3.1, y * 0.9 + 1.7, seed) - 0.5) * 1.6;
+      const wy = (vnoise(x * 0.9 + 8.3, y * 0.9 + 5.9, seed + 1) - 0.5) * 1.6;
+      let val = 0, amp = 0.5, freq = 1.0, norm = 0;
+      for (let o = 0; o < 5; o++) {
+        val += vnoise((x + wx) * freq + o * 5.71, (y + wy) * freq + o * 9.17, seed + o) * amp;
+        norm += amp;
         amp *= 0.5;
-        freq *= 2.1;
+        freq *= 2.05;
       }
-      return val;
+      return val / norm;
     }
 
     // 2x2 Atlas: 4 completely unique organic fractal smoke patterns
@@ -6047,7 +6096,10 @@ export class Renderer3D {
               noiseVal = (n1 * 0.65 + n2 * 0.35) * Math.pow(Math.max(0, 0.95 - r), 1.5);
             }
 
-            const alpha = Math.min(1.0, Math.max(0, noiseVal * 1.75));
+            // Soft round puff body, with noise only roughening the density (never punching holes)
+            const body = Math.pow(Math.max(0, 1 - r / 0.96), 0.8);
+            const grain = fbm(nx * 2.4 + qIdx * 3.7, ny * 2.4 + qIdx * 1.9, qIdx * 5.3 + 1.0);
+            const alpha = Math.min(1.0, body * (0.45 + 0.9 * Math.max(grain, noiseVal * 1.4)));
             if (alpha <= 0.005) continue;
 
             const globalX = ox + px;
@@ -6082,19 +6134,32 @@ export class Renderer3D {
   }
 
   setupTireSmoke() {
-    this.maxSmokeParticles = 900;
+    this.maxSmokeParticles = 3600; // Right-sized from 900: eliminates GPU fill-rate collapse & overdraw in multi-car corners
+    this.smokeHead = 0;
     this.smokeParticles = [];
+    for (let i = 0; i < this.maxSmokeParticles; i++) {
+      this.smokeParticles.push({
+        alive: false,
+        x: 0, y: 0, z: 0,
+        vx: 0, vy: 0, vz: 0,
+        size: 0, growthRate: 0,
+        rot: 0, vRot: 0,
+        atlasIdx: 0, alpha: 0,
+        life: 0, decay: 1,
+      });
+    }
+
     this.smokePosArr = new Float32Array(this.maxSmokeParticles * 3);
     this.smokeSizeArr = new Float32Array(this.maxSmokeParticles);
     this.smokeAlphaArr = new Float32Array(this.maxSmokeParticles);
-    this.smokeCosSinArr = new Float32Array(this.maxSmokeParticles * 2);
+    this.smokeRotArr = new Float32Array(this.maxSmokeParticles);
     this.smokeAtlasIdxArr = new Float32Array(this.maxSmokeParticles);
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.smokePosArr, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(this.smokeSizeArr, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.smokeAlphaArr, 1));
-    geo.setAttribute('cosSin', new THREE.BufferAttribute(this.smokeCosSinArr, 2));
+    geo.setAttribute('rot', new THREE.BufferAttribute(this.smokeRotArr, 1));
     geo.setAttribute('atlasIdx', new THREE.BufferAttribute(this.smokeAtlasIdxArr, 1));
     geo.setDrawRange(0, 0);
 
@@ -6103,7 +6168,7 @@ export class Renderer3D {
     const vertShader = `
       attribute float size;
       attribute float alpha;
-      attribute vec2 cosSin;
+      attribute float rot;
       attribute float atlasIdx;
       varying float vAlpha;
       varying vec2 vCosSin;
@@ -6111,10 +6176,10 @@ export class Renderer3D {
 
       void main() {
         vAlpha = alpha;
-        vCosSin = cosSin;
+        vCosSin = vec2(cos(rot), sin(rot));
         vAtlasIdx = atlasIdx;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = clamp(size * (950.0 / -mvPosition.z), 2.0, 160.0);
+        gl_PointSize = clamp(size * (1150.0 / -mvPosition.z), 3.0, 128.0);
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
@@ -6125,40 +6190,33 @@ export class Renderer3D {
       varying vec2 vCosSin;
       varying float vAtlasIdx;
 
+      float hash21(vec2 i) {
+        return fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
+      }
+      float vnoise(vec2 x) {
+        vec2 i = floor(x);
+        vec2 f = fract(x);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+                   mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+
       void main() {
         vec2 p = gl_PointCoord - vec2(0.5);
-        float dist = length(p);
-        if (dist > 0.49) discard;
+        float dist = length(p) * 2.0;
+        if (dist >= 1.0) discard;
 
-        // Smooth circular boundary feathering
-        float feather = 1.0 - smoothstep(0.10, 0.49, dist);
+        // Per-particle random rotation
+        vec2 pr = vec2(p.x * vCosSin.x - p.y * vCosSin.y, p.x * vCosSin.y + p.y * vCosSin.x);
 
-        // Individual particle random rotation
-        vec2 pRot = vec2(
-          p.x * vCosSin.x - p.y * vCosSin.y,
-          p.x * vCosSin.y + p.y * vCosSin.x
-        );
+        // Fully procedural puff: round, soft-edged, roughened by two noise octaves (no texture, no hard edges)
+        vec2 seed = vec2(vAtlasIdx * 7.31, vAtlasIdx * 3.77);
+        float n = vnoise(pr * 5.0 + seed) * 0.6 + vnoise(pr * 11.0 + seed * 1.7) * 0.4;
+        float body = pow(1.0 - dist, 1.3);
+        float alpha = clamp(body * (0.35 + 0.70 * n) * vAlpha, 0.0, 1.0);
+        if (alpha < 0.004) discard;
 
-        // Map into 2x2 atlas quadrant (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)
-        vec2 quadOffset = vec2(0.0);
-        if (vAtlasIdx > 2.5) {
-          quadOffset = vec2(0.5, 0.5);
-        } else if (vAtlasIdx > 1.5) {
-          quadOffset = vec2(0.0, 0.5);
-        } else if (vAtlasIdx > 0.5) {
-          quadOffset = vec2(0.5, 0.0);
-        }
-
-        vec2 quadUv = (pRot * 0.94) + vec2(0.25, 0.25);
-        quadUv = clamp(quadUv, vec2(0.01), vec2(0.49));
-        vec2 finalUv = quadOffset + quadUv;
-
-        vec4 texColor = texture2D(uSmokeTexture, finalUv);
-        float alpha = texColor.a * feather * vAlpha * 0.68;
-        if (alpha < 0.003) discard;
-
-        // Subtle realistic color gradation (warm vapor core to cool atmospheric haze)
-        vec3 smokeColor = mix(vec3(0.96, 0.95, 0.93), vec3(0.88, 0.90, 0.93), dist * 1.4);
+        vec3 smokeColor = mix(vec3(0.84, 0.84, 0.85), vec3(0.64, 0.66, 0.70), dist);
         gl_FragColor = vec4(smokeColor, alpha);
       }
     `;
@@ -6181,108 +6239,99 @@ export class Renderer3D {
   }
 
   clearTireSmoke() {
-    this.smokeParticles = [];
+    this.smokeHead = 0;
+    if (this.smokeParticles) {
+      for (let i = 0; i < this.smokeParticles.length; i++) {
+        this.smokeParticles[i].alive = false;
+      }
+    }
     if (this.smokeMesh) this.smokeMesh.geometry.setDrawRange(0, 0);
   }
 
   addTireSmokePuff(x, y, z, carVx, carVy, intensity, extraSpread = 0, puffType = 'auto') {
-    const angle = Math.random() * Math.PI * 2;
-    const spread = (0.35 + extraSpread) * (0.8 + Math.random() * 0.5);
+    if (!this.smokeParticles || this.maxSmokeParticles === 0) return;
 
-    // Highly varied particle scales for realistic multi-frequency smoke
+    const angle = Math.random() * Math.PI * 2;
+    const spread = (0.25 + extraSpread) * (0.8 + Math.random() * 0.4);
+
+    // Highly varied particle scales for realistic multi-frequency smoke:
+    // Low intensity (start/finish) biases towards light wisps rather than heavy billows
     let baseSize, growth, decayRate;
-    const typeRoll = puffType === 'auto' ? Math.random() : (puffType === 'wisp' ? 0.1 : (puffType === 'billow' ? 0.9 : 0.5));
+    const rawRoll = Math.random();
+    const typeRoll = puffType === 'auto'
+      ? (intensity < 0.35 ? Math.min(rawRoll, 0.28) : rawRoll)
+      : (puffType === 'wisp' ? 0.1 : (puffType === 'billow' ? 0.9 : 0.5));
 
     if (typeRoll < 0.35) {
-      // 1. Fine wisps & filaments (rapid expansion, quick dissipation)
-      baseSize = 1.8 + Math.random() * 1.6;
-      growth = 2.8 + Math.random() * 3.2;
-      decayRate = 0.75 + Math.random() * 0.45; // ~0.8s to 1.2s
+      // 1. Thin wisps: gentle onset & fadeout puffs, soft dissipation
+      baseSize = 1.8 + Math.random() * 0.9;
+      growth = 2.2 + Math.random() * 0.8;
+      decayRate = 0.90 + Math.random() * 0.25;
     } else if (typeRoll < 0.80) {
-      // 2. Medium turbulent eddies
-      baseSize = 3.8 + Math.random() * 2.8;
-      growth = 4.5 + Math.random() * 4.0;
-      decayRate = 0.50 + Math.random() * 0.25; // ~1.3s to 1.8s
+      // 2. Main body: spreads naturally as it ages
+      baseSize = 2.5 + Math.random() * 1.1;
+      growth = 2.8 + Math.random() * 1.2;
+      decayRate = 0.70 + Math.random() * 0.20;
     } else {
-      // 3. Dense billowing plume core
-      baseSize = 6.5 + Math.random() * 4.0;
-      growth = 7.0 + Math.random() * 5.5;
-      decayRate = 0.40 + Math.random() * 0.18; // ~1.8s to 2.4s
+      // 3. Heavier billow
+      baseSize = 3.0 + Math.random() * 1.2;
+      growth = 3.2 + Math.random() * 1.4;
+      decayRate = 0.55 + Math.random() * 0.15;
     }
 
-    // More visible plumes without increasing the capped particle pool or lifetime.
-    baseSize *= 1.50;
-    growth *= 1.15;
     const atlasVariant = Math.floor(Math.random() * 4);
-    const alphaVal = Math.min(0.46, 0.10 + intensity * 0.36);
+    // Smooth proportional alpha scaling down to faint wisps at onset and finish
+    const alphaVal = Math.min(0.09, Math.max(0.006, intensity * 0.085));
     const px = x + (Math.random() - 0.5) * spread;
     const py = y + (Math.random() - 0.5) * spread;
-    const pz = z + Math.random() * 0.06;
-    const pvx = (carVx * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4;
-    const pvy = (carVy * (0.05 + Math.random() * 0.12)) + (Math.random() - 0.5) * 2.4;
-    const pvz = 0.4 + Math.random() * 1.4; // Natural thermal updraft
+    const pz = z + 0.6 + Math.random() * 0.3; // lifted clear of road and skid meshes so the sprite is never depth-clipped
+    // Low, sideways-drifting smoke: wake drag backwards, light shared wind, weak updraft
+    const pvx = -carVx * 0.04 + 0.5 + (Math.random() - 0.5) * 0.8;
+    const pvy = -carVy * 0.04 + 0.25 + (Math.random() - 0.5) * 0.8;
+    const pvz = 0.1 + Math.random() * 0.4;
     const pvRot = (Math.random() - 0.5) * 2.2;
 
-    // Fast zero-allocation buffer recycling when at capacity (avoids O(N) shift())
-    if (this.smokeParticles.length >= this.maxSmokeParticles) {
-      const p = this.smokeParticles[0];
-      p.x = px;
-      p.y = py;
-      p.z = pz;
-      p.vx = pvx;
-      p.vy = pvy;
-      p.vz = pvz;
-      p.size = baseSize;
-      p.growthRate = growth;
-      p.rot = angle;
-      p.vRot = pvRot;
-      p.atlasIdx = atlasVariant;
-      p.alpha = alphaVal;
-      p.life = 1.0;
-      p.decay = decayRate;
-      return;
-    }
+    // Zero-allocation circular ring buffer indexing (avoids all heap churn and GC pauses)
+    const p = this.smokeParticles[this.smokeHead];
+    this.smokeHead = (this.smokeHead + 1) % this.maxSmokeParticles;
 
-    this.smokeParticles.push({
-      x: px,
-      y: py,
-      z: pz,
-      vx: pvx,
-      vy: pvy,
-      vz: pvz,
-      size: baseSize,
-      growthRate: growth,
-      rot: angle,
-      vRot: pvRot,
-      atlasIdx: atlasVariant,
-      alpha: alphaVal,
-      life: 1.0,
-      decay: decayRate,
-    });
+    p.alive = true;
+    p.x = px;
+    p.y = py;
+    p.z = pz;
+    p.vx = pvx;
+    p.vy = pvy;
+    p.vz = pvz;
+    p.size = baseSize;
+    p.growthRate = growth;
+    p.rot = angle;
+    p.vRot = pvRot;
+    p.atlasIdx = atlasVariant;
+    p.alpha = alphaVal;
+    p.life = 1.0;
+    p.decay = decayRate;
   }
 
   updateTireSmoke() {
-    if (!this.smokeParticles || this.smokeParticles.length === 0) {
+    if (!this.smokeParticles || this.maxSmokeParticles === 0) {
       if (this.smokeMesh) this.smokeMesh.geometry.setDrawRange(0, 0);
       return;
     }
 
     const dt = 1 / 60;
     let writeIdx = 0;
-    let aliveCount = 0;
     const particles = this.smokeParticles;
-    const total = particles.length;
+    const total = this.maxSmokeParticles;
 
-    // Single-pass forward in-place compaction: eliminates splice() heap churn and GC spikes completely
     for (let i = 0; i < total; i++) {
       const p = particles[i];
+      if (!p.alive) continue;
+
       p.life -= p.decay * dt;
       if (p.life <= 0) {
+        p.alive = false;
         continue;
       }
-
-      particles[aliveCount] = p;
-      aliveCount++;
 
       // Physics: chaotic drag deceleration, aerodynamic draft, and thermal rise
       p.x += p.vx * dt;
@@ -6300,31 +6349,44 @@ export class Renderer3D {
       this.smokePosArr[idx + 2] = p.z;
 
       this.smokeSizeArr[writeIdx] = p.size;
-      // Exponential fade tail creates an organic wisp dissipation
-      this.smokeAlphaArr[writeIdx] = p.alpha * Math.pow(p.life, 1.6);
-
-      const rIdx = writeIdx * 2;
-      this.smokeCosSinArr[rIdx] = Math.cos(p.rot);
-      this.smokeCosSinArr[rIdx + 1] = Math.sin(p.rot);
-
+      const lf = Math.max(0, p.life);
+      // Gentle fade in as puff lifts away, followed by smooth cubic ease-out
+      const fadeIn = Math.min(1.0, (1 - lf) * 4.5);
+      const fadeOut = lf * lf * (3.0 - 2.0 * lf);
+      this.smokeAlphaArr[writeIdx] = p.alpha * fadeOut * fadeIn;
+      this.smokeRotArr[writeIdx] = p.rot;
       this.smokeAtlasIdxArr[writeIdx] = p.atlasIdx;
 
       writeIdx++;
     }
 
-    // Direct length truncation is O(1) in V8
-    particles.length = aliveCount;
+    if (this.smokeMesh) {
+      if (writeIdx > 0) {
+        const geo = this.smokeMesh.geometry;
+        const posAttr = geo.attributes.position;
+        const sizeAttr = geo.attributes.size;
+        const alphaAttr = geo.attributes.alpha;
+        const rotAttr = geo.attributes.rot;
+        const atlasAttr = geo.attributes.atlasIdx;
 
-    this.smokeMesh.geometry.attributes.position.needsUpdate = true;
-    this.smokeMesh.geometry.attributes.size.needsUpdate = true;
-    this.smokeMesh.geometry.attributes.alpha.needsUpdate = true;
-    this.smokeMesh.geometry.attributes.cosSin.needsUpdate = true;
-    this.smokeMesh.geometry.attributes.atlasIdx.needsUpdate = true;
-    this.smokeMesh.geometry.setDrawRange(0, writeIdx);
+        posAttr.addUpdateRange(0, writeIdx * 3);
+        sizeAttr.addUpdateRange(0, writeIdx);
+        alphaAttr.addUpdateRange(0, writeIdx);
+        rotAttr.addUpdateRange(0, writeIdx);
+        atlasAttr.addUpdateRange(0, writeIdx);
+
+        posAttr.needsUpdate = true;
+        sizeAttr.needsUpdate = true;
+        alphaAttr.needsUpdate = true;
+        rotAttr.needsUpdate = true;
+        atlasAttr.needsUpdate = true;
+      }
+      this.smokeMesh.geometry.setDrawRange(0, writeIdx);
+    }
   }
 
   setupSkidmarks() {
-    this.maxSkidQuads = 128000; // 128k persistent quads: permanent skid marks throughout the entire race across all laps
+    this.maxSkidQuads = 48000; // 128k persistent quads: permanent skid marks throughout the entire race across all laps
     const maxVerts = this.maxSkidQuads * 4;
     const maxIndices = this.maxSkidQuads * 6;
 
@@ -6381,8 +6443,7 @@ export class Renderer3D {
         float edge = smoothstep(0.0, 0.20, vUv.x) * smoothstep(1.0, 0.80, vUv.x);
         float lateral = 0.50 + 0.50 * edge;
         // Subtle, natural rubber that builds up naturally and remains clearly visible across all lighting
-        float alpha = clamp(vAlpha * lateral, 0.0, 0.60);
-        if (alpha < 0.005) discard;
+        float alpha = clamp(vAlpha * lateral, 0.0, 0.70);
         gl_FragColor = vec4(rubber, alpha);
       }
     `;
@@ -6397,13 +6458,13 @@ export class Renderer3D {
       forceSinglePass: true, // Flat ribbons need both sides, but not two transparency passes.
       blending: THREE.NormalBlending,
       polygonOffset: true,
-      polygonOffsetFactor: -6.0,
-      polygonOffsetUnits: -6.0,
+      polygonOffsetFactor: -1.0,
+      polygonOffsetUnits: -1.0,
     });
 
     this.skidMesh = new THREE.Mesh(geo, mat);
     this.skidMesh.frustumCulled = false;
-    this.skidMesh.renderOrder = 350;
+    this.skidMesh.renderOrder = 20; // Road rubber: after track decor (1..16), strictly BEFORE cars (100)
     this.scene.add(this.skidMesh);
 
     this.skidHead = 0;
@@ -6418,11 +6479,11 @@ export class Renderer3D {
     if (this.skidMesh) this.skidMesh.geometry.setDrawRange(0, 0);
   }
 
-  addSkidQuad(v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y, alpha0, alpha1) {
+  addSkidQuad(v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y, alpha0, alpha1, elevZ = null) {
     const quadIdx = this.skidHead;
     const vOffset = quadIdx * 4;
-    // Elevated safely above asphalt slab (0.05) and white lines (0.12) to stay clearly visible
-    const z = 0.16;
+    // Rubber rests cleanly on the road surface (asphalt at 0.12, markings at 0.14) below cars (renderOrder 100)
+    const z = typeof elevZ === 'number' ? elevZ : 0.142;
 
     // v0 (prev outer edge)
     this.skidPosArr[vOffset * 3] = v0x;
@@ -6455,9 +6516,19 @@ export class Renderer3D {
 
   updateSkidmarks(sim) {
     if (!sim || !sim.cars) return;
-    const candidateCars = sim.player && sim.player.alive ? [sim.player, ...sim.cars] : sim.cars;
+    if (!this._candidateCars) this._candidateCars = [];
+    this._candidateCars.length = 0;
+    if (sim.player && sim.player.alive) this._candidateCars.push(sim.player);
+    if (sim.cars) {
+      for (let cIdx = 0; cIdx < sim.cars.length; cIdx++) this._candidateCars.push(sim.cars[cIdx]);
+    }
+    const candidateCars = this._candidateCars;
+    const camX = this.camera?.position?.x || 0;
+    const camY = this.camera?.position?.y || 0;
     let added = false;
-    const SKID_THRESH = 0.12; // Clean grip driving leaves ZERO marks; only dynamic loss of grip triggers
+        const SKID_THRESH = 0.12; // Clean grip driving leaves ZERO marks; only dynamic loss of grip triggers
+    const SMOKE_THRESH = 0.32; // Skid marks start at 0.12; smoke needs a clearly harder slide (heavy braking, wheelspin, real slip)
+    const SMOKE_SPACING = 1.1; // world units between puffs: small enough that puffs overlap into one smooth plume
     const startHead = this.skidHead;
     this._frameSkidQuadsAdded = 0;
 
@@ -6501,8 +6572,13 @@ export class Renderer3D {
 
       // Rear tires mark on oversteer slides, standing-start wheelspin, and heavy brake lockups:
       const targetRearInt = Math.min(1.0, Math.max(oversteerInt, launchSpinInt * 0.95, brakeLockInt * 0.85));
-      // Front tires mark on understeer scrub and brake lockups:
-      const targetFrontInt = Math.min(1.0, Math.max(understeerInt, brakeLockInt));
+      // Front tires mark only on severe brake lockups, crashes, or extreme understeer slides (never during normal steering):
+      const isSevereFrontLock = brakeLockInt > 0.40 && car.speed > 20;
+      const isSevereUndersteer = understeerInt > 0.65 && car.speed > 70;
+      const isFrontCrash = car.crashed && car.speed > 10;
+      const targetFrontInt = (isSevereFrontLock || isSevereUndersteer || isFrontCrash)
+        ? Math.min(1.0, Math.max(understeerInt * 0.8, brakeLockInt))
+        : 0.0;
 
       let track = this.carPrevTires.get(car);
       if (!track) {
@@ -6512,6 +6588,7 @@ export class Renderer3D {
           rl0x: 0, rl0y: 0, rl1x: 0, rl1y: 0,
           rr0x: 0, rr0y: 0, rr1x: 0, rr1y: 0,
           smoothRearInt: 0,
+          smoothRearSmoke: 0,
           prevRearAlpha: 0,
           rearActive: false,
           oversteerSmokeDist: 0,
@@ -6520,6 +6597,7 @@ export class Renderer3D {
           fl0x: 0, fl0y: 0, fl1x: 0, fl1y: 0,
           fr0x: 0, fr0y: 0, fr1x: 0, fr1y: 0,
           smoothFrontInt: 0,
+          smoothFrontSmoke: 0,
           prevFrontAlpha: 0,
           frontActive: false,
           understeerSmokeDist: 0,
@@ -6527,14 +6605,6 @@ export class Renderer3D {
         };
         this.carPrevTires.set(car, track);
       }
-
-      // Steering demand and brake input can saturate even with good grip. Smoke
-      // requires sustained, substantial sideways travel, not a saturated score.
-      const hardSkid = car.speed >= 80 && slipMag >= 0.22 &&
-        Math.abs(car.speed * Math.sin(slipMag)) >= 25;
-      if (!hardSkid) track.hardSkidSince = null;
-      else if (track.hardSkidSince == null || car.time < track.hardSkidSince) track.hardSkidSince = car.time;
-      const emitSkidSmoke = hardSkid && car.time - track.hardSkidSince >= 0.08;
 
       // Smooth attack/decay with fast recovery when grip is restored
       const prevRInt = track.smoothRearInt || 0;
@@ -6547,20 +6617,65 @@ export class Renderer3D {
       const curFrontInt = prevFInt + (targetFrontInt - prevFInt) * fRate;
       track.smoothFrontInt = curFrontInt;
 
+      // Loss of traction smoke conditions (launch wheelspin, brake lockup, drift, crash):
+      const lateralSpeed = Math.abs(car.speed * Math.sin(slipMag));
+      const isDriftSlide = (car.speed >= 25 && slipMag >= 0.08) || lateralSpeed >= 4;
+      const isLaunchSpin = launchSpinInt > 0.18;
+      const isRearBrakeLock = brakeLockInt > 0.22 && car.speed > 18;
+      const isCrashRear = car.crashed && car.speed > 8;
+
+      // Smooth cubic onset and trailing decay for natural, non-binary smoke plumes
+      const SMOKE_ONSET = 0.28;
+      const SMOKE_FULL = 0.72;
+      const smokeAttack = 0.24; // gentle bloom over ~5-7 frames
+      const smokeDecay = 0.14;  // soft tapering dissipation over ~8-12 frames
+
+      let targetSmokeRear = 0;
+      if (curRearInt > SMOKE_ONSET) {
+        const u = Math.min(1.0, (curRearInt - SMOKE_ONSET) / (SMOKE_FULL - SMOKE_ONSET));
+        targetSmokeRear = u * u * (3.0 - 2.0 * u);
+      }
+      const prevRearSmoke = track.smoothRearSmoke || 0;
+      const rSRate = targetSmokeRear > prevRearSmoke ? smokeAttack : smokeDecay;
+      const curRearSmoke = prevRearSmoke + (targetSmokeRear - prevRearSmoke) * rSRate;
+      track.smoothRearSmoke = curRearSmoke;
+      const emitRearSmoke = curRearSmoke > 0.015;
+
+      const isFrontBrakeLock = brakeLockInt > 0.22 && car.speed > 18;
+      const isCrashFront = car.crashed && car.speed > 8;
+      const isUndersteerScrub = understeerInt > 0.25 && car.speed > 35;
+
+      let targetSmokeFront = 0;
+      if (curFrontInt > SMOKE_ONSET) {
+        const u = Math.min(1.0, (curFrontInt - SMOKE_ONSET) / (SMOKE_FULL - SMOKE_ONSET));
+        targetSmokeFront = u * u * (3.0 - 2.0 * u);
+      }
+      const prevFrontSmoke = track.smoothFrontSmoke || 0;
+      const fSRate = targetSmokeFront > prevFrontSmoke ? smokeAttack : smokeDecay;
+      const curFrontSmoke = prevFrontSmoke + (targetSmokeFront - prevFrontSmoke) * fSRate;
+      track.smoothFrontSmoke = curFrontSmoke;
+      const emitFrontSmoke = curFrontSmoke > 0.015;
+
       const cos = Math.cos(car.angle);
       const sin = Math.sin(car.angle);
 
-      // Rear axle contact points (aligned with 3D F1 rear axle)
-      const rlx = car.x - cos * 5.6 + sin * 4.6;
-      const rly = -car.y + sin * 5.6 + cos * 4.6;
-      const rrx = car.x - cos * 5.6 - sin * 4.6;
-      const rry = -car.y + sin * 5.6 - cos * 4.6;
+      // Tire ground elevation: stays flush with track and conforms to terrain when off-track
+      const carElev = (car.crashed && car.alive) ? this.getExactMeshHeight(car.x, -car.y) : 0;
+      const skidZ = Math.max(0.142, carElev + 0.022);
 
-      // Front axle contact points (aligned with 3D F1 front steering wheels)
-      const flx = car.x + cos * 8.6 + sin * 4.6;
-      const fly = -car.y - sin * 8.6 + cos * 4.6;
-      const frx = car.x + cos * 8.6 - sin * 4.6;
-      const fry = -car.y - sin * 8.6 - cos * 4.6;
+      // Rear axle contact points: calibrated to the 3D F1 rear wheels (-9.8 along body)
+      const rearAxleDist = 9.8;
+      const rlx = car.x - cos * rearAxleDist + sin * 4.6;
+      const rly = -car.y + sin * rearAxleDist + cos * 4.6;
+      const rrx = car.x - cos * rearAxleDist - sin * 4.6;
+      const rry = -car.y + sin * rearAxleDist - cos * 4.6;
+
+      // Front axle contact points: calibrated to the 3D F1 front steering wheels (+5.8 along body)
+      const frontAxleDist = 5.8;
+      const flx = car.x + cos * frontAxleDist + sin * 4.6;
+      const fly = -car.y - sin * frontAxleDist + cos * 4.6;
+      const frx = car.x + cos * frontAxleDist - sin * 4.6;
+      const fry = -car.y - sin * frontAxleDist - cos * 4.6;
 
       const hw = 1.05; // ~2.1m contact width per tire
       const nx = sin * hw;
@@ -6576,18 +6691,21 @@ export class Renderer3D {
       const curFr0x = frx - nx, curFr0y = fry - ny;
       const curFr1x = frx + nx, curFr1y = fry + ny;
 
-      // Subtle, translucent rubber alpha (gentle deposit that naturally accumulates without turning harsh or opaque)
+      // Noticeable, permanent rubber alpha that creates authentic dark graphite tracks
       const isRearMarking = curRearInt > SKID_THRESH;
-      const curRearAlpha = isRearMarking ? (0.08 + curRearInt * 0.22) : 0.0;
+      const curRearAlpha = isRearMarking ? (0.22 + curRearInt * 0.45) : 0.0;
 
       const isFrontMarking = curFrontInt > SKID_THRESH;
-      const curFrontAlpha = isFrontMarking ? (0.06 + curFrontInt * 0.18) : 0.0;
+      const curFrontAlpha = isFrontMarking ? (0.18 + curFrontInt * 0.40) : 0.0;
 
       if (track.initialized) {
+        const distToCam = Math.hypot(car.x - camX, -car.y - camY);
+        const nearCam = distToCam < 380 || car === sim.leader || car === sim.player;
+
         // --- 1. REAR TIRES (Oversteer, Wheelspin, Brake Locks, Crash) ---
-        if (isRearMarking || track.rearActive) {
-          const dLR = Math.hypot(rlx - track.rlx, rly - track.rly);
-          const minStepR = (Math.abs(car.steer || 0) > 0.35 || oversteerInt > 0.4) ? 1.6 : 2.8;
+        const dLR = Math.hypot(rlx - track.rlx, rly - track.rly);
+        if (nearCam && (isRearMarking || track.rearActive)) {
+          const minStepR = 0.30;
           if (dLR > minStepR && dLR < 45) {
             const pRl0x = track.rearActive ? track.rl0x : (track.rlx - nx);
             const pRl0y = track.rearActive ? track.rl0y : (track.rly - ny);
@@ -6602,54 +6720,74 @@ export class Renderer3D {
             const alpha0 = track.rearActive ? track.prevRearAlpha : (curRearAlpha * 0.35);
             const alpha1 = isRearMarking ? curRearAlpha : 0.0;
 
-            this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1);
-            this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1);
-
-            // Dense smoke only during a sustained heavy sideways skid.
-            const rearSmokeInt = targetRearInt;
-            if (emitSkidSmoke && rearSmokeInt > SKID_THRESH) {
-              const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-              if (camDist < 500) {
-                track.oversteerSmokeDist = (track.oversteerSmokeDist || 0) + dLR;
-                const smokeThresh = track.oversteerNextPuff || 0.90;
-                if (track.oversteerSmokeDist >= smokeThresh) {
-                  track.oversteerSmokeDist = 0;
-                  track.oversteerNextPuff = 0.70 + Math.random() * 0.80;
-                  const carVx = car.vx || 0;
-                  const carVy = -(car.vy || 0);
-
-                  // Staggered asymmetrical emission:
-                  if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(rlx, rly, 0.18, carVx, carVy, rearSmokeInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
-                  }
-                  if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(rrx, rry, 0.18, carVx, carVy, rearSmokeInt, 0.4, Math.random() < 0.3 ? 'wisp' : 'auto');
-                  }
-                  if (rearSmokeInt > 0.45 && Math.random() < 0.70) {
-                    const rcx = (rlx + rrx) * 0.5 + (Math.random() - 0.5) * 1.2;
-                    const rcy = (rly + rry) * 0.5 + (Math.random() - 0.5) * 1.2;
-                    this.addTireSmokePuff(rcx, rcy, 0.22, carVx, carVy, rearSmokeInt, 0.9, 'billow');
-                  }
-                }
-              }
-            } else {
-              track.oversteerSmokeDist = 0;
-            }
+            this.addSkidQuad(pRl0x, pRl0y, pRl1x, pRl1y, curRl0x, curRl0y, curRl1x, curRl1y, alpha0, alpha1, skidZ);
+            this.addSkidQuad(pRr0x, pRr0y, pRr1x, pRr1y, curRr0x, curRr0y, curRr1x, curRr1y, alpha0, alpha1, skidZ);
 
             track.prevRearAlpha = isRearMarking ? curRearAlpha : 0.0;
             track.rearActive = isRearMarking;
+            track.rlx = rlx; track.rly = rly;
+            track.rrx = rrx; track.rry = rry;
+            track.rl0x = curRl0x; track.rl0y = curRl0y;
+            track.rl1x = curRl1x; track.rl1y = curRl1y;
+            track.rr0x = curRr0x; track.rr0y = curRr0y;
+            track.rr1x = curRr1x; track.rr1y = curRr1y;
             added = true;
+          } else if (dLR >= 45) {
+            track.rlx = rlx; track.rly = rly;
+            track.rrx = rrx; track.rry = rry;
+            track.rl0x = curRl0x; track.rl0y = curRl0y;
+            track.rl1x = curRl1x; track.rl1y = curRl1y;
+            track.rr0x = curRr0x; track.rr0y = curRr0y;
+            track.rr1x = curRr1x; track.rr1y = curRr1y;
+            track.rearActive = false;
+            track.prevRearAlpha = 0;
           }
+          // Note: when dLR <= minStepR, do NOT advance track.rlx; let it accumulate across frames
         } else {
           track.rearActive = false;
           track.prevRearAlpha = 0;
-          track.oversteerSmokeDist = 0;
+          track.rlx = rlx; track.rly = rly;
+          track.rrx = rrx; track.rry = rry;
+          track.rl0x = curRl0x; track.rl0y = curRl0y;
+          track.rl1x = curRl1x; track.rl1y = curRl1y;
+          track.rr0x = curRr0x; track.rr0y = curRr0y;
+          track.rr1x = curRr1x; track.rr1y = curRr1y;
+        }
+
+        // --- REAR TIRE SMOKE (continuous plume: overlapping puffs laid along each skidding tire's path) ---
+        if (nearCam && emitRearSmoke) {
+          const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+          if (camDist < 300) {
+            const eLx = car.x - cos * 10.6 + sin * 4.6, eLy = -car.y + sin * 10.6 + cos * 4.6;
+            const eRx = car.x - cos * 10.6 - sin * 4.6, eRy = -car.y + sin * 10.6 - cos * 4.6;
+            const hasPrev = track.smokeRValid === true;
+            const pLx = hasPrev ? track.smokeELx : eLx, pLy = hasPrev ? track.smokeELy : eLy;
+            const pRx = hasPrev ? track.smokeERx : eRx, pRy = hasPrev ? track.smokeERy : eRy;
+            const dSmokeR = Math.hypot(eLx - pLx, eLy - pLy);
+            let acc = (track.smokeRAcc || 0) + (isLaunchSpin ? Math.max(dSmokeR, 0.9) : dSmokeR);
+            const n = hasPrev ? Math.min(8, Math.floor(acc / SMOKE_SPACING)) : 1;
+            acc = hasPrev ? Math.min(acc - n * SMOKE_SPACING, SMOKE_SPACING) : 0;
+            track.smokeRAcc = acc;
+            const carVx = car.vx || 0;
+            const carVy = -(car.vy || 0);
+            for (let k = 1; k <= n; k++) {
+              const t = k / n;
+              this.addTireSmokePuff(pLx + (eLx - pLx) * t, pLy + (eLy - pLy) * t, 0.18, carVx, carVy, curRearSmoke, 0.1, 'auto');
+              this.addTireSmokePuff(pRx + (eRx - pRx) * t, pRy + (eRy - pRy) * t, 0.18, carVx, carVy, curRearSmoke, 0.1, 'auto');
+            }
+            track.smokeELx = eLx; track.smokeELy = eLy;
+            track.smokeERx = eRx; track.smokeERy = eRy;
+            track.smokeRValid = true;
+          }
+        } else {
+          track.smokeRValid = false;
+          track.smokeRAcc = 0;
         }
 
         // --- 2. FRONT TIRES (Understeer, Brake Locks, Crash) ---
-        if (isFrontMarking || track.frontActive) {
-          const dLF = Math.hypot(flx - track.flx, fly - track.fly);
-          const minStepF = (Math.abs(car.steer || 0) > 0.35 || understeerInt > 0.4) ? 1.6 : 2.8;
+        const dLF = Math.hypot(flx - track.flx, fly - track.fly);
+        if (nearCam && (isFrontMarking || track.frontActive)) {
+          const minStepF = 0.30;
           if (dLF > minStepF && dLF < 45) {
             const pFl0x = track.frontActive ? track.fl0x : (track.flx - nx);
             const pFl0y = track.frontActive ? track.fl0y : (track.fly - ny);
@@ -6664,46 +6802,68 @@ export class Renderer3D {
             const alpha0 = track.frontActive ? track.prevFrontAlpha : (curFrontAlpha * 0.35);
             const alpha1 = isFrontMarking ? curFrontAlpha : 0.0;
 
-            this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1);
-            this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1);
-
-            // Steering/braking demand alone must not produce front smoke.
-            const frontSmokeInt = targetFrontInt;
-            if (emitSkidSmoke && frontSmokeInt > SKID_THRESH) {
-              const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
-              if (camDist < 500) {
-                track.understeerSmokeDist = (track.understeerSmokeDist || 0) + dLF;
-                const smokeThresh = track.understeerNextPuff || 0.90;
-                if (track.understeerSmokeDist >= smokeThresh) {
-                  track.understeerSmokeDist = 0;
-                  track.understeerNextPuff = 0.70 + Math.random() * 0.80;
-                  const carVx = car.vx || 0;
-                  const carVy = -(car.vy || 0);
-                  if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(flx, fly, 0.18, carVx, carVy, frontSmokeInt, 0.3, 'auto');
-                  }
-                  if (Math.random() < 0.85) {
-                    this.addTireSmokePuff(frx, fry, 0.18, carVx, carVy, frontSmokeInt, 0.3, 'auto');
-                  }
-                  if (frontSmokeInt > 0.45 && Math.random() < 0.60) {
-                    const fcx = (flx + frx) * 0.5 + (Math.random() - 0.5) * 1.0;
-                    const fcy = (fly + fry) * 0.5 + (Math.random() - 0.5) * 1.0;
-                    this.addTireSmokePuff(fcx, fcy, 0.20, carVx, carVy, frontSmokeInt, 0.8, 'wisp');
-                  }
-                }
-              }
-            } else {
-              track.understeerSmokeDist = 0;
-            }
+            this.addSkidQuad(pFl0x, pFl0y, pFl1x, pFl1y, curFl0x, curFl0y, curFl1x, curFl1y, alpha0, alpha1, skidZ);
+            this.addSkidQuad(pFr0x, pFr0y, pFr1x, pFr1y, curFr0x, curFr0y, curFr1x, curFr1y, alpha0, alpha1, skidZ);
 
             track.prevFrontAlpha = isFrontMarking ? curFrontAlpha : 0.0;
             track.frontActive = isFrontMarking;
+            track.flx = flx; track.fly = fly;
+            track.frx = frx; track.fry = fry;
+            track.fl0x = curFl0x; track.fl0y = curFl0y;
+            track.fl1x = curFl1x; track.fl1y = curFl1y;
+            track.fr0x = curFr0x; track.fr0y = curFr0y;
+            track.fr1x = curFr1x; track.fr1y = curFr1y;
             added = true;
+          } else if (dLF >= 45) {
+            track.flx = flx; track.fly = fly;
+            track.frx = frx; track.fry = fry;
+            track.fl0x = curFl0x; track.fl0y = curFl0y;
+            track.fl1x = curFl1x; track.fl1y = curFl1y;
+            track.fr0x = curFr0x; track.fr0y = curFr0y;
+            track.fr1x = curFr1x; track.fr1y = curFr1y;
+            track.frontActive = false;
+            track.prevFrontAlpha = 0;
           }
+          // Note: when dLF <= minStepF, do NOT advance track.flx; let it accumulate across frames
         } else {
           track.frontActive = false;
           track.prevFrontAlpha = 0;
-          track.understeerSmokeDist = 0;
+          track.flx = flx; track.fly = fly;
+          track.frx = frx; track.fry = fry;
+          track.fl0x = curFl0x; track.fl0y = curFl0y;
+          track.fl1x = curFl1x; track.fl1y = curFl1y;
+          track.fr0x = curFr0x; track.fr0y = curFr0y;
+          track.fr1x = curFr1x; track.fr1y = curFr1y;
+        }
+
+        // --- FRONT TIRE SMOKE (continuous plume, always starting behind the front contact patch) ---
+        if (nearCam && emitFrontSmoke) {
+          const camDist = Math.hypot(car.x - this.camera.position.x, -car.y - this.camera.position.y);
+          if (camDist < 300) {
+            const eLx = car.x + cos * 4.6 + sin * 4.6, eLy = -car.y - sin * 4.6 + cos * 4.6;
+            const eRx = car.x + cos * 4.6 - sin * 4.6, eRy = -car.y - sin * 4.6 - cos * 4.6;
+            const hasPrev = track.smokeFValid === true;
+            const pLx = hasPrev ? track.smokeFELx : eLx, pLy = hasPrev ? track.smokeFELy : eLy;
+            const pRx = hasPrev ? track.smokeFERx : eRx, pRy = hasPrev ? track.smokeFERy : eRy;
+            const dSmokeF = Math.hypot(eLx - pLx, eLy - pLy);
+            let acc = (track.smokeFAcc || 0) + dSmokeF;
+            const n = hasPrev ? Math.min(8, Math.floor(acc / SMOKE_SPACING)) : 1;
+            acc = hasPrev ? Math.min(acc - n * SMOKE_SPACING, SMOKE_SPACING) : 0;
+            track.smokeFAcc = acc;
+            const carVx = car.vx || 0;
+            const carVy = -(car.vy || 0);
+            for (let k = 1; k <= n; k++) {
+              const t = k / n;
+              this.addTireSmokePuff(pLx + (eLx - pLx) * t, pLy + (eLy - pLy) * t, 0.16, carVx, carVy, curFrontSmoke, 0.1, 'auto');
+              this.addTireSmokePuff(pRx + (eRx - pRx) * t, pRy + (eRy - pRy) * t, 0.16, carVx, carVy, curFrontSmoke, 0.1, 'auto');
+            }
+            track.smokeFELx = eLx; track.smokeFELy = eLy;
+            track.smokeFERx = eRx; track.smokeFERy = eRy;
+            track.smokeFValid = true;
+          }
+        } else {
+          track.smokeFValid = false;
+          track.smokeFAcc = 0;
         }
       } else {
         track.rearActive = false;
@@ -6712,23 +6872,20 @@ export class Renderer3D {
         track.frontActive = false;
         track.prevFrontAlpha = 0;
         track.understeerSmokeDist = 0;
+        track.rlx = rlx; track.rly = rly;
+        track.rrx = rrx; track.rry = rry;
+        track.rl0x = curRl0x; track.rl0y = curRl0y;
+        track.rl1x = curRl1x; track.rl1y = curRl1y;
+        track.rr0x = curRr0x; track.rr0y = curRr0y;
+        track.rr1x = curRr1x; track.rr1y = curRr1y;
+        track.flx = flx; track.fly = fly;
+        track.frx = frx; track.fry = fry;
+        track.fl0x = curFl0x; track.fl0y = curFl0y;
+        track.fl1x = curFl1x; track.fl1y = curFl1y;
+        track.fr0x = curFr0x; track.fr0y = curFr0y;
+        track.fr1x = curFr1x; track.fr1y = curFr1y;
+        track.initialized = true;
       }
-
-      // Maintain persistent tracking across frames
-      track.rlx = rlx; track.rly = rly;
-      track.rrx = rrx; track.rry = rry;
-      track.rl0x = curRl0x; track.rl0y = curRl0y;
-      track.rl1x = curRl1x; track.rl1y = curRl1y;
-      track.rr0x = curRr0x; track.rr0y = curRr0y;
-      track.rr1x = curRr1x; track.rr1y = curRr1y;
-
-      track.flx = flx; track.fly = fly;
-      track.frx = frx; track.fry = fry;
-      track.fl0x = curFl0x; track.fl0y = curFl0y;
-      track.fl1x = curFl1x; track.fl1y = curFl1y;
-      track.fr0x = curFr0x; track.fr0y = curFr0y;
-      track.fr1x = curFr1x; track.fr1y = curFr1y;
-      track.initialized = true;
     }
 
     if (added && this.skidMesh) {
@@ -6900,22 +7057,54 @@ export class Renderer3D {
     }
 
     // 2. CORE REQUIREMENT: Camera ALWAYS focuses on P1 (Race Leader), keeping P2 in the viewport!
-    // P1 is the race leader from sim.leader or rankedCars[0]
-    let p1 = null;
+    let rawLeader = null;
     if (sim && sim.leader && (sim.leader.alive || sim.leader.finished) && !sim.leader.crashed) {
-      p1 = sim.leader;
+      rawLeader = sim.leader;
     }
-    if (!p1 && rankedCars && rankedCars.length > 0) {
+    if (!rawLeader && rankedCars && rankedCars.length > 0) {
       for (let i = 0; i < rankedCars.length; i++) {
         const c = rankedCars[i];
         if (c && (c.alive || c.finished) && !c.crashed) {
-          p1 = c;
+          rawLeader = c;
           break;
         }
       }
     }
-    if (!p1) {
-      p1 = focusCar || (sim?.cars && sim.cars[0]) || pool[0] || null;
+    if (!rawLeader) {
+      rawLeader = focusCar || (sim?.cars && sim.cars[0]) || pool[0] || null;
+    }
+
+    // Leader Hysteresis / Anti-Jitter:
+    // When 2 or more cars race side-by-side in corners, raw leader swaps every frame due to
+    // inner/outer radius curvature. Keep the existing leader focus until an overtake is decisive.
+    let p1 = rawLeader;
+    const prevLeader = this._leadFocusCar;
+    const now = performance.now();
+    if (prevLeader && prevLeader !== rawLeader && (prevLeader.alive || prevLeader.finished) && !prevLeader.crashed) {
+      const prevLaps = prevLeader.laps || 0;
+      const rawLaps = rawLeader.laps || 0;
+      const prevIdx = prevLeader.idx || 0;
+      const rawIdx = rawLeader.idx || 0;
+      const totalDiff = (rawLaps - prevLaps) * (sim.track?.N || 400) + (rawIdx - prevIdx);
+
+      if (totalDiff < 2.5) {
+        if (!this._leadSwitchCandidate || this._leadSwitchCandidate !== rawLeader) {
+          this._leadSwitchCandidate = rawLeader;
+          this._leadSwitchStart = now;
+        }
+        if (now - this._leadSwitchStart < 600) {
+          p1 = prevLeader;
+        } else {
+          this._leadFocusCar = rawLeader;
+          this._leadSwitchCandidate = null;
+        }
+      } else {
+        this._leadFocusCar = rawLeader;
+        this._leadSwitchCandidate = null;
+      }
+    } else {
+      this._leadFocusCar = rawLeader;
+      this._leadSwitchCandidate = null;
     }
 
     // P2 is the 2nd place car / closest active competitor behind P1
@@ -6970,6 +7159,9 @@ export class Renderer3D {
       const p1Start = (sim && sim.leader) || (sim?.cars && sim.cars[0]) || null;
       this._currentActionPair = p1Start ? { carA: p1Start, carB: null } : null;
       this.focusedCar = p1Start;
+      this._leadFocusCar = p1Start;
+      this._leadSwitchCandidate = null;
+      this._smoothP1P2Dist = null;
     }
     if (sim) this.lastSimTime = sim.time;
     this.updateGantryLights(sim);
@@ -7237,6 +7429,24 @@ export class Renderer3D {
     const p1 = getRenderPose(this.focusedCar, opts.renderAlpha);
     const p2 = getRenderPose(actionPair.carB, opts.renderAlpha);
 
+    // Onboard: the view sits on the chassis and looks far ahead, so small tick-to-tick
+    // yaw noise from steering becomes visible shake while turning. Smooth the displayed
+    // yaw once and share it between the car mesh and the camera so the mount stays rigid.
+    if (cameraPreset === 'onboard' && p1 && p1 !== this.focusedCar) {
+      const yaw = this._onboardYaw;
+      if (isNewStart || !yaw || yaw.car !== this.focusedCar) {
+        this._onboardYaw = { car: this.focusedCar, angle: p1.angle };
+      } else {
+        if (cameraDt >= 0.002) {
+          const err = Math.atan2(Math.sin(p1.angle - yaw.angle), Math.cos(p1.angle - yaw.angle));
+          yaw.angle += err * cameraBlend(0.30);
+        }
+        p1.angle = yaw.angle;
+      }
+    } else {
+      this._onboardYaw = null;
+    }
+
     const p1X = p1 ? p1.x : 0;
     const p1Y = p1 ? -p1.y : 0;
     const p1Angle = p1 ? -p1.angle : 0;
@@ -7267,7 +7477,13 @@ export class Renderer3D {
     const p2X = p2Alive ? p2.x : (p1X - Math.cos(p1Angle) * 22.0);
     const p2Y = p2Alive ? -p2.y : (p1Y - Math.sin(p1Angle) * 22.0);
 
-    const p1p2Dist = p2Alive ? Math.hypot(p1X - p2X, p1Y - p2Y) : 22.0;
+    const rawP1P2Dist = p2Alive ? Math.hypot(p1X - p2X, p1Y - p2Y) : 22.0;
+    if (typeof this._smoothP1P2Dist !== 'number' || isNewStart) {
+      this._smoothP1P2Dist = rawP1P2Dist;
+    } else {
+      this._smoothP1P2Dist += (rawP1P2Dist - this._smoothP1P2Dist) * cameraBlend(0.06);
+    }
+    const p1p2Dist = this._smoothP1P2Dist;
 
     // Terrain elevation at P1 and battle midpoint (active on-track cars are flat at Z=0)
     const p1Elev = (p1 && !p1.crashed && p1.alive) ? 0 : this.getExactMeshHeight(p1X, p1Y);
@@ -7412,7 +7628,12 @@ export class Renderer3D {
       const targetCar = p1;
       const cosA = Math.cos(targetCar.angle);
       const sinA = Math.sin(targetCar.angle);
-      const targetElev = p1Elev;
+      const focusedMesh = (sim?.player && this.focusedCar === sim.player)
+        ? this.playerCar
+        : (sim?.cars ? this.carPool[sim.cars.indexOf(this.focusedCar)] : null);
+      const targetElev = (focusedMesh && typeof focusedMesh.userData?.curZ === 'number')
+        ? focusedMesh.userData.curZ
+        : p1Elev;
 
       destCamX = targetCar.x - cosA * 2.0;
       destCamY = -targetCar.y + sinA * 2.0;
@@ -7767,6 +7988,7 @@ export class Renderer3D {
         this._camTransition.active = false;
       }
     } else if (isOrbitActive) {
+      if (this.controls) this.controls.enabled = true;
       // In steady-state orbit mode, OrbitControls auto-rotates around target ONLY if follow is OFF
       this.controls.autoRotate = !opts.follow;
       this.controls.autoRotateSpeed = 0.55;
@@ -7779,7 +8001,11 @@ export class Renderer3D {
         this.camera.updateProjectionMatrix();
       }
     } else if (isOnboardActive) {
-      this.controls.autoRotate = false;
+      if (this.controls) {
+        this.controls.enabled = false;
+        this.controls.autoRotate = false;
+      }
+      this.camera.up.set(0, 0, 1);
       this.camera.position.set(destCamX, destCamY, destCamZ);
       this.controls.target.set(destTargetX, destTargetY, destTargetZ);
       this.camera.lookAt(this.controls.target);
@@ -7788,8 +8014,12 @@ export class Renderer3D {
         this.camera.updateProjectionMatrix();
       }
     } else {
+      if (this.controls) {
+        this.controls.enabled = false;
+        this.controls.autoRotate = false;
+      }
+      this.camera.up.set(0, 0, 1);
       // Normal steady-state smooth tracking
-      this.controls.autoRotate = false;
       this.camera.position.x += (destCamX - this.camera.position.x) * cameraBlend(camGlide);
       this.camera.position.y += (destCamY - this.camera.position.y) * cameraBlend(camGlide);
       this.camera.position.z += (destCamZ - this.camera.position.z) * cameraBlend(camGlide);
@@ -7865,8 +8095,11 @@ export class Renderer3D {
     }
 
     // Identify Top 10 positions on track for selective billboard position badges
-    const top10 = rankedCars.slice(0, 10);
-    const visibleSet = new Set(top10);
+    if (!this._badgeVisibleSet) this._badgeVisibleSet = new Set();
+    this._badgeVisibleSet.clear();
+    const visibleSet = this._badgeVisibleSet;
+    const topCount = Math.min(10, rankedCars.length);
+    for (let rIdx = 0; rIdx < topCount; rIdx++) visibleSet.add(rankedCars[rIdx]);
     if (sim && sim.player && sim.player.alive) visibleSet.add(sim.player);
     if (focusCar && focusCar.alive) visibleSet.add(focusCar);
 
@@ -7879,6 +8112,7 @@ export class Renderer3D {
         mesh.visible = true;
 
         const pose = getRenderPose(car, opts.renderAlpha);
+        if (this._onboardYaw && this._onboardYaw.car === car && pose !== car) pose.angle = this._onboardYaw.angle;
         const targetX = pose.x;
         const targetY = -pose.y;
         const targetAngle = -pose.angle;
@@ -7946,8 +8180,11 @@ export class Renderer3D {
         const rank = carRankMap.get(car);
         const badge = mesh.userData.badgeSprite;
         const showBadge = visibleSet.has(car) || car.crashed;
+        const isMountedCar = isOnboardActive && (car === this.focusedCar || car === this._onboardCar);
         if (badge) {
-          if (car.crashed) {
+          if (isMountedCar) {
+            badge.visible = false;
+          } else if (car.crashed) {
             badge.visible = true;
             if (badge.material.map !== this.eliminatedTexture) {
               badge.material.map = this.eliminatedTexture;
@@ -7984,7 +8221,8 @@ export class Renderer3D {
       const targetX = playerPose.x;
       const targetY = -playerPose.y;
       const targetZ = (sim.player.crashed) ? this.getExactMeshHeight(targetX, targetY) : 0;
-      const targetAngle = -playerPose.angle;
+      const targetAngle = -(this._onboardYaw && this._onboardYaw.car === sim.player && playerPose !== sim.player
+        ? this._onboardYaw.angle : playerPose.angle);
 
       if (typeof this.playerCar.userData.curX !== 'number' || Math.hypot(targetX - this.playerCar.userData.curX, targetY - this.playerCar.userData.curY) > 60) {
         this.playerCar.userData.curX = targetX;
@@ -8045,8 +8283,11 @@ export class Renderer3D {
       const rank = carRankMap.get(sim.player);
       const badge = this.playerCar.userData.badgeSprite;
       const showBadge = visibleSet.has(sim.player) || sim.player.crashed;
+      const isPlayerMounted = isOnboardActive && (sim.player === this.focusedCar || sim.player === this._onboardCar);
       if (badge) {
-        if (sim.player.crashed) {
+        if (isPlayerMounted) {
+          badge.visible = false;
+        } else if (sim.player.crashed) {
           badge.visible = true;
           if (badge.material.map !== this.eliminatedTexture) {
             badge.material.map = this.eliminatedTexture;

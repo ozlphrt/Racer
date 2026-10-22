@@ -221,9 +221,10 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   const isBurstActive = burstGensRemaining > 0;
   if (burstGensRemaining > 0) burstGensRemaining--;
 
-  // Multi-tier stagnation detection (prolonged 80+ gen plateau, sustained deficit, or manual burst)
-  const isPlateauing = (!needsReliability && (stagnantGenerationsCount >= 80 || paceStagnantGenerationsCount >= 80)) || isBurstActive;
-  const burstMultiplier = isBurstActive ? 1.4 : (needsReliability && finishers.length ? 0.75 : (isPlateauing ? 1.2 : 1.0));
+  // Multi-tier stagnation detection (prolonged 80+ gen plateau, sustained deficit, zero-finisher deadlock, or manual burst)
+  const isZeroFinishStuck = finishers.length === 0 && stagnantGenerationsCount >= 40;
+  const isPlateauing = ((!needsReliability || isZeroFinishStuck) && (stagnantGenerationsCount >= 80 || paceStagnantGenerationsCount >= 80 || isZeroFinishStuck)) || isBurstActive;
+  const burstMultiplier = isBurstActive ? 1.4 : (needsReliability && finishers.length ? 0.75 : (isPlateauing ? 1.25 : 1.0));
   const effectiveSigma = mutationSigma * burstMultiplier;
   const effectiveRate = Math.min(0.28, mutationRate * burstMultiplier);
 

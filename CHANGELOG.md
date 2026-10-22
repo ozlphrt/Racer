@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.22 — 2026-10-22
+
+- Accelerate simulation throughput by adding conservative bounding-box rejection in `castRay`, skipping distant wall segments without altering sensor geometry or numeric results.
+- Add realistic chassis yaw dynamics and tyre lateral grip limits: finite yaw response time (`yawResponseSec: 0.12`), speed-scaled lateral grip caps (`latGripBase: 120`, `latGripPerSpeed: 0.6`), and steering rack slew/smoothing limits (`STEER_LIMITS`), preventing unrealistic instant snaps and steering chatter.
+- Fix onboard camera stutter by low-pass filtering onboard camera yaw and synchronizing it rigidly with the car chassis across variable frame rates.
+- Polish 3D visuals: remove fake 2D tyre circles from car contact shadow maps, set track markings to non-depth-writing materials so cars render cleanly above track lines, and use `THREE.PCFShadowMap`.
+- Add circuit selector management: inline Edit and Delete actions on custom circuit cards with confirmation prompts and Track Studio navigation.
+- Upgrade pace insights telemetry with percentile-scaled axes, outlier markers, and lap-warning indicators.
+- Retrain bundled Grand Prix milestone brains up to generation 250 under physics signature v2; update lookahead and offline planner suites to 109 passing regression tests.
+
+
 ## 1.5.21 — 2026-10-21
 
 - Save and load custom circuits only on request. Open Track Studio with a blank canvas and keep named circuits in the library behind explicit Load actions.
