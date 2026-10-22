@@ -726,7 +726,7 @@ function restartCurrentGen() {
   if (sim.cars && sim.cars.length > 0) {
     sim.startGeneration(sim.cars.map((c) => c.brain.genome));
   } else {
-    sim.startGeneration(Array.from({ length: CONFIG.ga.population }, () => NeuralNetwork.randomGenome(LAYERS)));
+    sim.startGeneration(Array.from({ length: CONFIG.ga.population }, () => NeuralNetwork.randomGenome(LAYERS, CONFIG.nn.baseInputs)));
   }
   if (state.view3d && renderer3d && state.follow) {
     renderer3d.resetCamera(true);

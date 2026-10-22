@@ -170,12 +170,21 @@ function paceTournament(candidates, k) {
   return best;
 }
 
+/** First-layer weight indices belonging to inputs `from`..layers[0]-1 (stride = inputs + bias). */
+export function lookaheadWeightIndices(layers, from) {
+  const idx = [];
+  if (!layers || !Number.isInteger(from) || from >= layers[0]) return idx;
+  const stride = layers[0] + 1;
+  for (let j = 0; j < layers[1]; j++) for (let i = from; i < layers[0]; i++) idx.push(j * stride + i);
+  return idx;
+}
+
 /**
  * Build the next generation: elites survive unchanged, pace-champions are protected,
  * and high-variance wildcard explorers break through plateaus.
  * @param {{genome: Float32Array, fitness: number, bestLap?: number, finished?: boolean}[]} scored
  */
-export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap }) {
+export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap, layers, lockedFrom }) {
   const sorted = [...scored].sort((a, b) => Number(Boolean(b.finished)) - Number(Boolean(a.finished)) || b.fitness - a.fitness);
   const finishers = sorted.filter(candidate => candidate.finished);
   const parentPool = finishers.length ? finishers : sorted;
@@ -183,6 +192,15 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   const needsReliability = completionRate < 0.70;
   const next = [];
   const protectedGenomes = new Set();
+
+  // Staged learning: until some car finishes a race, the weights of the extra track-awareness
+  // inputs are inherited unchanged (zero at birth). Free mutation of those weights makes early
+  // networks steer on far-away corner signals and stops from-scratch training from ever finishing.
+  const lockIdx = finishers.length === 0 ? lookaheadWeightIndices(layers, lockedFrom) : [];
+  const lock = (child, parent) => {
+    for (let k = 0; k < lockIdx.length; k++) child[lockIdx[k]] = parent[lockIdx[k]];
+    return child;
+  };
 
   // 1. Track Fitness & Pace Progression
   const topFit = sorted[0]?.fitness || 0;
@@ -253,16 +271,16 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
     const hotParent = finishers[0] || validLapCars[0] || sorted[0];
     if (hotParent) {
       // Wildcard 1: Late Braker (delays braking on entry, earlier on gas)
-      next.push(mutateLateBraker(hotParent.genome, effectiveSigma * 1.25));
+      next.push(lock(mutateLateBraker(hotParent.genome, effectiveSigma * 1.25), hotParent.genome));
 
       // Wildcard 2: Apex Slicer (tighter kerb clipping & apex entry)
       if (next.length < population) {
-        next.push(mutateApexSlicer(hotParent.genome, effectiveSigma * 1.35));
+        next.push(lock(mutateApexSlicer(hotParent.genome, effectiveSigma * 1.35), hotParent.genome));
       }
 
       // Wildcard 3: Apex Hunter (high momentum carrier)
       if (next.length < population) {
-        next.push(mutateApexHunter(hotParent.genome, effectiveSigma * 1.45));
+        next.push(lock(mutateApexHunter(hotParent.genome, effectiveSigma * 1.45), hotParent.genome));
       }
     }
   }
@@ -274,7 +292,7 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
     const parent = parentPool[(Math.random() * Math.min(8, parentPool.length)) | 0];
     const expSigma = isBurstActive ? effectiveSigma * 1.4 : (isPlateauing ? effectiveSigma * 1.25 : effectiveSigma * 1.15);
     const expRate = isBurstActive ? 0.22 : 0.16;
-    next.push(mutate(Float32Array.from(parent.genome), expRate, expSigma));
+    next.push(lock(mutate(Float32Array.from(parent.genome), expRate, expSigma), parent.genome));
   }
 
   // Preserve most proven policies with small local changes. Mixing independently
@@ -294,7 +312,7 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
     const b = (validLapCars.length >= 2 && Math.random() < 0.20)
       ? paceTournament(validLapCars, tournamentK)
       : tournament(parentPool, tournamentK);
-    next.push(mutate(crossover(a.genome, b.genome), effectiveRate, effectiveSigma));
+    next.push(lock(mutate(crossover(a.genome, b.genome), effectiveRate, effectiveSigma), a.genome));
   }
   return next;
 }

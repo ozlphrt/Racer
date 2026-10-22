@@ -35,7 +35,8 @@ export class Simulation {
 
   get gaOptions() {
     const pop = this.mode === 'race' ? 20 : this.config.ga.population;
-    return { ...this.config.ga, population: pop, mutationRate: this.mutationRate };
+    return { ...this.config.ga, population: pop, mutationRate: this.mutationRate,
+      layers: this.layers, lockedFrom: this.config.nn.baseInputs };
   }
 
   reset() {
@@ -62,7 +63,7 @@ export class Simulation {
     this.deathEvents = [];
     const count = this.mode === 'race' ? 20 : this.config.ga.population;
     const genomes = Array.from({ length: count }, () =>
-      NeuralNetwork.randomGenome(this.layers),
+      NeuralNetwork.randomGenome(this.layers, this.config.nn.baseInputs),
     );
     this.startGeneration(genomes);
   }
@@ -83,7 +84,7 @@ export class Simulation {
     }
     if (list.length === 0) {
       while (list.length < count) {
-        list.push(NeuralNetwork.randomGenome(this.layers));
+        list.push(NeuralNetwork.randomGenome(this.layers, this.config.nn.baseInputs));
       }
     } else {
       const baseLen = list.length;
@@ -151,7 +152,7 @@ export class Simulation {
       this.seedFrom(savedState.allTimeBest.genome, savedState.allTimeBest);
     } else {
       const genomes = Array.from({ length: pop }, () =>
-        NeuralNetwork.randomGenome(this.layers),
+        NeuralNetwork.randomGenome(this.layers, this.config.nn.baseInputs),
       );
       this.startGeneration(genomes);
     }
@@ -646,11 +647,9 @@ export class Simulation {
     const f = this.config.fitness || {};
     const scored = sortedCars.map((c, rankIdx) => {
       let fit = c.fitness;
-      // Track position bonus for beating opponents and finishing ahead
-      if (rankIdx === 0) fit += f.p1Bonus || 2500;
-      else if (rankIdx === 1) fit += f.p2Bonus || 1500;
-      else if (rankIdx === 2) fit += f.p3Bonus || 900;
-      else if (rankIdx < 10) fit += (10 - rankIdx) * 60;
+      if (f.p1Bonus && rankIdx === 0) fit += f.p1Bonus;
+      else if (f.p2Bonus && rankIdx === 1) fit += f.p2Bonus;
+      else if (f.p3Bonus && rankIdx === 2) fit += f.p3Bonus;
 
       return {
         car: c,

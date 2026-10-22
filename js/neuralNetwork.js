@@ -29,13 +29,18 @@ export class NeuralNetwork {
     return s;
   }
 
-  static randomGenome(layers) {
+  /** @param {number|null} zeroFrom first-layer inputs from this index upward start with zero weights. */
+  static randomGenome(layers, zeroFrom = null) {
     const g = new Float32Array(NeuralNetwork.genomeSize(layers));
     let p = 0;
     for (let l = 0; l < layers.length - 1; l++) {
       const nIn = layers[l];
       const scale = 1.8 / Math.sqrt(nIn);
       for (let k = 0; k < (nIn + 1) * layers[l + 1]; k++) g[p++] = randn() * scale;
+    }
+    if (Number.isInteger(zeroFrom) && zeroFrom < layers[0]) {
+      const stride = layers[0] + 1;
+      for (let j = 0; j < layers[1]; j++) for (let i = zeroFrom; i < layers[0]; i++) g[j * stride + i] = 0;
     }
     return g;
   }

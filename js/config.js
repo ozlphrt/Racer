@@ -42,7 +42,8 @@ export const CONFIG = {
     length: 240,
   },
 
-  nn: { layers: [8, 12, 8, 2] }, // 7 rays + speed → steer, throttle
+  // 7 rays + speed (base) + lateral pos + 3 curvature lookaheads (staged: frozen at zero until a car finishes) → steer, throttle
+  nn: { layers: [12, 12, 8, 2], baseInputs: 8 },
 
   ga: {
     population: 20, // 20-Car F1 Grid (blistering fast simulation speed & clean racing lines)
@@ -63,16 +64,8 @@ export const CONFIG = {
   },
 
   fitness: {
-    lapBonus: 4500, // Large reward per completed lap
-    fullRaceBonus: 30000, // Milestone bonus for completing the selected race distance
-    targetLapTime: 8.54, // Benchmark target lap time matching historic 8.54s record; exponentially rewards sub-9.0s pace
-    speedPaceWeight: 22, // Reward for sustained high velocity across sectors (beats crawling)
-    timeoutPenalty: 0.35, // Penalize cars that time out without finishing so slow creeping is an evolutionary dead-end
-    crashPenalty: 600, // Strict penalty for crashing into walls/runoff (rewards staying on track)
-    contactPenalty: 50, // Penalty per contact after grace period (penalizes collisions)
-    cleanRaceBonus: 3500, // Massive bonus for completing laps with 0 collision contacts
-    p1Bonus: 5000, // High reward for winning the race / finishing ahead in P1
-    p2Bonus: 2500, // Reward for 2nd place
-    p3Bonus: 1500, // Reward for 3rd place
+    speedPaceWeight: 40, // Weight for average speed (distance / time): rewards fast laps and race completion
+    crashPenalty: 500, // Penalty for hitting outer barrier / deep off-track
+    contactPenalty: 50, // Penalty per vehicle contact when collisions are active
   },
 };

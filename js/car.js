@@ -10,6 +10,12 @@ export const RAY_ANGLES = CONFIG.sensors.angles.map((a) => (a * Math.PI) / 180);
 // while all lap-capable bundled brains still finish (0.08 s and above begins to crash them).
 export const STEER_LIMITS = { smoothingSec: 0.05, slewPerSec: 40 };
 
+// Track-awareness inputs appended after the 7 rays + speed: lateral position on the road
+// and signed upcoming curvature sampled at these distances ahead (world units).
+export const LOOKAHEAD_DISTANCES = [80, 180, 320];
+export const BASE_INPUTS = RAY_ANGLES.length + 1;
+export const TOTAL_INPUTS = BASE_INPUTS + 1 + LOOKAHEAD_DISTANCES.length;
+
 
 /**
  * Arcade car. Driven either by a NeuralNetwork brain or by manual controls.
@@ -26,7 +32,7 @@ export class Car {
     this.carNumber = 1;
     this.teamIdx = 0;
     this.rayDist = new Float32Array(RAY_ANGLES.length);
-    this.inputs = new Float32Array(RAY_ANGLES.length + 1);
+    this.inputs = new Float32Array(TOTAL_INPUTS);
     this.rayWindow = Math.ceil(CONFIG.sensors.length / track.spacing) + 3;
     this.collisionAlwaysOn = false;
     this.reset(gridSlot);
@@ -188,6 +194,21 @@ export class Car {
 
     const forwardFactor = Math.cos(diff);
     this.inputs[RAY_ANGLES.length] = (this.speed / CONFIG.car.maxSpeed) * Math.max(-1, Math.min(1, forwardFactor));
+
+    // Lateral position: -1..+1 across the road, same sign convention as the curvature below
+    // (positive = toward the inside of a positive-curvature corner).
+    const i0 = this.idx;
+    const lateral = ((this.x - t.cx[i0]) * -t.ty[i0] + (this.y - t.cy[i0]) * t.tx[i0]) / t.half;
+    this.inputs[BASE_INPUTS] = clamp(lateral, -1, 1);
+
+    // Signed upcoming curvature (5-sample average) at each lookahead distance, scaled so a
+    // typical corner (radius ~ 1-2 road widths) uses most of the -1..+1 range.
+    for (let k = 0; k < LOOKAHEAD_DISTANCES.length; k++) {
+      const ahead = i0 + Math.round(LOOKAHEAD_DISTANCES[k] / t.spacing);
+      let sum = 0;
+      for (let o = -2; o <= 2; o++) sum += t.curvature[t.wrap(ahead + o)];
+      this.inputs[BASE_INPUTS + 1 + k] = clamp((sum / 5) * t.half * 2.5, -1, 1);
+    }
   }
 
   die(reason, crashCause = 'unknown') {
@@ -530,12 +551,12 @@ export class Car {
     } else if (this.isOffTrack(cos, sin)) {
       // In grass runoff zone: apply tire drag deceleration, off-track penalty, and recovery timer
       this.offTrackTimer += dt;
-      this.offTrackPenalty += 140 * dt;
-      const grassDrag = Math.max(0, 1 - 2.8 * dt);
+      this.offTrackPenalty += 50 * dt;
+      const grassDrag = Math.max(0, 1 - 1.8 * dt);
       this.vx *= grassDrag;
       this.vy *= grassDrag;
       this.speed = Math.hypot(this.vx, this.vy);
-      if (this.offTrackTimer > 1.8) {
+      if (this.offTrackTimer >= 1.8) {
         this.die('crash', 'runoff');
         return;
       }
@@ -585,7 +606,7 @@ export class Car {
     const hw = CONFIG.car.width / 2;
     // Small buffer on launch frame to prevent rear grid row corner false clipping
     const safetyBuffer = this.time < 1.2 ? 5.0 : 0.0;
-    const curbBuffer = 7.5; // Curb / rumble strip tolerance
+    const curbBuffer = 12.0; // Curb / rumble strip tolerance (permits full curb utilization)
     const halfWidth = this.track.half + safetyBuffer + curbBuffer + extraBuffer;
     const lim = halfWidth * halfWidth;
 
@@ -605,80 +626,34 @@ export class Car {
   }
 
   get fitness() {
-    const f = CONFIG.fitness;
-    const g = CONFIG.generation;
-    const raceTime = this.finished && Number.isFinite(this.finishTime) ? this.finishTime : this.time;
+    const f = CONFIG.fitness || {};
+    const raceTime = this.finished && Number.isFinite(this.finishTime) ? this.finishTime : Math.max(1, this.time);
 
-    // 1. Distance Progress along track
-    let s = this.maxIdx * this.track.spacing;
+    // 1. Distance progress along track
+    const distance = Math.max(0, this.maxIdx * this.track.spacing);
+    let s = distance;
 
-    // 2. Continuous Average Speed Pace Reward (rewards sustained high velocity across corners)
-    // For crashed cars, pace reward is dampened so that suicidal high-speed wall impacts are never
-    // favored over cars that brake, navigate deeper into the corner, and learn survival.
-    const avgSpeed = (this.maxIdx * this.track.spacing) / Math.max(1, raceTime);
-    const paceWeight = this.crashed ? (f.speedPaceWeight ?? 7.5) * 0.15 : (f.speedPaceWeight ?? 7.5);
+    // 2. Pace / speed reward: distance / time (units per second)
+    // Faster lap and race times directly yield higher average speed.
+    // For crashed cars, pace reward is dampened so reckless wall impacts are never selected.
+    const avgSpeed = distance / raceTime;
+    const paceWeight = this.crashed ? (f.speedPaceWeight ?? 40) * 0.10 : (f.speedPaceWeight ?? 40);
     s += avgSpeed * paceWeight;
 
-    // 3. Lap Completion Bonus
-    s += this.laps * (f.lapBonus || 4500);
-
-    // 4. Lap Speed Multiplier (exponentially rewards fast lap times to break through conservative plateaus)
-    for (const lt of this.lapTimes) {
-      if (lt > 0) {
-        const target = f.targetLapTime || 8.54;
-        const speedRatio = Math.max(0.5, target / lt);
-        s += (f.lapBonus || 4500) * Math.pow(speedRatio, 3.2);
-
-        // Sub-9.4s Hot-Lap Breakthrough Bonus: heavily rewards pushing towards the 8.54s record
-        if (lt < 9.4) {
-          const paceDelta = Math.max(0, 9.4 - lt);
-          s += Math.pow(paceDelta * 4.5, 2.2) * 1800;
-        }
-      }
-    }
-
-    // 5. Lap Consistency Bonus (rewards reproducing fast, reliable lap times across consecutive laps)
-    if (this.lapTimes.length >= 2) {
-      let sumLap = 0;
-      for (const lt of this.lapTimes) sumLap += lt;
-      const meanLap = sumLap / this.lapTimes.length;
-      let varSum = 0;
-      for (const lt of this.lapTimes) varSum += Math.abs(lt - meanLap);
-      const avgDev = varSum / this.lapTimes.length;
-      const consistencyBonus = Math.max(0, 2200 - avgDev * 1400);
-      s += consistencyBonus;
-    }
-
-    // 6. Full 5-Lap Race Finish Bonus + Time-Remaining Speed Multiplier
-    if (this.finished || this.laps >= (g.maxLaps || 5)) {
-      s += f.fullRaceBonus || 30000;
-      // High speed reward for completing the entire 5 laps quickly
-      const timeRemaining = Math.max(0, (g.timeLimit || 85) - raceTime);
-      s += timeRemaining * 200;
-    }
-
-    // 7. Clean Driving & Collision Avoidance Reward / Penalty
-    if (this.contacts === 0 && this.laps > 0) {
-      s += (f.cleanRaceBonus || 3500) * Math.min(1.0, this.laps / (g.maxLaps || 5));
-    } else {
+    // 3. Collision penalty (when active)
+    if (this.contacts > 0) {
       const contactDeduction = (this.collisionPenalty || 0) + (this.contacts * (f.contactPenalty || 50));
-      s -= Math.min(s * 0.45, contactDeduction); // Meaningful collision penalty while preserving forward drive
+      s -= Math.min(s * 0.20, contactDeduction);
     }
 
-    // 8. Grass Runoff penalty
+    // 4. Grass runoff penalty
     if (this.offTrackPenalty > 0) {
-      s -= Math.min(s * 0.40, this.offTrackPenalty);
+      s -= Math.min(s * 0.15, this.offTrackPenalty);
     }
 
-    // 9. Wall crash penalty (strict penalty for going deep off-track)
+    // 5. Wall crash penalty
     if (this.crashed) {
-      s -= f.crashPenalty || 600;
-    }
-
-    // 10. Timeout penalty: un-finished cars that time out creeping are penalized so that
-    // carrying pace through corners is rewarded over slow, hesitant survival.
-    if (!this.finished && !this.crashed && raceTime >= ((g.timeLimit || 110) - 0.5) && f.timeoutPenalty) {
-      s *= Math.max(0.1, 1 - f.timeoutPenalty);
+      s -= f.crashPenalty ?? 500;
     }
 
     return Math.max(0, s);

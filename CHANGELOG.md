@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.23 - 2026-10-22
+
+- Simplify the fitness function to forward distance plus average speed, minus grass, contact and crash penalties. Remove lap, finish, rank, consistency and timeout bonuses that rewarded the same thing several times.
+- Widen the curb tolerance (7.5 to 12 units) and soften grass penalties so cars can use the full track width.
+- Feed the network lateral road position and signed upcoming curvature at 80, 180 and 320 units (12 inputs). Weights of these inputs start at zero and stay frozen until a car finishes a race, so from-scratch training keeps its fast early learning.
+- Bundled 8-input milestone brains no longer fit the 12-input network. Ten tests that depend on them are skipped until the brains are retrained.
 ## 1.5.22 — 2026-10-22
 
 - Accelerate simulation throughput by adding conservative bounding-box rejection in `castRay`, skipping distant wall segments without altering sensor geometry or numeric results.
