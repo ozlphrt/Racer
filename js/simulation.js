@@ -47,6 +47,7 @@ export class Simulation {
     this.history = [];
     this.allTimeBest = null;
     this.lastRaceChampion = null;
+    this.fastestLapChampion = null;
     this.bestLapEver = Infinity;
     this.prevBestLapEver = null;
     this.playerBestLap = Infinity;
@@ -657,6 +658,7 @@ export class Simulation {
         fitness: Math.max(0, fit),
         bestLap: c.bestLap,
         finished: c.finished,
+        laps: c.laps,
       };
     });
 
@@ -772,13 +774,27 @@ export class Simulation {
           if (samples && samples.length > 5) {
             this.recordLapTelemetry = [...samples];
           }
+          if (fastestCar.brain && fastestCar.brain.genome) {
+            this.fastestLapChampion = {
+              genome: Float32Array.from(fastestCar.brain.genome),
+              bestLap: genBestLap,
+              fitness: fastestCar.fitness,
+              generation: this.generation,
+            };
+          }
         }
         this.raceBestLap = genBestLap;
         this.onNewBestLap?.(genBestLap, fastestCar, this.prevBestLapEver, 'overall');
       }
     }
 
-    const next = evolve(scored, { ...this.gaOptions, bestLapEver: this.bestLapEver, genBestLap });
+    const next = evolve(scored, {
+      ...this.gaOptions,
+      bestLapEver: this.bestLapEver,
+      genBestLap,
+      allTimeBest: this.allTimeBest,
+      fastestLapChampion: this.fastestLapChampion,
+    });
     this.generation++;
     this.startGeneration(next);
     this.onGeneration?.(record);

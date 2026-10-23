@@ -8,11 +8,11 @@ export const RAY_ANGLES = CONFIG.sensors.angles.map((a) => (a * Math.PI) / 180);
 // maximum change rate per second (40/s = full lock to full lock in 0.05 s, a safety cap only).
 // Tuned by headless sweeps: the raw network chatters lock-to-lock ~13x/s; 0.05 s removes that
 // while all lap-capable bundled brains still finish (0.08 s and above begins to crash them).
-export const STEER_LIMITS = { smoothingSec: 0.05, slewPerSec: 40 };
+export const STEER_LIMITS = { smoothingSec: 0.02, slewPerSec: 50 };
 
 // Track-awareness inputs appended after the 7 rays + speed: lateral position on the road
 // and signed upcoming curvature sampled at these distances ahead (world units).
-export const LOOKAHEAD_DISTANCES = [80, 180, 320];
+export const LOOKAHEAD_DISTANCES = CONFIG.sensors?.lookaheadDistances || [120, 260, 480];
 export const BASE_INPUTS = RAY_ANGLES.length + 1;
 export const TOTAL_INPUTS = BASE_INPUTS + 1 + LOOKAHEAD_DISTANCES.length;
 
@@ -86,6 +86,10 @@ export class Car {
     this.collisionPenalty = 0;
     this.offTrackTimer = 0;
     this.offTrackPenalty = 0;
+    this.steerJerk = 0;
+    this.excessScrub = 0;
+    this.lookaheadLineQuality = 0;
+    this.prevSteer = 0;
     this.speed = 0;
     this.topSpeed = 0;
     this.steer = 0;
@@ -486,6 +490,24 @@ export class Car {
       }
     }
 
+    // Accumulate steering smoothness, tire scrub, and lookahead racing line quality
+    if (this.alive && !this.crashed && !this.finished && this.speed > 25) {
+      const dSteer = Math.abs(this.steer - (this.prevSteer ?? this.steer));
+      this.steerJerk += dSteer;
+      this.prevSteer = this.steer;
+
+      if (Math.abs(this.slipAngle) > 0.08) {
+        this.excessScrub += (Math.abs(this.slipAngle) - 0.08) * dt;
+      }
+
+      // Lookahead racing line quality: reward outside positioning prior to corner entry
+      const curLat = this.inputs[BASE_INPUTS] || 0;
+      const nearCurv = this.inputs[BASE_INPUTS + 1] || 0;
+      if (Math.abs(nearCurv) > 0.15 && (curLat * nearCurv) < -0.05) {
+        this.lookaheadLineQuality += Math.abs(curLat * nearCurv) * dt;
+      }
+    }
+
     // Progress along the track
     const ni = t.nearestIndex(this.x, this.y, this.idx);
     let d = ni - this.idx;
@@ -551,12 +573,14 @@ export class Car {
     } else if (this.isOffTrack(cos, sin)) {
       // In grass runoff zone: apply tire drag deceleration, off-track penalty, and recovery timer
       this.offTrackTimer += dt;
-      this.offTrackPenalty += 50 * dt;
-      const grassDrag = Math.max(0, 1 - 1.8 * dt);
+      this.offTrackPenalty += (50 + Math.max(0, this.speed - 60) * 1.8) * dt;
+      const grassDrag = Math.max(0, 1 - 2.8 * dt);
       this.vx *= grassDrag;
       this.vy *= grassDrag;
       this.speed = Math.hypot(this.vx, this.vy);
-      if (this.offTrackTimer >= 1.8) {
+      // High-speed dive-bombers washing out to outer barrier are retired swiftly (0.4s), while slow crawling rejoins get the full 1.8s
+      const runoffLimit = (this.speed > 120) ? 0.40 : 1.8;
+      if (this.offTrackTimer >= runoffLimit) {
         this.die('crash', 'runoff');
         return;
       }
@@ -651,7 +675,23 @@ export class Car {
       s -= Math.min(s * 0.15, this.offTrackPenalty);
     }
 
-    // 5. Wall crash penalty
+    // 5. Steering smoothness & tire scrub penalty (encourages flowing, high-momentum racing lines)
+    if (f.steerSmoothWeight && this.steerJerk > 0) {
+      const jerkDeduction = this.steerJerk * f.steerSmoothWeight;
+      s -= Math.min(s * 0.12, jerkDeduction);
+    }
+    if (f.scrubWeight && this.excessScrub > 0) {
+      const scrubDeduction = this.excessScrub * f.scrubWeight;
+      s -= Math.min(s * 0.10, scrubDeduction);
+    }
+
+    // 6. Lookahead curvature racing line bonus (rewards wide entry anticipating apex)
+    if (f.lookaheadLineBonus && this.lookaheadLineQuality > 0) {
+      const lineBonus = this.lookaheadLineQuality * f.lookaheadLineBonus;
+      s += Math.min(s * 0.15, lineBonus);
+    }
+
+    // 7. Wall crash penalty
     if (this.crashed) {
       s -= f.crashPenalty ?? 500;
     }

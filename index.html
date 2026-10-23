@@ -25,7 +25,6 @@
 <body>
   <div class="app">
     <main class="stage" id="stage">
-      <canvas id="track-canvas" aria-label="Race track simulation 2D" hidden></canvas>
       <canvas id="track-canvas-3d" aria-label="Race track simulation 3D"></canvas>
 
       <!-- Top Left HUD Panel -->
@@ -44,8 +43,21 @@
           </div>
         </div>
         <div class="hud-sep"></div>
+        <div class="hud-item hud-timer-box">
+          <span class="hud-label">Race Clock</span>
+          <span class="hud-value small" id="hud-race-time">00:00.0</span>
+        </div>
+        <div class="hud-sep"></div>
         <div class="hud-item"><span class="hud-label">FPS</span><span class="hud-value small" id="hud-fps">60</span></div>
         <div class="hud-timer" title="Generation time limit"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
+      </div>
+
+      <!-- Automated Exploration Burst Active Pill Badge (Top Right) -->
+      <div class="burst-active-pill glass hidden" id="burst-active-pill" aria-label="Exploration Burst Active" title="Automated Exploration Burst Active: Breaking through training plateau">
+        <svg class="burst-flame-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span class="burst-timer-value" id="burst-timer-value">Burst 20G</span>
       </div>
 
       <!-- Ghost Mode 30s Countdown Timer Circle Badge (Top Right) -->
@@ -445,13 +457,14 @@
               <div class="shortcut-item"><span>Leaderboard</span> <kbd>L</kbd></div>
               <div class="shortcut-item"><span>Cockpit telemetry</span> <kbd>C</kbd></div>
               <div class="shortcut-item"><span>Pause / Resume</span> <kbd>Space</kbd></div>
-              <div class="shortcut-item"><span>Toggle 3D / 2D</span> <kbd>O</kbd></div>
+              <div class="shortcut-item"><span>Reset 3D camera</span> <kbd>O</kbd></div>
               <div class="shortcut-item"><span>Orbit / Pan camera</span> <kbd>Drag</kbd></div>
               <div class="shortcut-item"><span>Follow leader</span> <kbd>F</kbd></div>
               <div class="shortcut-item"><span>Show sensors</span> <kbd>X</kbd></div>
               <div class="shortcut-item"><span>Turbo 8× mode</span> <kbd>T</kbd></div>
               <div class="shortcut-item"><span>Drive yourself</span> <kbd>M</kbd></div>
               <div class="shortcut-item"><span>Restart generation</span> <kbd>R</kbd></div>
+              <div class="shortcut-item"><span>Restore best line</span> <kbd>B</kbd></div>
               <div class="shortcut-item"><span>Toggle Audio</span> <kbd>S</kbd></div>
               <div class="shortcut-item"><span>Insights panel</span> <kbd>P</kbd></div>
               <div class="shortcut-item"><span>Welcome Guide</span> <kbd>?</kbd></div>
@@ -570,6 +583,7 @@
         <div class="btn-row">
           <button class="btn btn-primary" id="btn-pause" type="button">❚❚ Pause</button>
           <button class="btn" id="btn-reset" type="button">↺ Restart Lap</button>
+          <button class="btn" id="btn-restore-best" type="button" title="Restore Champion Racing Line (B)">⚡ Best Line</button>
         </div>
         <div class="slider-row">
           <label for="speed-slider">Speed <span class="slider-value" id="speed-value">×1</span></label>
@@ -590,10 +604,6 @@
 
       <section class="card" aria-labelledby="view-title">
         <h2 id="view-title">View &amp; Camera</h2>
-        <label class="switch-row" for="toggle-3d">
-          <span>3D Orbit View <kbd>O</kbd></span>
-          <input type="checkbox" id="toggle-3d" class="switch" checked>
-        </label>
         <label class="switch-row" for="toggle-follow">
           <span>Follow leader <kbd>F</kbd></span>
           <input type="checkbox" id="toggle-follow" class="switch" checked>

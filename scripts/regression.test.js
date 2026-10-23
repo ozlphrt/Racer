@@ -2068,3 +2068,20 @@ test('lookahead input weights start at zero and stay frozen until a car finishes
   const grown = Array.from({ length: 30 }, () => evolve(racing, opts)).flat();
   assert.ok(grown.some(g => idx.some(i => g[i] !== 0)), 'free to evolve once cars finish');
 });
+
+test('steering smoothness, scrub penalty and lookahead curvature reward influence fitness', () => {
+  const circuit = track();
+  const brain = new NeuralNetwork(CONFIG.nn.layers, Array(NeuralNetwork.genomeSize(CONFIG.nn.layers)).fill(0));
+  const smoothCar = new Car(circuit, brain, 0);
+  const jerkyCar = new Car(circuit, brain, 1);
+
+  Object.assign(smoothCar, { maxIdx: 500, time: 20, speed: 200 });
+  Object.assign(jerkyCar, { maxIdx: 500, time: 20, speed: 200 });
+
+  jerkyCar.steerJerk = 15;
+  jerkyCar.excessScrub = 2.5;
+  smoothCar.lookaheadLineQuality = 3.0;
+
+  assert.ok(smoothCar.fitness > jerkyCar.fitness, 'smooth driving with outside lookahead positioning achieves higher fitness');
+});
+

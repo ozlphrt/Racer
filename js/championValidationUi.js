@@ -9,7 +9,7 @@ export function createChampionValidationPanel(sim, getTrackKey, getLaps) {
   let job = null, worker = null;
   const generationSettings = () => {
     const laps = getLaps();
-    return { ...CONFIG.generation, maxLaps: laps, timeLimit: laps === 1 ? 26 : laps === 2 ? 50 : laps * 22 };
+    return { ...CONFIG.generation, maxLaps: laps, timeLimit: laps === 1 ? 45 : laps === 2 ? 80 : laps * 36 };
   };
   const settings = () => JSON.stringify({ car: CONFIG.car, sensors: CONFIG.sensors,
     generation: generationSettings(), gridBox: CONFIG.gridBox, dt: CONFIG.dt });

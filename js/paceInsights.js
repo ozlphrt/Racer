@@ -92,12 +92,9 @@ function drawPaceInsightsAtHeight(chart, h) {
     [model.recordGain === null ? 'No record yet' : 'Record gain', `${model.sinceRecord ?? '—'} gens since last record`, '#38bdf8',
       model.recordGain === null ? '—' : seconds(model.recordGain)],
     [gapDirection, `First vs last ${model.comparisonSize} gens · median gap`, model.gapChange > 0 ? '#f59e0b' : '#38bdf8', gapValue],
-    [model.finishRate === null ? 'Population finish unavailable' : 'Population finish',
-      `${model.finished}/${model.starters} cars · last ${model.finishWindow} gens`, '#94a3b8',
-      model.finishRate === null ? '—' : `${Math.round(model.finishRate * 100)}%`],
   ];
   const portrait = w < 650;
-  const cardWidth = portrait ? w - 8 : (w - 16) / 3;
+  const cardWidth = portrait ? w - 8 : (w - 8 - (cards.length - 1) * 4) / cards.length;
   const cardHeight = portrait ? 38 : 48;
   cards.forEach(([title, subtitle, color, big], i) => {
     const x = portrait ? 4 : 4 + i * (cardWidth + 4);
@@ -111,8 +108,8 @@ function drawPaceInsightsAtHeight(chart, h) {
     ctx.fillStyle = '#f8fafc'; ctx.font = `700 ${portrait ? 20 : 19}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(big, x + cardWidth - 12, y + cardHeight / 2);
   });
-  const usable = Math.max(50, h - (portrait ? 216 : 150));
-  const champion = { top: portrait ? 138 : 72, height: usable * 0.43 };
+  const usable = Math.max(50, h - (portrait ? 175 : 150));
+  const champion = { top: portrait ? 98 : 72, height: usable * 0.43 };
   const pack = { top: champion.top + champion.height + 29, height: usable * 0.43 };
   const survival = { top: pack.top + pack.height + 24, height: Math.max(12, usable * 0.14) };
   // Robust axes: a few collapsed generations (e.g. a 110 s timeout) must not flatten the real trend,

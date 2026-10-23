@@ -14,23 +14,23 @@ import { carSideviewRenderer } from './carSideviewRenderer.js';
 
 // F1 Number Decals Configuration (Calibrated in 3D Decal Studio)
 export const F1_DECAL_CONFIG = {
-  front: { posX: -10.05, posY: 0.05, posZ: 1,    scaleX: 4.35, scaleY: 2.45, rotX: 21,  rotY: -3,  rotZ: -90 },
-  top:   { posX: 0.82,  posY: 0.24,  posZ: 3.29, scaleX: 3.75, scaleY: 3.9,  rotX: 0,   rotY: 10,  rotZ: -90 },
-  rear:  { posX: 12.14, posY: 0.03,  posZ: 4.24, scaleX: 3.45, scaleY: 2.75, rotX: 5,   rotY: 0,   rotZ: 90 },
-  left:  { posX: 5.4,   posY: -1.7,  posZ: 2.4,  scaleX: 4.4,  scaleY: 3.45, rotX: 90,  rotY: 0,   rotZ: 0 },
-  right: { posX: 4.2,   posY: 1.9,   posZ: 2.44, scaleX: 4.75, scaleY: 3.45, rotX: -90, rotY: 180, rotZ: 0 }
+  front: { posX: -10.05, posY: 0.05, posZ: 1, scaleX: 4.35, scaleY: 2.45, rotX: 21, rotY: -3, rotZ: -90 },
+  top: { posX: 0.82, posY: 0.24, posZ: 3.29, scaleX: 3.75, scaleY: 3.9, rotX: 0, rotY: 10, rotZ: -90 },
+  rear: { posX: 12.14, posY: 0.03, posZ: 4.24, scaleX: 3.45, scaleY: 2.75, rotX: 5, rotY: 0, rotZ: 90 },
+  left: { posX: 5.4, posY: -1.7, posZ: 2.4, scaleX: 4.4, scaleY: 3.45, rotX: 90, rotY: 0, rotZ: 0 },
+  right: { posX: 4.2, posY: 1.9, posZ: 2.44, scaleX: 4.75, scaleY: 3.45, rotX: -90, rotY: 180, rotZ: 0 }
 };
 
 // Authentic F1 Racing Numbers (Decoupled from positions & grid slots)
 export const F1_CAR_NUMBERS = [
   44, 63, // Team 0 (Silver Arrows / Black & Gold)
   16, 55, // Team 1 (Scuderia Ferrari Rosso Corsa)
-  1,  11, // Team 2 (Red Bull Championship)
-  4,  81, // Team 3 (McLaren Papaya)
+  1, 11, // Team 2 (Red Bull Championship)
+  4, 81, // Team 3 (McLaren Papaya)
   14, 18, // Team 4 (Aston Martin Emerald)
   10, 31, // Team 5 (Alpine Sport)
   23, 2,  // Team 6 (Williams Racing)
-  3,  22, // Team 7 (Visa Cash App RB)
+  3, 22, // Team 7 (Visa Cash App RB)
   77, 24, // Team 8 (Kick Sauber)
   20, 27, // Team 9 (Haas F1 Team)
 ];
@@ -674,7 +674,7 @@ export class Renderer3D {
     const b = t.bounds;
     const margin = 2800;
     if (tx >= b.minX - margin && tx <= b.maxX + margin &&
-        ty >= b.minY - margin && ty <= b.maxY + margin) {
+      ty >= b.minY - margin && ty <= b.maxY + margin) {
       let minDSq = Infinity;
       let bestK = 0;
       const N = t.N;
@@ -1212,26 +1212,26 @@ export class Renderer3D {
     const kS2 = Math.cos(wx * -0.058 + wy * 0.064 + 2.7);
     const kS3 = Math.sin(wx * 0.082 - wy * 0.045 + 0.6);
     const smallHills = (Math.pow(Math.max(0, kS1), 2.2) * 3.8 +
-                        Math.pow(Math.max(0, kS2), 2.2) * 3.2 +
-                        Math.pow(Math.max(0, kS3), 2.4) * 2.8);
+      Math.pow(Math.max(0, kS2), 2.2) * 3.2 +
+      Math.pow(Math.max(0, kS3), 2.4) * 2.8);
 
     // Category B: 25-45 Car-Sized Medium Knolls (~125m - 225m diameter, 4.5m - 8.0m height)
     const kM1 = Math.sin(wx * 0.032 - wy * 0.026 + 0.9);
     const kM2 = Math.cos(wx * 0.024 + wy * 0.031 + 2.2);
     const kM3 = Math.sin(wx * -0.038 - wy * 0.019 + 1.5);
     const medHills = (Math.pow(Math.max(0, kM1), 1.9) * 5.8 +
-                      Math.pow(Math.max(0, kM2), 1.9) * 5.2 +
-                      Math.pow(Math.max(0, kM3), 2.0) * 4.4);
+      Math.pow(Math.max(0, kM2), 1.9) * 5.2 +
+      Math.pow(Math.max(0, kM3), 2.0) * 4.4);
 
     // Category C: 50-75 Car-Sized Large Mini Hills (~250m - 375m diameter, 7.0m - 12.0m height)
     const kL1 = Math.sin(wx * 0.016 + wy * 0.013 + 1.8);
     const kL2 = Math.cos(wx * -0.018 + wy * 0.015 + 0.4);
     const largeHills = (Math.pow(Math.max(0, kL1), 1.7) * 8.5 +
-                        Math.pow(Math.max(0, kL2), 1.7) * 7.5);
+      Math.pow(Math.max(0, kL2), 1.7) * 7.5);
 
     // Rolling harmonic swells connecting the hills into a flowing natural landscape
     const rollingBase = Math.sin(wx * 0.0085 + wy * 0.0070 + 1.1) * 3.4 +
-                        Math.cos(wx * 0.0135 - wy * 0.0120 + 2.5) * 2.6;
+      Math.cos(wx * 0.0135 - wy * 0.0120 + 2.5) * 2.6;
 
     const miniHills = (smallHills + medHills + largeHills + rollingBase) * hillBlend;
 
@@ -1264,7 +1264,7 @@ export class Renderer3D {
       const mRatio = Math.min(1.0, (distFromCenter - maxTrackSpan) / 2800.0);
       const mBlend = mRatio * mRatio * (3 - 2 * mRatio);
       const mRidge = (Math.sin(x * 0.00050 + 1.8) * Math.cos(y * 0.00050 - 0.9) * 0.5 + 0.5) * 650.0
-                   + Math.sin(x * 0.0012 - 0.6) * 180.0;
+        + Math.sin(x * 0.0012 - 0.6) * 180.0;
       elevation += Math.max(0, mRidge) * mBlend;
     }
 
@@ -2367,9 +2367,9 @@ export class Renderer3D {
       // 4 Corner Verticals (Standards)
       const offsets = [
         { dx: -towerW * 0.5, dy: -towerD * 0.5 },
-        { dx:  towerW * 0.5, dy: -towerD * 0.5 },
-        { dx:  towerW * 0.5, dy:  towerD * 0.5 },
-        { dx: -towerW * 0.5, dy:  towerD * 0.5 },
+        { dx: towerW * 0.5, dy: -towerD * 0.5 },
+        { dx: towerW * 0.5, dy: towerD * 0.5 },
+        { dx: -towerW * 0.5, dy: towerD * 0.5 },
       ];
 
       const corners = offsets.map(o => {
@@ -2468,9 +2468,9 @@ export class Renderer3D {
     // 4 Long Continuous Chords across the full track width
     const chordOffsets = [
       { dy: -trussD * 0.5, z: trussZBottom }, // Bottom-Front
-      { dy:  trussD * 0.5, z: trussZBottom }, // Bottom-Back
+      { dy: trussD * 0.5, z: trussZBottom }, // Bottom-Back
       { dy: -trussD * 0.5, z: trussZTop },    // Top-Front
-      { dy:  trussD * 0.5, z: trussZTop },    // Top-Back
+      { dy: trussD * 0.5, z: trussZTop },    // Top-Back
     ];
 
     for (const co of chordOffsets) {
@@ -2490,9 +2490,9 @@ export class Renderer3D {
       const bayCenter = new THREE.Vector3().lerpVectors(innerCenter, outerCenter, frac);
 
       const pBF = bayCenter.clone().addScaledVector(longDir, -trussD * 0.5); pBF.z = trussZBottom;
-      const pBB = bayCenter.clone().addScaledVector(longDir,  trussD * 0.5); pBB.z = trussZBottom;
+      const pBB = bayCenter.clone().addScaledVector(longDir, trussD * 0.5); pBB.z = trussZBottom;
       const pTF = bayCenter.clone().addScaledVector(longDir, -trussD * 0.5); pTF.z = trussZTop;
-      const pTB = bayCenter.clone().addScaledVector(longDir,  trussD * 0.5); pTB.z = trussZTop;
+      const pTB = bayCenter.clone().addScaledVector(longDir, trussD * 0.5); pTB.z = trussZTop;
 
       // Vertical & transverse ring struts at bay divider
       addPipe(pBF, pTF, 0.15, scaffoldMat);
@@ -2511,9 +2511,9 @@ export class Renderer3D {
         const nextCenter = new THREE.Vector3().lerpVectors(innerCenter, outerCenter, nextFrac);
 
         const npBF = nextCenter.clone().addScaledVector(longDir, -trussD * 0.5); npBF.z = trussZBottom;
-        const npBB = nextCenter.clone().addScaledVector(longDir,  trussD * 0.5); npBB.z = trussZBottom;
+        const npBB = nextCenter.clone().addScaledVector(longDir, trussD * 0.5); npBB.z = trussZBottom;
         const npTF = nextCenter.clone().addScaledVector(longDir, -trussD * 0.5); npTF.z = trussZTop;
-        const npTB = nextCenter.clone().addScaledVector(longDir,  trussD * 0.5); npTB.z = trussZTop;
+        const npTB = nextCenter.clone().addScaledVector(longDir, trussD * 0.5); npTB.z = trussZTop;
 
         // Front Face X-Brace (facing oncoming cars)
         addPipe(pBF, npTF, 0.13, scaffoldMat);
@@ -4396,7 +4396,7 @@ export class Renderer3D {
 
     // Yaw 180Â° so the car's nose points forward along velocity vector +X
     carSubGroup.rotation.z = Math.PI;
-    
+
     group.add(carSubGroup);
     return group;
   }
@@ -4426,7 +4426,7 @@ export class Renderer3D {
       const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
       const colors = new Float32Array([0.1, 0.9, 0.3, 1.0, 0.2, 0.2]); // initial green to red
       geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-      
+
       const line = new THREE.Line(geo, rayMat);
       line.frustumCulled = false; // Essential: buffer positions mutate dynamically, preventing erroneous bounding-sphere culling
       line.renderOrder = 999;
@@ -5423,7 +5423,7 @@ export class Renderer3D {
           }
           if (instMat?.isMeshLambertMaterial) {
             const key = [instMat.color.getHex(), instMat.map?.uuid, instMat.transparent,
-              instMat.opacity, instMat.alphaTest, instMat.side].join('|');
+            instMat.opacity, instMat.alphaTest, instMat.side].join('|');
             if (!sharedMaterials.has(key)) sharedMaterials.set(key, instMat);
             instMat = sharedMaterials.get(key);
           }
@@ -6526,7 +6526,7 @@ export class Renderer3D {
     const camX = this.camera?.position?.x || 0;
     const camY = this.camera?.position?.y || 0;
     let added = false;
-        const SKID_THRESH = 0.12; // Clean grip driving leaves ZERO marks; only dynamic loss of grip triggers
+    const SKID_THRESH = 0.12; // Clean grip driving leaves ZERO marks; only dynamic loss of grip triggers
     const SMOKE_THRESH = 0.32; // Skid marks start at 0.12; smoke needs a clearly harder slide (heavy braking, wheelspin, real slip)
     const SMOKE_SPACING = 1.1; // world units between puffs: small enough that puffs overlap into one smooth plume
     const startHead = this.skidHead;
@@ -7420,8 +7420,10 @@ export class Renderer3D {
       }
       // A mounted view cannot hop between cars whenever quantized race progress
       // swaps P1/P2 during braking or a side-by-side corner. Keep the chassis.
-      actionPair = { carA: this._onboardCar,
-        carB: rankedCars.find(car => car !== this._onboardCar) || null };
+      actionPair = {
+        carA: this._onboardCar,
+        carB: rankedCars.find(car => car !== this._onboardCar) || null
+      };
     } else {
       this._onboardCar = null;
     }
@@ -7544,14 +7546,14 @@ export class Renderer3D {
       destTargetY = p1Y;
       destTargetZ = 2.5 + p1Elev;
       // High cinematic orbit perspective framing both cars
-      const orbitDist = Math.max(110.0, Math.min(230.0, 110.0 + p1p2Dist * 0.45));
-      const altitude = Math.max(48.0, Math.min(140.0, 48.0 + p1p2Dist * 0.35)) + battleElev;
+      const orbitDist = Math.max(80.0, Math.min(170.0, 80.0 + p1p2Dist * 0.38));
+      const altitude = Math.max(38.0, Math.min(105.0, 38.0 + p1p2Dist * 0.28)) + battleElev;
       destCamX = p1X + orbitDist * 0.8;
       destCamY = p1Y - orbitDist * 0.6;
       destCamZ = altitude;
-      targetFov = Math.max(42, Math.min(66, 42 + (p1p2Dist / 100.0) * 16));
-      camGlide = 0.035;
-      targetGlide = 0.040;
+      targetFov = Math.max(54, Math.min(74, 54 + (p1p2Dist / 90.0) * 16));
+      camGlide = 0.038;
+      targetGlide = 0.042;
     } else if (cameraPreset === 'action' && focusCar) {
       // ACTION FRONT CAM: Reverse camera floating AHEAD of P1, looking back at P1's nose & P2 behind
       this._actionAngle = followHeading('_actionAngle', refAngle);
@@ -7755,23 +7757,24 @@ export class Renderer3D {
         const sinA = Math.sin(this._chaseAngle);
 
         // Generous, breathable chase camera distance and elevated vantage point
-        const speedBonus = Math.min(18.0, (p1.speed || 0) * 0.12);
-        const distBehind = Math.max(68.0, Math.min(210.0, 66.0 + speedBonus + p1p2Dist * 0.45));
-        const heightAbove = Math.max(22.0, Math.min(56.0, 22.0 + speedBonus * 0.35 + p1p2Dist * 0.15));
+        const speedBonus = Math.min(14.0, (p1.speed || 0) * 0.08);
+        const distBehind = Math.max(45.0, Math.min(110.0, 45.0 + speedBonus + p1p2Dist * 0.25));
+        const heightAbove = Math.max(14.0, Math.min(35.0, 14.0 + speedBonus * 0.18 + p1p2Dist * 0.10));
         destCamX = this._chaseTargetX - cosA * distBehind;
         destCamY = this._chaseTargetY - sinA * distBehind;
         destCamZ = heightAbove + battleElev;
 
-        // Look-ahead framing: look ahead of P1 along travel direction so car is positioned in lower-center third of screen
-        const lookAhead = 14.0;
+        // Look-ahead framing: look ahead of P1 along travel direction
+        const lookAhead = 16.0;
         destTargetX = p1X + cosA * lookAhead;
         destTargetY = p1Y + sinA * lookAhead;
         destTargetZ = 2.4 + p1Elev;
 
-        // Wide, cinematic FOV: prevents claustrophobic framing and gives ample screen margins
-        targetFov = Math.max(54, Math.min(74, 54 + (p1p2Dist / 80.0) * 16));
-        camGlide = 0.030;
-        targetGlide = 0.035;
+        // Dynamic speed FOV: authentic F1 high-speed rush (68° up to 82° at top speed)
+        const speedNorm = Math.min(1.0, Math.max(0.0, ((p1.speed || 0) - 50) / 240));
+        targetFov = Math.min(82, 68 + speedNorm * 14 + Math.min(6, (p1p2Dist / 80.0) * 8));
+        camGlide = 0.038;
+        targetGlide = 0.042;
       }
     }
 
@@ -7884,10 +7887,10 @@ export class Renderer3D {
       // When switching to/from fixed TV Gantry or across large spatial offsets,
       // use direct Cartesian linear glide to prevent the camera from flying far outside the track.
       const isDirectMode = cameraPreset === 'broadcast' || this._lastActivePreset === 'broadcast' ||
-                           cameraPreset === 'orbit' || this._lastActivePreset === 'orbit' ||
-                           cameraPreset === 'action' || this._lastActivePreset === 'action' ||
-                           cameraPreset === 'action_rear' || this._lastActivePreset === 'action_rear' ||
-                           r0 > 75 || r1 > 75;
+        cameraPreset === 'orbit' || this._lastActivePreset === 'orbit' ||
+        cameraPreset === 'action' || this._lastActivePreset === 'action' ||
+        cameraPreset === 'action_rear' || this._lastActivePreset === 'action_rear' ||
+        r0 > 75 || r1 > 75;
 
       if (isDirectMode) {
         this._camTransition = {
@@ -8340,11 +8343,15 @@ export class Renderer3D {
       for (const car of rankedCars) debug.peakCorrection = Math.max(debug.peakCorrection, car.motionCorrection || 0);
       if (cameraNow - debug.since >= 1000) {
         const near = rankedCars.filter(car => car !== this.focusedCar && Math.hypot(car.x - p1X, -car.y - p1Y) < 180)
-          .map(car => ({ car: car.carNumber, idx: car.idx, speed: +car.speed.toFixed(1),
+          .map(car => ({
+            car: car.carNumber, idx: car.idx, speed: +car.speed.toFixed(1),
             correction: +(car.motionCorrection || 0).toFixed(2), steer: +car.steer.toFixed(2),
-            throttle: +car.throttle.toFixed(2), heading: +(car.headingDiff || 0).toFixed(2) }));
-        console.info('[MOTION] ' + JSON.stringify({ focus: this.focusedCar?.carNumber, idx: p1?.idx,
-          switches: debug.switches, correction: +debug.peakCorrection.toFixed(2), gap: +debug.worstFrame.toFixed(1), near }));
+            throttle: +car.throttle.toFixed(2), heading: +(car.headingDiff || 0).toFixed(2)
+          }));
+        console.info('[MOTION] ' + JSON.stringify({
+          focus: this.focusedCar?.carNumber, idx: p1?.idx,
+          switches: debug.switches, correction: +debug.peakCorrection.toFixed(2), gap: +debug.worstFrame.toFixed(1), near
+        }));
         debug.since = cameraNow; debug.switches = 0; debug.peakCorrection = 0; debug.worstFrame = 0;
       }
     }

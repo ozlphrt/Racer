@@ -1,5 +1,14 @@
 import { randn } from './math.js';
 
+function hasSameGenome(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 export function tournament(scored, k) {
   let best = null;
   for (let i = 0; i < k; i++) {
@@ -123,15 +132,15 @@ function mutateApexSlicer(genome, sigma) {
   const g = Float32Array.from(genome);
   const n = g.length;
   for (let i = 0; i < n; i++) {
-    if (Math.random() < 0.28) {
-      g[i] += randn() * sigma;
+    if (Math.random() < 0.20) {
+      g[i] += randn() * sigma * 0.5;
     }
   }
-  // Target steer output weights (penultimate output neuron)
+  // Target steer output weights (penultimate output neuron) with smooth, controlled adjustments
   const steerNeuronOffset = Math.max(0, n - 24);
   for (let i = steerNeuronOffset; i < n - 2; i++) {
-    if (Math.random() < 0.45) {
-      g[i] += (randn() * 1.2) * sigma;
+    if (Math.random() < 0.25) {
+      g[i] += (randn() * 0.35) * sigma;
     }
   }
   return g;
@@ -184,19 +193,25 @@ export function lookaheadWeightIndices(layers, from) {
  * and high-variance wildcard explorers break through plateaus.
  * @param {{genome: Float32Array, fitness: number, bestLap?: number, finished?: boolean}[]} scored
  */
-export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap, layers, lockedFrom }) {
-  const sorted = [...scored].sort((a, b) => Number(Boolean(b.finished)) - Number(Boolean(a.finished)) || b.fitness - a.fitness);
+export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap, layers, lockedFrom, allTimeBest, fastestLapChampion }) {
+  const isLapComplete = candidate => Boolean(candidate.finished || (candidate.laps >= 1) || (Number.isFinite(candidate.bestLap) && candidate.bestLap < Infinity));
+  const sorted = [...scored].sort((a, b) => {
+    const aLap = isLapComplete(a);
+    const bLap = isLapComplete(b);
+    return Number(Boolean(b.finished)) - Number(Boolean(a.finished)) || Number(bLap) - Number(aLap) || b.fitness - a.fitness;
+  });
   const finishers = sorted.filter(candidate => candidate.finished);
-  const parentPool = finishers.length ? finishers : sorted;
-  const completionRate = finishers.length / Math.max(1, scored.length);
+  const lapCompleters = sorted.filter(isLapComplete);
+  const parentPool = finishers.length ? finishers : (lapCompleters.length ? lapCompleters : sorted);
+  const completionRate = (finishers.length || lapCompleters.length) / Math.max(1, scored.length);
   const needsReliability = completionRate < 0.70;
   const next = [];
   const protectedGenomes = new Set();
 
-  // Staged learning: until some car finishes a race, the weights of the extra track-awareness
-  // inputs are inherited unchanged (zero at birth). Free mutation of those weights makes early
-  // networks steer on far-away corner signals and stops from-scratch training from ever finishing.
-  const lockIdx = finishers.length === 0 ? lookaheadWeightIndices(layers, lockedFrom) : [];
+  // Staged learning: until some car completes a lap or race, the weights of the extra track-awareness
+  // inputs are inherited unchanged (zero at birth). Unlocks as soon as any car proves it can complete a circuit lap.
+  const hasLapFinished = lapCompleters.length > 0;
+  const lockIdx = !hasLapFinished ? lookaheadWeightIndices(layers, lockedFrom) : [];
   const lock = (child, parent) => {
     for (let k = 0; k < lockIdx.length; k++) child[lockIdx[k]] = parent[lockIdx[k]];
     return child;
@@ -223,28 +238,39 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
 
     if (hasRecord) {
       const gapToRecord = currentGenLap - bestLapEver;
-      // If gap to record remains stagnant > 0.40s for an extended campaign
+      // If gap to record remains stagnant > 0.40s for an extended run
       if (gapToRecord > 0.40) {
         paceStagnantGenerationsCount++;
-        // Give 100 generations of exploitation before a brief 20-gen catalyst burst
-        if (!needsReliability && paceStagnantGenerationsCount >= 100 && burstGensRemaining === 0) {
-          triggerExplorationBurst(20);
-        }
       } else {
         paceStagnantGenerationsCount = Math.max(0, paceStagnantGenerationsCount - 3);
       }
     }
   }
 
-  const isBurstActive = burstGensRemaining > 0;
-  if (burstGensRemaining > 0) burstGensRemaining--;
+  // Automate exploration burst when training reaches a sustained plateau:
+  // - 40 consecutive generations without fitness or lap time progress
+  // - 40 consecutive generations stuck with > 0.40s deficit to track record
+  // - Zero-finisher deadlock for 35+ generations
+  // Condition: reliable completion must be established (> 70%) unless trapped in zero-finisher deadlock
+  const isZeroFinishStuck = finishers.length === 0 && stagnantGenerationsCount >= 35;
+  const isPlateauCondition = (!needsReliability || isZeroFinishStuck) && (stagnantGenerationsCount >= 40 || paceStagnantGenerationsCount >= 40 || isZeroFinishStuck);
 
-  // Multi-tier stagnation detection (prolonged 80+ gen plateau, sustained deficit, zero-finisher deadlock, or manual burst)
-  const isZeroFinishStuck = finishers.length === 0 && stagnantGenerationsCount >= 40;
-  const isPlateauing = ((!needsReliability || isZeroFinishStuck) && (stagnantGenerationsCount >= 80 || paceStagnantGenerationsCount >= 80 || isZeroFinishStuck)) || isBurstActive;
-  const burstMultiplier = isBurstActive ? 1.4 : (needsReliability && finishers.length ? 0.75 : (isPlateauing ? 1.25 : 1.0));
+  if (isPlateauCondition && burstGensRemaining === 0) {
+    triggerExplorationBurst(6); // 6 generations of targeted exploration catalyst
+  }
+
+  const isBurstActive = burstGensRemaining > 0;
+  if (burstGensRemaining > 0) {
+    burstGensRemaining--;
+    // Keep stagnation counters reset during the burst to give full exploitation window after burst ends
+    stagnantGenerationsCount = 0;
+    paceStagnantGenerationsCount = 0;
+  }
+
+  const isPlateauing = isPlateauCondition || isBurstActive;
+  const burstMultiplier = isBurstActive ? 1.25 : (needsReliability && finishers.length ? 0.75 : (isPlateauing ? 1.15 : 1.0));
   const effectiveSigma = mutationSigma * burstMultiplier;
-  const effectiveRate = Math.min(0.28, mutationRate * burstMultiplier);
+  const effectiveRate = Math.min(0.25, mutationRate * burstMultiplier);
 
   // 1. Preserve reliable finishers first, ranked by fitness within each group.
   const eliteCount = Math.max(1, elites !== undefined ? elites : 2);
@@ -260,46 +286,62 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
 
   if (validLapCars.length > 0 && next.length < population) {
     const fastestLapCar = validLapCars[0];
-    const alreadyIncluded = protectedGenomes.has(fastestLapCar.genome);
+    const alreadyIncluded = next.some(g => hasSameGenome(g, fastestLapCar.genome));
     if (!alreadyIncluded) {
       next.push(Float32Array.from(fastestLapCar.genome));
+      protectedGenomes.add(fastestLapCar.genome);
     }
   }
 
-  // 3. Stagnation Breaker: Inject targeted Wildcard Explorers when truly plateauing
+  // 3. Hall-of-Fame Immortal Champions (guarantees the proven record racing line is NEVER lost)
+  // Only inject if not already present in this generation's elites.
+  if (allTimeBest && allTimeBest.genome && next.length < population) {
+    if (!next.some(g => hasSameGenome(g, allTimeBest.genome))) {
+      next.push(Float32Array.from(allTimeBest.genome));
+      protectedGenomes.add(allTimeBest.genome);
+    }
+  }
+  if (fastestLapChampion && fastestLapChampion.genome && next.length < population) {
+    if (!next.some(g => hasSameGenome(g, fastestLapChampion.genome))) {
+      next.push(Float32Array.from(fastestLapChampion.genome));
+      protectedGenomes.add(fastestLapChampion.genome);
+    }
+  }
+
+  // 4. Stagnation Breaker: Inject targeted Wildcard Explorers when plateauing
   if ((isPlateauing || isBurstActive) && next.length < population) {
     const hotParent = finishers[0] || validLapCars[0] || sorted[0];
     if (hotParent) {
       // Wildcard 1: Late Braker (delays braking on entry, earlier on gas)
-      next.push(lock(mutateLateBraker(hotParent.genome, effectiveSigma * 1.25), hotParent.genome));
+      next.push(lock(mutateLateBraker(hotParent.genome, effectiveSigma * 1.15), hotParent.genome));
 
-      // Wildcard 2: Apex Slicer (tighter kerb clipping & apex entry)
+      // Wildcard 2: Apex Slicer (smooth kerb entry)
       if (next.length < population) {
-        next.push(lock(mutateApexSlicer(hotParent.genome, effectiveSigma * 1.35), hotParent.genome));
+        next.push(lock(mutateApexSlicer(hotParent.genome, effectiveSigma * 1.15), hotParent.genome));
       }
 
-      // Wildcard 3: Apex Hunter (high momentum carrier)
+      // Wildcard 3: Apex Hunter (momentum carrier)
       if (next.length < population) {
-        next.push(lock(mutateApexHunter(hotParent.genome, effectiveSigma * 1.45), hotParent.genome));
+        next.push(lock(mutateApexHunter(hotParent.genome, effectiveSigma * 1.20), hotParent.genome));
       }
     }
   }
 
-  // 4. Standard dynamic explorers (8-18% of population)
-  const explorerPct = isBurstActive ? 0.18 : (isPlateauing ? 0.14 : 0.08);
+  // 5. Standard dynamic explorers (8-16% of population)
+  const explorerPct = isBurstActive ? 0.16 : (isPlateauing ? 0.12 : 0.08);
   const explorers = Math.max(1, Math.floor(population * explorerPct));
   for (let i = 0; i < explorers && next.length < population; i++) {
     const parent = parentPool[(Math.random() * Math.min(8, parentPool.length)) | 0];
-    const expSigma = isBurstActive ? effectiveSigma * 1.4 : (isPlateauing ? effectiveSigma * 1.25 : effectiveSigma * 1.15);
-    const expRate = isBurstActive ? 0.22 : 0.16;
+    const expSigma = isBurstActive ? effectiveSigma * 1.25 : (isPlateauing ? effectiveSigma * 1.15 : effectiveSigma * 1.10);
+    const expRate = isBurstActive ? 0.20 : 0.15;
     next.push(lock(mutate(Float32Array.from(parent.genome), expRate, expSigma), parent.genome));
   }
 
-  // Preserve most proven policies with small local changes. Mixing independently
-  // trained hidden neurons and mutating dozens of weights at full strength can
-  // destroy launch control even when both parents completed the race.
-  // Keep the existing explorers and the remaining crossover lane for new pace.
-  const localOffspring = finishers.length && !isBurstActive ? Math.floor(population * 0.60) : 0;
+  // 6. Preserve most proven policies with small local changes.
+  // CRITICAL: Even during a burst, preserve 45% of the population as slightly mutated clones of proven finishers!
+  // This guarantees the population NEVER loses the learned racing line.
+  const localRatio = isBurstActive ? 0.45 : 0.60;
+  const localOffspring = finishers.length ? Math.floor(population * localRatio) : 0;
   for (let i = 0; i < localOffspring && next.length < population; i++) {
     const parent = tournament(finishers, tournamentK);
     next.push(mutate(Float32Array.from(parent.genome), effectiveRate * 0.35, effectiveSigma * 0.15));

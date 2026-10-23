@@ -13,19 +13,19 @@ export const CONFIG = {
   car: {
     length: 26,
     width: 13,
-    accel: 345, // High-performance F1 acceleration (units/s²)
-    brake: 640, // Deeper, more responsive braking
-    drag: 0.23, // Aerodynamic drag
-    maxSpeed: 435, // Realistic modern F1 top speed ceiling (~340 km/h with 0.78 scale)
-    turnRate: 3.8, // Agile apex steering
+    accel: 480, // High-performance modern 1000hp hybrid F1 acceleration (units/s²)
+    brake: 720, // Deeper, more responsive braking
+    drag: 0.16, // Aerodynamic drag
+    maxSpeed: 480, // Realistic modern F1 top speed ceiling (~375 km/h with 0.78 scale)
+    turnRate: 3.9, // Agile apex steering
     minTurnSpeed: 45, // Steering response onset
-    highSpeedTurnLoss: 0.32,
-    tireGrip: 6.8, // Calibrated lateral tire grip: authentic progressive slip and drift dynamics (down from 8.2)
-    understeerFactor: 0.0035, // High-speed front tire scrub on aggressive corner entry
-    oversteerFactor: 0.32, // Power oversteer and throttle-steer rotation on corner exit
-    yawResponseSec: 0.12, // Chassis yaw-rate response time: rotation builds up with inertia instead of snapping
-    latGripBase: 120, // Peak lateral acceleration at standstill (units/s², ~57 units/s² per g)
-    latGripPerSpeed: 0.6, // Extra lateral acceleration per unit speed from aerodynamic downforce
+    highSpeedTurnLoss: 0.28,
+    tireGrip: 8.8, // Balanced F1 slick grip: authentic slip angle, visible skidmarks, and progressive rotation (not glued on rails)
+    understeerFactor: 0.0028, // Front tire scrub under heavy cornering
+    oversteerFactor: 0.18, // Dynamic throttle-steer rotation on corner exit
+    yawResponseSec: 0.035, // Crisp chassis response (eliminates 120ms phase lag wagging)
+    latGripBase: 165, // Balanced mechanical cornering grip
+    latGripPerSpeed: 1.10, // Progressive aero downforce that builds with speed
   },
 
   collision: {
@@ -39,7 +39,8 @@ export const CONFIG = {
 
   sensors: {
     angles: [-90, -60, -30, 0, 30, 60, 90], // degrees relative to heading (negative = left)
-    length: 240,
+    length: 420, // Extended forward vision: allows early high-speed corner anticipation and braking
+    lookaheadDistances: [120, 260, 480], // Extended horizons: early corner entry, apex transition, and multi-apex chicane exit
   },
 
   // 7 rays + speed (base) + lateral pos + 3 curvature lookaheads (staged: frozen at zero until a car finishes) → steer, throttle
@@ -54,7 +55,7 @@ export const CONFIG = {
   },
 
   generation: {
-    timeLimit: 110, // sim seconds: 22 seconds per lap for a five-lap race
+    timeLimit: 180, // sim seconds: generous time for learning cars (~36s per lap for a five-lap race)
     startDelay: 2.0, // seconds for F1 starting lights sequence (red -> green launch)
     maxLaps: 5, // a car "finishes" after this many laps
     finishWindow: 15, // seconds for healthy trailing cars after the first finisher
@@ -67,5 +68,8 @@ export const CONFIG = {
     speedPaceWeight: 40, // Weight for average speed (distance / time): rewards fast laps and race completion
     crashPenalty: 500, // Penalty for hitting outer barrier / deep off-track
     contactPenalty: 50, // Penalty per vehicle contact when collisions are active
+    steerSmoothWeight: 12, // Penalty weight for steering jerk / erratic lock-to-lock switching
+    scrubWeight: 20, // Penalty weight for excessive lateral tire scrub / mid-corner power slide
+    lookaheadLineBonus: 25, // Bonus for positioning on the outside before corner entry (anticipating upcoming curvature)
   },
 };

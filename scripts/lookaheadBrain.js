@@ -5,6 +5,9 @@ import { clamp } from '../js/math.js';
 
 export const LOOKAHEAD_LAYERS = [12, 12, 8, 2];
 export function upgradeGenome(genome) {
+  if (genome.length === NeuralNetwork.genomeSize(LOOKAHEAD_LAYERS) && Array.from(genome).every(Number.isFinite)) {
+    return Float32Array.from(genome);
+  }
   if (genome.length !== NeuralNetwork.genomeSize([8, 12, 8, 2]) || !Array.from(genome).every(Number.isFinite)) {
     throw new Error('Expected a finite 8-12-8-2 genome.');
   }

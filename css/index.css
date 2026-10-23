@@ -418,6 +418,53 @@ h1 {
   box-shadow: 0 0 6px rgba(56, 189, 248, 0.45);
 }
 
+/* ===== Top-Right Automated Exploration Burst Pill ===== */
+.burst-active-pill {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 14px));
+  right: calc(max(16px, env(safe-area-inset-right, 16px)) + 84px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: rgba(22, 16, 42, 0.92);
+  border: 1px solid rgba(250, 204, 21, 0.6);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 14px rgba(250, 204, 21, 0.35);
+  color: #facc15;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  z-index: 32;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: burstPulseGlow 2s infinite ease-in-out;
+}
+
+.burst-active-pill.hidden {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.92);
+  pointer-events: none;
+}
+
+.burst-flame-icon {
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+@keyframes burstPulseGlow {
+  0%, 100% {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 10px rgba(250, 204, 21, 0.25);
+  }
+  50% {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 18px rgba(245, 158, 11, 0.55);
+  }
+}
+
 /* ===== Compact Top-Right Ghost Mode Circle Badge ===== */
 .ghost-timer-pill {
   position: absolute;
