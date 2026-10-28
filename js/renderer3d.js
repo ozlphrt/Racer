@@ -224,161 +224,23 @@ export class Renderer3D {
       return this._terrainDetailMaps;
     }
 
-    const size = 512;
-
-    const dCanvas = document.createElement('canvas');
-    dCanvas.width = size;
-    dCanvas.height = size;
-    const dCtx = dCanvas.getContext('2d');
-    const dImg = dCtx.createImageData(size, size);
-    const dData = dImg.data;
-
-    const nCanvas = document.createElement('canvas');
-    nCanvas.width = size;
-    nCanvas.height = size;
-    const nCtx = nCanvas.getContext('2d');
-    const nImg = nCtx.createImageData(size, size);
-    const nData = nImg.data;
-
-    const rCanvas = document.createElement('canvas');
-    rCanvas.width = size;
-    rCanvas.height = size;
-    const rCtx = rCanvas.getContext('2d');
-    const rImg = rCtx.createImageData(size, size);
-    const rData = rImg.data;
-
-    // High-performance integer hashing for non-repeating stochastic lattice
-    function hash2D(i, j, seed) {
-      let n = (Math.imul(i + 137, 374761393) + Math.imul(j + 283, 668265263) + Math.imul(seed + 541, 1013904223)) | 0;
-      n = Math.imul(n ^ (n >>> 13), 1274126177);
-      return ((n ^ (n >>> 16)) >>> 0) / 4294967296.0;
-    }
-
-    // Seamless continuous periodic Value Noise on torus [0, 1) x [0, 1)
-    function periodicNoise(u, v, freq, seed) {
-      const px = u * freq;
-      const py = v * freq;
-      const x0 = Math.floor(px);
-      const y0 = Math.floor(py);
-      const fx = px - x0;
-      const fy = py - y0;
-      // Quintic smootherstep curve: 6t^5 - 15t^4 + 10t^3
-      const sx = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
-      const sy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
-      const i0 = ((x0 % freq) + freq) % freq;
-      const j0 = ((y0 % freq) + freq) % freq;
-      const i1 = (i0 + 1) % freq;
-      const j1 = (j0 + 1) % freq;
-      const v00 = hash2D(i0, j0, seed);
-      const v10 = hash2D(i1, j0, seed);
-      const v01 = hash2D(i0, j1, seed);
-      const v11 = hash2D(i1, j1, seed);
-      const vx0 = v00 + sx * (v10 - v00);
-      const vx1 = v01 + sx * (v11 - v01);
-      return vx0 + sy * (vx1 - vx0);
-    }
-
-    // Micro-scale turf grain frequencies for seamless isotropic surface detail (no macro periodic spots)
-    const octaves = [
-      { freq: 16, weight: 0.38 },
-      { freq: 32, weight: 0.30 },
-      { freq: 64, weight: 0.20 },
-      { freq: 128, weight: 0.12 },
-    ];
-
-    const heights = new Float32Array(size * size);
-
-    // Compute seamless fine organic micro-surface
-    for (let y = 0; y < size; y++) {
-      const v = y / size;
-      for (let x = 0; x < size; x++) {
-        const u = x / size;
-
-        // Continuous organic multi-frequency domain warp for completely irregular, non-geometric micro-bumps
-        const warpU = (periodicNoise(u, v, 8, 101) - 0.5) * 0.10 + (periodicNoise(u, v, 16, 303) - 0.5) * 0.05;
-        const warpV = (periodicNoise(u, v, 8, 203) - 0.5) * 0.10 + (periodicNoise(u, v, 16, 404) - 0.5) * 0.05;
-        const wu = ((u + warpU) % 1.0 + 1.0) % 1.0;
-        const wv = ((v + warpV) % 1.0 + 1.0) % 1.0;
-
-        let sum = 0;
-        for (let o = 0; o < octaves.length; o++) {
-          const { freq, weight } = octaves[o];
-          sum += periodicNoise(wu, wv, freq, o * 19 + 7) * weight;
-        }
-        heights[y * size + x] = sum;
-      }
-    }
-
-    // Generate balanced, seamless diffuse albedo, normal, and roughness
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const idx = (y * size + x) * 4;
-        const h = heights[y * size + x];
-
-        const x0 = (x - 1 + size) % size;
-        const x1 = (x + 1) % size;
-        const y0 = (y - 1 + size) % size;
-        const y1 = (y + 1) % size;
-
-        const hL = heights[y * size + x0];
-        const hR = heights[y * size + x1];
-        const hU = heights[y0 * size + x];
-        const hD = heights[y1 * size + x];
-
-        // Natural pronounced micro-bump normal relief (completely irregular, organic clumps and sod)
-        const dx = (hR - hL) * 3.0;
-        const dy = (hD - hU) * 3.0;
-        const dz = 1.0;
-        const len = Math.hypot(dx, dy, dz) || 1;
-
-        nData[idx] = ((-dx / len) * 0.5 + 0.5) * 255;
-        nData[idx + 1] = ((-dy / len) * 0.5 + 0.5) * 255;
-        nData[idx + 2] = ((dz / len) * 0.5 + 0.5) * 255;
-        nData[idx + 3] = 255;
-
-        // Fine blade fiber grain: smooth, subtle, and uniform (NO dark circles or speckles)
-        const bladeNoise = (hash2D(x, y, 777) - 0.5) * 14;
-        const bladeRelief = (h - 0.5) * 24;
-
-        // Darker, desaturated organic turf base with gentle blade variation
-        const rOut = Math.min(255, Math.max(0, Math.round(92 + bladeRelief * 0.7 + bladeNoise * 0.5)));
-        const gOut = Math.min(255, Math.max(0, Math.round(118 + bladeRelief * 0.8 + bladeNoise * 0.6)));
-        const bOut = Math.min(255, Math.max(0, Math.round(74 + bladeRelief * 0.5 + bladeNoise * 0.4)));
-
-        dData[idx] = rOut;
-        dData[idx + 1] = gOut;
-        dData[idx + 2] = bOut;
-        dData[idx + 3] = 255;
-
-        // Realistic matte turf roughness (0.84 - 0.90)
-        const rough = Math.floor(218 + (0.5 - h) * 24);
-        rData[idx] = Math.min(255, Math.max(0, rough));
-        rData[idx + 1] = rData[idx];
-        rData[idx + 2] = rData[idx];
-        rData[idx + 3] = 255;
-      }
-    }
-
-    dCtx.putImageData(dImg, 0, 0);
-    nCtx.putImageData(nImg, 0, 0);
-    rCtx.putImageData(rImg, 0, 0);
-
     const maxAniso = (this.renderer && this.renderer.capabilities) ? this.renderer.capabilities.getMaxAnisotropy() : 8;
+    const repeatCount = 220;
 
-    // High repeat count for fine, seamless micro-detail across the landscape
-    const diffuseMap = new THREE.CanvasTexture(dCanvas);
+    const loader = new THREE.TextureLoader();
+    const diffuseMap = loader.load('./textures/terrain-grass.jpg', (tex) => {
+      tex.needsUpdate = true;
+      if (this.terrainMesh && this.terrainMesh.material) {
+        this.terrainMesh.material.needsUpdate = true;
+      }
+    });
+    diffuseMap.colorSpace = THREE.SRGBColorSpace;
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
-    diffuseMap.repeat.set(120, 120);
+    diffuseMap.repeat.set(repeatCount, repeatCount);
     diffuseMap.generateMipmaps = true;
-    diffuseMap.anisotropy = Math.min(maxAniso, 4);
+    diffuseMap.anisotropy = Math.min(maxAniso, 8);
 
-    const normalMap = new THREE.CanvasTexture(nCanvas);
-    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
-    normalMap.repeat.set(120, 120);
-    normalMap.generateMipmaps = true;
-    normalMap.anisotropy = Math.min(maxAniso, 2);
-
-    this._terrainDetailMaps = { diffuseMap, normalMap };
+    this._terrainDetailMaps = { diffuseMap, normalMap: null };
     return this._terrainDetailMaps;
   }
 
@@ -1038,100 +900,32 @@ export class Renderer3D {
         g = 0.27 + aNorm * 0.06 + mesoPatch * 0.05 + microNoise2;
         b = 0.19 + aNorm * 0.07 + mesoPatch * 0.05;
       } else {
-        // Lowland & Rolling Pasture: Organic landscape with irregularly darker, less saturated greens
-        const hLow = Math.min(1.0, h / 120.0);
-
-        // Knoll sun-facing highlight
+        // Lowland & Rolling Pasture: Neutral daylight modulation so the grass tile texture shows its true colors
+        const hLow = Math.min(1.0, Math.max(0.0, h / 120.0));
         const knollSun = Math.max(0, Math.sin(rx2 * 0.022 + 1.2) * Math.cos(ry1 * 0.019));
-
-        if (mesoPatch > 0.18) {
-          // Biome: Warm Earthy Loam, Terracotta Clay & Exposed Silt
-          r = 0.48 + hLow * 0.04 + mesoPatch * 0.12 + microNoise1;
-          g = 0.30 + hLow * 0.03 + mesoPatch * 0.06 + microNoise2 * 0.6;
-          b = 0.18 + hLow * 0.02 + mesoPatch * 0.04;
-        } else if (macroBiome > 0.18) {
-          // Biome: Deep Moss, Conifer & Forest Swales (irregularly darker and muted)
-          const gLvl = 0.20 + (greenVariance + 1.0) * 0.04; // 0.20 - 0.28 (dark forest greens)
-          const rLvl = 0.13 + (greenVariance + 1.0) * 0.02;
-          r = rLvl + hLow * 0.03 + mesoPatch * 0.04 + microNoise1 * 0.5;
-          g = gLvl + hLow * 0.03 + mesoPatch * 0.05 + microNoise2;
-          b = 0.12 + hLow * 0.02 + mesoPatch * 0.03;
-        } else if (macroBiome < -0.18) {
-          // Biome: Sun-Drenched Golden Prairie & Amber Fescue Grass
-          r = 0.48 + hLow * 0.05 + mesoPatch * 0.07 + microNoise1 + knollSun * 0.06;
-          g = 0.42 + hLow * 0.04 + mesoPatch * 0.06 + microNoise2 + knollSun * 0.04;
-          b = 0.19 + hLow * 0.03 + mesoPatch * 0.03;
-        } else if (mesoPatch < -0.16) {
-          // Biome: Highland Moorland with Heather Lilac & Slate Purple Tones
-          r = 0.34 + hLow * 0.03 + mesoPatch * 0.05 + microNoise1;
-          g = 0.29 + hLow * 0.03 + mesoPatch * 0.04 + microNoise2 * 0.7;
-          b = 0.42 + hLow * 0.04 + mesoPatch * 0.06 + microJitter;
-        } else {
-          // Biome: Grounded Pasture Meadow (irregularly darker, earthy, less saturated)
-          const gLvl = 0.22 + (greenVariance + 1.0) * 0.045; // 0.22 - 0.31 (much darker than earlier 0.42)
-          const rLvl = 0.16 + (greenVariance + 1.0) * 0.025;
-          r = rLvl + hLow * 0.03 + mesoPatch * 0.05 + microNoise1 + knollSun * 0.03;
-          g = gLvl + hLow * 0.03 + mesoPatch * 0.05 + microNoise2 + knollSun * 0.03;
-          b = 0.13 + hLow * 0.02 + mesoPatch * 0.03;
-        }
-
-        // Distinct organic wildflower bloom flecks (gentle natural hues)
-        if (bloomField1 > 0.58 && h < 75) {
-          // Golden Buttercups and Yellow Marigolds
-          const s = (bloomField1 - 0.58) / 0.42;
-          r += 0.13 * s;
-          g += 0.09 * s;
-          b -= 0.03 * s;
-        } else if (bloomField2 > 0.64 && h > 20 && h < 95) {
-          // Heather & Wild Clover Blossom (Lilac/Rose)
-          const s = (bloomField2 - 0.64) / 0.36;
-          r += 0.11 * s;
-          g += 0.03 * s;
-          b += 0.11 * s;
-        }
+        const shade = 0.88 + hLow * 0.06 + macroBiome * 0.06 + mesoPatch * 0.05 + knollSun * 0.05;
+        r = shade + microNoise1 * 0.25;
+        g = shade + microNoise2 * 0.25;
+        b = shade + microJitter * 0.20;
       }
 
-      // 1. Calculate perceived luminance (Rec. 709)
-      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-      // 2. Reduce saturation: specifically make greens darker and less saturated, applied IRREGULARLY across the world
-      let satFactor = 0.65;
-      if (g > r && g > b) {
-        // Green surface: apply irregular non-uniform desaturation
-        // Areas with lower greenVariance drop down to ~0.38 - 0.44 (deep desaturated moss/peat)
-        // Areas with higher greenVariance sit around ~0.52 - 0.58
-        satFactor = 0.48 + greenVariance * 0.12;
-      }
-      if (satNoise < -0.10) {
-        // Dedicated desaturated coloration spots (faded, dusty, dry earth patches)
-        const t = Math.min(1.0, (-0.10 - satNoise) / 0.65);
-        satFactor -= t * 0.18;
-      }
-      satFactor = Math.max(0.28, Math.min(0.78, satFactor));
-
-      r = lum + (r - lum) * satFactor;
-      g = lum + (g - lum) * satFactor;
-      b = lum + (b - lum) * satFactor;
-
-      // 3. Reduce luminance separately: targeted low-luminance spots
-      let lumFactor = 1.0; // Baseline retains natural brightness
+      // Subtle luminance variation across ridges and swales
+      let lumFactor = 1.0;
       if (lumNoise < -0.15) {
-        // Subtle natural earth tone variation (never harsh dark spots)
         const t = Math.min(1.0, (-0.15 - lumNoise) / 0.65);
-        lumFactor = 1.0 - t * 0.16;
+        lumFactor = 1.0 - t * 0.12;
       } else if (lumNoise > 0.40) {
-        // Sunlit clearing/ridge highlight
         const t = Math.min(1.0, (lumNoise - 0.40) / 0.60);
-        lumFactor = 1.0 + t * 0.15;
+        lumFactor = 1.0 + t * 0.10;
       }
 
       r *= lumFactor;
       g *= lumFactor;
       b *= lumFactor;
 
-      colors[i * 3] = Math.max(0.04, Math.min(0.98, r));
-      colors[i * 3 + 1] = Math.max(0.04, Math.min(0.98, g));
-      colors[i * 3 + 2] = Math.max(0.04, Math.min(0.98, b));
+      colors[i * 3] = Math.max(0.04, Math.min(1.0, r));
+      colors[i * 3 + 1] = Math.max(0.04, Math.min(1.0, g));
+      colors[i * 3 + 2] = Math.max(0.04, Math.min(1.0, b));
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -1145,7 +939,7 @@ export class Renderer3D {
       shininess: 0,       // No specular glossiness or glare
       reflectivity: 0,    // No environment reflections
       normalMap: normalMap,
-      normalScale: new THREE.Vector2(1.5, 1.5),
+      normalScale: new THREE.Vector2(0.75, 0.75),
       flatShading: false,
     });
 
