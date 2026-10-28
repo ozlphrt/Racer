@@ -593,15 +593,15 @@ export class Renderer3D {
       return -0.14 * (1.0 - tNorm * tNorm * (3.0 - 2.0 * tNorm));
     }
 
-    // 3. Wide flat verge apron (220m margin outside track edge, ~262m from centerline)
+    // 3. Flat verge apron immediately outside track edge (~100m from centerline)
     // Guarantees all triangles crossing or bordering the track are flush at 0.00m (under asphalt Z=0.12m)
-    const flatRadius = trackHalf + 220.0;
+    const flatRadius = trackHalf + 58.0;
     if (distToTrack <= flatRadius) {
       return 0.0;
     }
 
-    // Smooth cubic ease-in from verge into rolling mini hills and mini bumps
-    const hillEaseDist = 80.0;
+    // Smooth cubic ease-in from verge into rolling mini hills, random hummocks, and micro bumps
+    const hillEaseDist = 55.0;
     const hillRatio = Math.min(1.0, (distToTrack - flatRadius) / hillEaseDist);
     const hillBlend = hillRatio * hillRatio * (3.0 - 2.0 * hillRatio);
 
@@ -616,23 +616,26 @@ export class Renderer3D {
     const wx = x + warpX;
     const wy = y + warpY;
 
+    // Irregular spatial clumping factor so bumps appear in random natural clusters rather than a uniform grid
+    const bumpCluster = 0.45 + 0.85 * Math.max(0, Math.sin(rx1 * 0.0055 + 0.4) * Math.cos(ry2 * 0.0063 - 1.2) + 0.25);
+
     // 4. Random Mini Hills Sized ~10 to 75 Cars (~50m to ~375m diameter):
     // Formula 1 car length is ~5m.
-    // Category A: 10-20 Car-Sized Mini Mounds (~50m - 100m diameter, 2.5m - 4.5m height)
+    // Category A: 10-20 Car-Sized Mini Mounds (~50m - 100m diameter, 2.5m - 5.5m height)
     const kS1 = Math.sin(wx * 0.068 + wy * 0.052 + 1.3);
     const kS2 = Math.cos(wx * -0.058 + wy * 0.064 + 2.7);
     const kS3 = Math.sin(wx * 0.082 - wy * 0.045 + 0.6);
-    const smallHills = (Math.pow(Math.max(0, kS1), 2.2) * 3.8 +
-      Math.pow(Math.max(0, kS2), 2.2) * 3.2 +
-      Math.pow(Math.max(0, kS3), 2.4) * 2.8);
+    const smallHills = (Math.pow(Math.max(0, kS1), 2.1) * 4.4 +
+      Math.pow(Math.max(0, kS2), 2.1) * 3.8 +
+      Math.pow(Math.max(0, kS3), 2.3) * 3.4) * bumpCluster;
 
-    // Category B: 25-45 Car-Sized Medium Knolls (~125m - 225m diameter, 4.5m - 8.0m height)
+    // Category B: 25-45 Car-Sized Medium Knolls (~125m - 225m diameter, 4.5m - 8.5m height)
     const kM1 = Math.sin(wx * 0.032 - wy * 0.026 + 0.9);
     const kM2 = Math.cos(wx * 0.024 + wy * 0.031 + 2.2);
     const kM3 = Math.sin(wx * -0.038 - wy * 0.019 + 1.5);
-    const medHills = (Math.pow(Math.max(0, kM1), 1.9) * 5.8 +
-      Math.pow(Math.max(0, kM2), 1.9) * 5.2 +
-      Math.pow(Math.max(0, kM3), 2.0) * 4.4);
+    const medHills = (Math.pow(Math.max(0, kM1), 1.9) * 6.2 +
+      Math.pow(Math.max(0, kM2), 1.9) * 5.6 +
+      Math.pow(Math.max(0, kM3), 2.0) * 4.8);
 
     // Category C: 50-75 Car-Sized Large Mini Hills (~250m - 375m diameter, 7.0m - 12.0m height)
     const kL1 = Math.sin(wx * 0.016 + wy * 0.013 + 1.8);
@@ -646,11 +649,12 @@ export class Renderer3D {
 
     const miniHills = (smallHills + medHills + largeHills + rollingBase) * hillBlend;
 
-    // 5. Tactile Mini Bumps & Peat Hummocks (wavelength ~55m - 130m, height 0.8m - 2.0m)
-    const b1 = Math.sin(wx * 0.045 - wy * 0.038 + 0.8) * 1.05;
-    const b2 = Math.cos(wx * 0.072 + wy * 0.065 + 1.9) * 0.65;
-    const b3 = (Math.abs(Math.sin(wx * 0.034 + 0.5) * Math.cos(wy * 0.031 - 0.4)) - 0.35) * 1.1;
-    const miniBumps = (b1 + b2 + b3) * hillBlend;
+    // 5. Tactile Micro & Random Bumps / Peat Hummocks (wavelength ~25m - 110m, height 1.2m - 3.8m)
+    const b1 = Math.sin(wx * 0.045 - wy * 0.038 + 0.8) * 1.45;
+    const b2 = Math.cos(wx * 0.072 + wy * 0.065 + 1.9) * 1.10;
+    const b3 = (Math.abs(Math.sin(wx * 0.034 + 0.5) * Math.cos(wy * 0.031 - 0.4)) - 0.30) * 1.85;
+    const b4 = Math.pow(Math.max(0, Math.sin(rx1 * 0.115 - ry2 * 0.095 + 2.1) * Math.cos(rx2 * 0.105 + ry1 * 0.125 - 0.7)), 1.6) * 2.9 * bumpCluster;
+    const miniBumps = (b1 + b2 + b3 + b4) * hillBlend;
 
     // 6. Regional Macro Topography (wavelength 700m - 2200m, height 18m - 65m)
     const macroFlatRadius = trackHalf + 110.0;
@@ -742,7 +746,7 @@ export class Renderer3D {
     }
     const pos = this.terrainMesh.geometry.attributes.position.array;
     const w = 24000;
-    const segs = 160;
+    const segs = 240;
     const gridX1 = segs + 1;
     const seg = w / segs;
 
@@ -781,7 +785,7 @@ export class Renderer3D {
     }
 
     const w = 24000;
-    const segs = 160;
+    const segs = 240;
     const geo = new THREE.PlaneGeometry(w, w, segs, segs);
     const pos = geo.attributes.position.array;
     const count = geo.attributes.position.count;
@@ -809,7 +813,7 @@ export class Renderer3D {
         const minD = Math.min(dists[iA], dists[iB], dists[iC]);
 
         // 1. Roadbed clearance
-        if (minD <= trackHalfDist + 240.0) {
+        if (minD <= trackHalfDist + 105.0) {
           if (pos[iA * 3 + 2] > 0.0) pos[iA * 3 + 2] = 0.0;
           if (pos[iB * 3 + 2] > 0.0) pos[iB * 3 + 2] = 0.0;
           if (pos[iC * 3 + 2] > 0.0) pos[iC * 3 + 2] = 0.0;
@@ -1151,6 +1155,24 @@ export class Renderer3D {
             c2.rgb = mix(vec3(l2), c2.rgb, mix(0.38, 0.86, fract(h2.x * 7.13)));
 
             return c0 * w.x + c1 * w.y + c2 * w.z;
+          }
+
+          // Multi-scale micro & random surface bump heightfield (sod tufts, soil clods, and random earth hummocks)
+          float terrainBumpRelief(vec2 p) {
+            // Irregular clumping mask so some patches are rough & bumpy while others are gentler
+            float bumpMask = 0.30 + 0.95 * smoothstep(0.18, 0.82, terrainFbm(p * 0.0045 + vec2(19.4, 73.1)));
+
+            // Micro sod clumps & turf tufts (~1.2m - 4m)
+            float micro = (terrainValueNoise(p * 0.55 + vec2(4.1, 8.7)) - 0.5) * 0.38
+                        + (terrainValueNoise(p * 0.20 + vec2(17.3, 29.1)) - 0.5) * 0.65;
+
+            // Random small earth bumps & hollows (~8m - 26m)
+            float smallBump = (terrainFbm(p * 0.048 + vec2(31.7, 11.2)) - 0.48) * 1.85;
+
+            // Irregular medium hummocks (~30m - 75m)
+            float medMound = pow(max(0.0, terrainFbm(p * 0.015 + vec2(53.1, 89.4)) - 0.34), 1.5) * 3.6;
+
+            return (micro + smallBump) * bumpMask + medMound;
           }`
         )
         .replace(
@@ -1223,6 +1245,20 @@ export class Renderer3D {
 
             diffuseColor *= sampledDiffuseColor;
           #endif`
+        )
+        .replace(
+          '#include <normal_fragment_maps>',
+          `#include <normal_fragment_maps>
+          {
+            // Perturb fragment normal with multi-scale micro & random bumps
+            float eps = 0.85;
+            float hC = terrainBumpRelief(vTerrainWorldXY);
+            float hX = terrainBumpRelief(vTerrainWorldXY + vec2(eps, 0.0));
+            float hY = terrainBumpRelief(vTerrainWorldXY + vec2(0.0, eps));
+            vec2 dH = vec2(hX - hC, hY - hC) / eps;
+            vec3 viewGrad = normalMatrix * vec3(-dH.x * 1.35, -dH.y * 1.35, 0.0);
+            normal = normalize(normal + viewGrad);
+          }`
         );
     };
 
