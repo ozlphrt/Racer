@@ -900,23 +900,43 @@ export class Renderer3D {
         g = 0.27 + aNorm * 0.06 + mesoPatch * 0.05 + microNoise2;
         b = 0.19 + aNorm * 0.07 + mesoPatch * 0.05;
       } else {
-        // Lowland & Rolling Pasture: Neutral daylight modulation so the grass tile texture shows its true colors
+        // Lowland & Rolling Pasture: Regional random coloration (emerald turf, golden fescue, warm loam, deep moss)
         const hLow = Math.min(1.0, Math.max(0.0, h / 120.0));
         const knollSun = Math.max(0, Math.sin(rx2 * 0.022 + 1.2) * Math.cos(ry1 * 0.019));
-        const shade = 0.88 + hLow * 0.06 + macroBiome * 0.06 + mesoPatch * 0.05 + knollSun * 0.05;
-        r = shade + microNoise1 * 0.25;
-        g = shade + microNoise2 * 0.25;
-        b = shade + microJitter * 0.20;
+
+        if (mesoPatch > 0.22) {
+          // Warm Earthy Amber & Dry Sun-Baked Turf
+          r = 1.06 + hLow * 0.05 + mesoPatch * 0.14 + microNoise1 * 0.5;
+          g = 0.92 + hLow * 0.04 + mesoPatch * 0.06 + microNoise2 * 0.4;
+          b = 0.74 + hLow * 0.03 + microJitter * 0.3;
+        } else if (macroBiome > 0.20) {
+          // Deep Lush Forest Moss & Dark Clover Swales
+          const gTint = 0.84 + (greenVariance + 1.0) * 0.08;
+          r = 0.72 + hLow * 0.03 + microNoise1 * 0.4;
+          g = gTint + hLow * 0.04 + microNoise2 * 0.5;
+          b = 0.74 + hLow * 0.03 + microJitter * 0.3;
+        } else if (macroBiome < -0.20) {
+          // Sun-Drenched Olive & Golden Prairie Grass
+          r = 1.08 + hLow * 0.05 + knollSun * 0.08 + microNoise1 * 0.5;
+          g = 1.02 + hLow * 0.04 + knollSun * 0.06 + microNoise2 * 0.4;
+          b = 0.76 + hLow * 0.03 + microJitter * 0.3;
+        } else {
+          // Varied Meadow Pasture
+          const base = 0.88 + hLow * 0.05 + knollSun * 0.05;
+          r = base + greenVariance * -0.06 + mesoPatch * 0.08 + microNoise1 * 0.45;
+          g = base + greenVariance * 0.07 + macroBiome * 0.05 + microNoise2 * 0.45;
+          b = base - 0.05 + satNoise * 0.06 + microJitter * 0.35;
+        }
       }
 
-      // Subtle luminance variation across ridges and swales
+      // Irregular luminance variation across ridges and swales
       let lumFactor = 1.0;
-      if (lumNoise < -0.15) {
-        const t = Math.min(1.0, (-0.15 - lumNoise) / 0.65);
-        lumFactor = 1.0 - t * 0.12;
-      } else if (lumNoise > 0.40) {
-        const t = Math.min(1.0, (lumNoise - 0.40) / 0.60);
-        lumFactor = 1.0 + t * 0.10;
+      if (lumNoise < -0.12) {
+        const t = Math.min(1.0, (-0.12 - lumNoise) / 0.68);
+        lumFactor = 1.0 - t * 0.20;
+      } else if (lumNoise > 0.32) {
+        const t = Math.min(1.0, (lumNoise - 0.32) / 0.68);
+        lumFactor = 1.0 + t * 0.16;
       }
 
       r *= lumFactor;
@@ -930,7 +950,7 @@ export class Renderer3D {
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    const { diffuseMap, normalMap, roughnessMap } = this.createTerrainDetailMaps();
+    const { diffuseMap, normalMap } = this.createTerrainDetailMaps();
 
     const mat = new THREE.MeshPhongMaterial({
       map: diffuseMap,
@@ -942,6 +962,126 @@ export class Renderer3D {
       normalScale: new THREE.Vector2(0.75, 0.75),
       flatShading: false,
     });
+
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+          varying vec2 vTerrainWorldXY;`
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          vTerrainWorldXY = position.xy;`
+        );
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+          varying vec2 vTerrainWorldXY;
+
+          float terrainHash21(vec2 p) {
+            p = fract(p * vec2(123.34, 456.21));
+            p += dot(p, p + 45.32);
+            return fract(p.x * p.y);
+          }
+
+          float terrainValueNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            float a = terrainHash21(i);
+            float b = terrainHash21(i + vec2(1.0, 0.0));
+            float c = terrainHash21(i + vec2(0.0, 1.0));
+            float d = terrainHash21(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+          }
+
+          float terrainFbm(vec2 p) {
+            float v = 0.0;
+            float a = 0.55;
+            mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
+            for (int i = 0; i < 3; i++) {
+              v += a * terrainValueNoise(p);
+              p = rot * p * 2.07 + vec2(17.3, 31.7);
+              a *= 0.45;
+            }
+            return v;
+          }`
+        )
+        .replace(
+          '#include <map_fragment>',
+          `#ifdef USE_MAP
+            vec2 wp = vTerrainWorldXY;
+
+            // Organic domain warp so tiles never align along straight grid lines
+            vec2 warp = vec2(
+              terrainFbm(wp * 0.0022 + vec2(3.1, 7.4)) - 0.5,
+              terrainFbm(wp * 0.0022 + vec2(15.8, 2.9)) - 0.5
+            ) * 42.0;
+            vec2 warpedXY = wp + warp;
+
+            // Three incommensurate pattern scales (fine, medium, macro) at rotated angles
+            mat2 rot1 = mat2(0.9659, -0.2588, 0.2588, 0.9659);   // ~15 deg
+            mat2 rot2 = mat2(0.5878,  0.8090, -0.8090, 0.5878);  // ~54 deg
+            mat2 rot3 = mat2(-0.3090, 0.9511, -0.9511, -0.3090); // ~108 deg
+
+            // Continuous local scale modulation within each layer (stretches & compresses pattern organically)
+            float localScaleMod = 0.82 + 0.36 * terrainValueNoise(wp * 0.0014 + vec2(9.2, 4.7));
+
+            vec2 uvFine  = (rot1 * warpedXY) * (0.0155 * localScaleMod);
+            vec2 uvMed   = (rot2 * (warpedXY + vec2(413.0, -271.0))) * (0.0068 * localScaleMod);
+            vec2 uvMacro = (rot3 * (warpedXY + vec2(-719.0, 583.0))) * (0.0027 * localScaleMod);
+
+            vec4 texFine  = texture2D(map, uvFine);
+            vec4 texMed   = texture2D(map, uvMed);
+            vec4 texMacro = texture2D(map, uvMacro);
+
+            // Spatially varying scale weights (shifts dominant pattern scale up and down across the field)
+            float scaleNoise1 = terrainFbm(wp * 0.0034 + vec2(1.7, 9.3));
+            float scaleNoise2 = terrainFbm(wp * 0.0019 + vec2(11.4, 5.1));
+
+            float wFine  = smoothstep(0.22, 0.72, scaleNoise1);
+            float wMacro = smoothstep(0.32, 0.78, scaleNoise2);
+            float wMed   = max(0.15, 1.0 - 0.55 * abs(scaleNoise1 - scaleNoise2));
+
+            // Sharp contrast-preserving blend so grass blades stay crisp
+            vec3 weights = pow(vec3(wFine, wMed, wMacro) + vec3(0.08), vec3(2.4));
+            weights /= (weights.x + weights.y + weights.z);
+
+            vec4 sampledDiffuseColor = texFine * weights.x + texMed * weights.y + texMacro * weights.z;
+
+            // Random coloration patches: olive/golden sun-bleached, deep emerald clover, warm earthy loam
+            float colNoiseA = terrainFbm(wp * 0.0026 + vec2(23.1, 14.7));
+            float colNoiseB = terrainFbm(wp * 0.0048 + vec2(41.9, 63.2));
+            float microTint = terrainValueNoise(wp * 0.018 + vec2(5.5, 8.8)) - 0.5;
+
+            vec3 tintOlive   = vec3(1.18, 1.06, 0.76);
+            vec3 tintEmerald = vec3(0.76, 1.10, 0.82);
+            vec3 tintLoam    = vec3(1.16, 0.92, 0.74);
+            vec3 tintMoss    = vec3(0.84, 0.96, 0.90);
+
+            vec3 randomTint = mix(tintEmerald, tintOlive, smoothstep(0.25, 0.75, colNoiseA));
+            randomTint = mix(randomTint, tintLoam, smoothstep(0.45, 0.85, colNoiseB) * 0.65);
+            randomTint = mix(randomTint, tintMoss, smoothstep(0.75, 0.25, colNoiseB) * 0.45);
+            randomTint += vec3(microTint * 0.08, microTint * 0.05, -microTint * 0.06);
+
+            sampledDiffuseColor.rgb *= randomTint;
+
+            // Random saturation & luminance micro-variation
+            float luma = dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+            float satMod = 0.78 + 0.44 * terrainValueNoise(wp * 0.0038 + vec2(77.0, 19.0));
+            sampledDiffuseColor.rgb = mix(vec3(luma), sampledDiffuseColor.rgb, satMod);
+
+            float lumMod = 0.84 + 0.32 * terrainFbm(wp * 0.0052 + vec2(91.3, 37.4));
+            sampledDiffuseColor.rgb *= lumMod;
+
+            diffuseColor *= sampledDiffuseColor;
+          #endif`
+        );
+    };
 
     this.terrainMesh = new THREE.Mesh(geo, mat);
     this.terrainMesh.receiveShadow = true;
