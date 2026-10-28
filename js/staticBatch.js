@@ -23,7 +23,7 @@ export function batchSceneryInstances(entries) {
       for (const matrix of part.matrices) batch.setMatrixAt(batch.addInstance(ids.get(part.geometry)), matrix);
     }
     batch.perObjectFrustumCulled = true;
-    batch.sortObjects = Boolean(parts[0].material.transparent);
+    batch.sortObjects = false;
     batch.computeBoundingSphere();
     batch.matrixAutoUpdate = false;
     batch.updateMatrix();
