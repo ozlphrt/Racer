@@ -225,20 +225,76 @@ export class Renderer3D {
     }
 
     const maxAniso = (this.renderer && this.renderer.capabilities) ? this.renderer.capabilities.getMaxAnisotropy() : 8;
-    const repeatCount = 220;
+    const size = 512;
+    const dCanvas = document.createElement('canvas');
+    dCanvas.width = size;
+    dCanvas.height = size;
+    const dCtx = dCanvas.getContext('2d');
+    dCtx.fillStyle = '#364d24';
+    dCtx.fillRect(0, 0, size, size);
 
-    const loader = new THREE.TextureLoader();
-    const diffuseMap = loader.load('./textures/terrain-grass.jpg', (tex) => {
-      tex.needsUpdate = true;
-      if (this.terrainMesh && this.terrainMesh.material) {
-        this.terrainMesh.material.needsUpdate = true;
-      }
-    });
+    const diffuseMap = new THREE.CanvasTexture(dCanvas);
     diffuseMap.colorSpace = THREE.SRGBColorSpace;
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
-    diffuseMap.repeat.set(repeatCount, repeatCount);
+    diffuseMap.repeat.set(180, 180);
     diffuseMap.generateMipmaps = true;
     diffuseMap.anisotropy = Math.min(maxAniso, 8);
+
+    if (typeof Image !== 'undefined') {
+      const tileImg = new Image();
+      tileImg.onload = () => {
+        // Extract the clean interior of a single quadrant (removing the 2x2 dark cross border in the source image)
+        // and synthesize a 100% seamless toroidal tile via dual-offset cosine cross-blending
+        const srcCanvas = document.createElement('canvas');
+        srcCanvas.width = size;
+        srcCanvas.height = size;
+        const srcCtx = srcCanvas.getContext('2d');
+        const iw = tileImg.naturalWidth || 1024;
+        const ih = tileImg.naturalHeight || 1024;
+        // Crop interior of top-left quadrant away from the blurry outer/center borders
+        const cropX = Math.round(iw * 0.045);
+        const cropY = Math.round(ih * 0.045);
+        const cropW = Math.round(iw * 0.41);
+        const cropH = Math.round(ih * 0.41);
+        srcCtx.drawImage(tileImg, cropX, cropY, cropW, cropH, 0, 0, size, size);
+
+        const srcData = srcCtx.getImageData(0, 0, size, size).data;
+        const outImg = dCtx.createImageData(size, size);
+        const outData = outImg.data;
+        const half = size >> 1;
+
+        for (let y = 0; y < size; y++) {
+          const wy = 0.5 - 0.5 * Math.cos((2.0 * Math.PI * y) / size);
+          const yShift = (y + half) % size;
+          for (let x = 0; x < size; x++) {
+            const wx = 0.5 - 0.5 * Math.cos((2.0 * Math.PI * x) / size);
+            const xShift = (x + half) % size;
+
+            const i00 = (y * size + x) * 4;
+            const i10 = (y * size + xShift) * 4;
+            const i01 = (yShift * size + x) * 4;
+            const i11 = (yShift * size + xShift) * 4;
+
+            const w00 = wx * wy;
+            const w10 = (1.0 - wx) * wy;
+            const w01 = wx * (1.0 - wy);
+            const w11 = (1.0 - wx) * (1.0 - wy);
+
+            outData[i00]     = Math.round(srcData[i00] * w00 + srcData[i10] * w10 + srcData[i01] * w01 + srcData[i11] * w11);
+            outData[i00 + 1] = Math.round(srcData[i00 + 1] * w00 + srcData[i10 + 1] * w10 + srcData[i01 + 1] * w01 + srcData[i11 + 1] * w11);
+            outData[i00 + 2] = Math.round(srcData[i00 + 2] * w00 + srcData[i10 + 2] * w10 + srcData[i01 + 2] * w01 + srcData[i11 + 2] * w11);
+            outData[i00 + 3] = 255;
+          }
+        }
+
+        dCtx.putImageData(outImg, 0, 0);
+        diffuseMap.needsUpdate = true;
+        if (this.terrainMesh && this.terrainMesh.material) {
+          this.terrainMesh.material.needsUpdate = true;
+        }
+      };
+      tileImg.src = './textures/terrain-grass.jpg';
+    }
 
     this._terrainDetailMaps = { diffuseMap, normalMap: null };
     return this._terrainDetailMaps;
@@ -988,6 +1044,12 @@ export class Renderer3D {
             return fract(p.x * p.y);
           }
 
+          vec4 terrainHash42(vec2 p) {
+            vec4 p4 = fract(vec4(p.xyxy) * vec4(0.1031, 0.1030, 0.0973, 0.1099));
+            p4 += dot(p4, p4.wzxy + 33.33);
+            return fract((p4.xxyz + p4.yzzw) * p4.zywx);
+          }
+
           float terrainValueNoise(vec2 p) {
             vec2 i = floor(p);
             vec2 f = fract(p);
@@ -1009,6 +1071,71 @@ export class Renderer3D {
               a *= 0.45;
             }
             return v;
+          }
+
+          // Simplex-grid stochastic texture bombing:
+          // Every triangle vertex gets its own random rotation (0..360 deg), random pattern scale (0.48x..2.1x),
+          // random UV offset, and random per-patch coloration tint.
+          vec4 terrainBombSample(sampler2D tex, vec2 worldXY, float cellFreq, float baseUvFreq, float seed) {
+            vec2 p = worldXY * cellFreq;
+            // Skew to simplex triangle grid
+            const float K1 = 0.366025404; // (sqrt(3)-1)/2
+            const float K2 = 0.211324865; // (3-sqrt(3))/6
+            vec2 i = floor(p + (p.x + p.y) * K1);
+            vec2 a = p - i + (i.x + i.y) * K2;
+            float m = step(a.y, a.x);
+            vec2 o = vec2(m, 1.0 - m);
+            vec2 b = a - o + K2;
+            vec2 c = a - 1.0 + 2.0 * K2;
+
+            // Smooth radial falloff weights from the 3 simplex vertices
+            vec3 d2 = vec3(dot(a, a), dot(b, b), dot(c, c));
+            vec3 w = max(0.58 - d2, 0.0);
+            w = w * w * w * w;
+            w /= max(w.x + w.y + w.z, 1e-5);
+
+            vec2 v0 = i;
+            vec2 v1 = i + o;
+            vec2 v2 = i + 1.0;
+
+            vec4 h0 = terrainHash42(v0 + seed);
+            vec4 h1 = terrainHash42(v1 + seed);
+            vec4 h2 = terrainHash42(v2 + seed);
+
+            // Random 360-degree rotation per vertex
+            float ang0 = h0.x * 6.2831853;
+            float ang1 = h1.x * 6.2831853;
+            float ang2 = h2.x * 6.2831853;
+            mat2 R0 = mat2(cos(ang0), -sin(ang0), sin(ang0), cos(ang0));
+            mat2 R1 = mat2(cos(ang1), -sin(ang1), sin(ang1), cos(ang1));
+            mat2 R2 = mat2(cos(ang2), -sin(ang2), sin(ang2), cos(ang2));
+
+            // Random pattern scale UP and DOWN per vertex (ranges from 0.45x big zoomed-in patches to 2.15x fine blades)
+            float sc0 = exp2(mix(-1.15, 1.10, h0.y)) * baseUvFreq;
+            float sc1 = exp2(mix(-1.15, 1.10, h1.y)) * baseUvFreq;
+            float sc2 = exp2(mix(-1.15, 1.10, h2.y)) * baseUvFreq;
+
+            vec2 dx = dFdx(worldXY);
+            vec2 dy = dFdy(worldXY);
+
+            vec2 uv0 = (R0 * worldXY) * sc0 + h0.zw;
+            vec2 uv1 = (R1 * worldXY) * sc1 + h1.zw;
+            vec2 uv2 = (R2 * worldXY) * sc2 + h2.zw;
+
+            vec4 c0 = textureGrad(tex, uv0, (R0 * dx) * sc0, (R0 * dy) * sc0);
+            vec4 c1 = textureGrad(tex, uv1, (R1 * dx) * sc1, (R1 * dy) * sc1);
+            vec4 c2 = textureGrad(tex, uv2, (R2 * dx) * sc2, (R2 * dy) * sc2);
+
+            // Per-cell random color/hue/brightness tint so adjacent patches vary naturally
+            vec3 t0 = mix(vec3(0.74, 1.12, 0.78), vec3(1.24, 1.00, 0.70), fract(h0.z * 3.17)) * mix(0.76, 1.22, fract(h0.w * 4.71));
+            vec3 t1 = mix(vec3(0.74, 1.12, 0.78), vec3(1.24, 1.00, 0.70), fract(h1.z * 3.17)) * mix(0.76, 1.22, fract(h1.w * 4.71));
+            vec3 t2 = mix(vec3(0.74, 1.12, 0.78), vec3(1.24, 1.00, 0.70), fract(h2.z * 3.17)) * mix(0.76, 1.22, fract(h2.w * 4.71));
+
+            c0.rgb *= t0;
+            c1.rgb *= t1;
+            c2.rgb *= t2;
+
+            return c0 * w.x + c1 * w.y + c2 * w.z;
           }`
         )
         .replace(
@@ -1016,66 +1143,44 @@ export class Renderer3D {
           `#ifdef USE_MAP
             vec2 wp = vTerrainWorldXY;
 
-            // Organic domain warp so tiles never align along straight grid lines
+            // Organic domain warp to bend cell boundaries into natural meadow contours
             vec2 warp = vec2(
-              terrainFbm(wp * 0.0022 + vec2(3.1, 7.4)) - 0.5,
-              terrainFbm(wp * 0.0022 + vec2(15.8, 2.9)) - 0.5
-            ) * 42.0;
+              terrainFbm(wp * 0.0018 + vec2(3.1, 7.4)) - 0.5,
+              terrainFbm(wp * 0.0018 + vec2(15.8, 2.9)) - 0.5
+            ) * 65.0;
             vec2 warpedXY = wp + warp;
 
-            // Three incommensurate pattern scales (fine, medium, macro) at rotated angles
-            mat2 rot1 = mat2(0.9659, -0.2588, 0.2588, 0.9659);   // ~15 deg
-            mat2 rot2 = mat2(0.5878,  0.8090, -0.8090, 0.5878);  // ~54 deg
-            mat2 rot3 = mat2(-0.3090, 0.9511, -0.9511, -0.3090); // ~108 deg
+            // Layer 1: Medium/Fine stochastic bombing (cell size ~90m, pattern scales 0.45x..2.15x)
+            vec4 detailSample = terrainBombSample(map, warpedXY, 0.011, 0.0135, 0.0);
 
-            // Continuous local scale modulation within each layer (stretches & compresses pattern organically)
-            float localScaleMod = 0.82 + 0.36 * terrainValueNoise(wp * 0.0014 + vec2(9.2, 4.7));
+            // Layer 2: Macro stochastic bombing (cell size ~320m, zoomed-in large pattern scales)
+            vec4 macroSample  = terrainBombSample(map, warpedXY + vec2(512.0, -347.0), 0.0031, 0.0038, 47.3);
 
-            vec2 uvFine  = (rot1 * warpedXY) * (0.0155 * localScaleMod);
-            vec2 uvMed   = (rot2 * (warpedXY + vec2(413.0, -271.0))) * (0.0068 * localScaleMod);
-            vec2 uvMacro = (rot3 * (warpedXY + vec2(-719.0, 583.0))) * (0.0027 * localScaleMod);
+            // Smoothly shift between fine/medium and macro scales across the world
+            float macroMix = smoothstep(0.28, 0.74, terrainFbm(wp * 0.0021 + vec2(11.4, 5.1)));
+            vec4 sampledDiffuseColor = mix(detailSample, macroSample, macroMix * 0.65);
 
-            vec4 texFine  = texture2D(map, uvFine);
-            vec4 texMed   = texture2D(map, uvMed);
-            vec4 texMacro = texture2D(map, uvMacro);
+            // Broad regional coloration patches: sun-bleached golden fescue, lush emerald clover, warm dry loam, deep moss
+            float colNoiseA = terrainFbm(wp * 0.0019 + vec2(23.1, 14.7));
+            float colNoiseB = terrainFbm(wp * 0.0037 + vec2(41.9, 63.2));
 
-            // Spatially varying scale weights (shifts dominant pattern scale up and down across the field)
-            float scaleNoise1 = terrainFbm(wp * 0.0034 + vec2(1.7, 9.3));
-            float scaleNoise2 = terrainFbm(wp * 0.0019 + vec2(11.4, 5.1));
+            vec3 tintOlive   = vec3(1.22, 1.08, 0.72);
+            vec3 tintEmerald = vec3(0.72, 1.14, 0.80);
+            vec3 tintLoam    = vec3(1.24, 0.90, 0.68);
+            vec3 tintMoss    = vec3(0.78, 0.95, 0.88);
 
-            float wFine  = smoothstep(0.22, 0.72, scaleNoise1);
-            float wMacro = smoothstep(0.32, 0.78, scaleNoise2);
-            float wMed   = max(0.15, 1.0 - 0.55 * abs(scaleNoise1 - scaleNoise2));
-
-            // Sharp contrast-preserving blend so grass blades stay crisp
-            vec3 weights = pow(vec3(wFine, wMed, wMacro) + vec3(0.08), vec3(2.4));
-            weights /= (weights.x + weights.y + weights.z);
-
-            vec4 sampledDiffuseColor = texFine * weights.x + texMed * weights.y + texMacro * weights.z;
-
-            // Random coloration patches: olive/golden sun-bleached, deep emerald clover, warm earthy loam
-            float colNoiseA = terrainFbm(wp * 0.0026 + vec2(23.1, 14.7));
-            float colNoiseB = terrainFbm(wp * 0.0048 + vec2(41.9, 63.2));
-            float microTint = terrainValueNoise(wp * 0.018 + vec2(5.5, 8.8)) - 0.5;
-
-            vec3 tintOlive   = vec3(1.18, 1.06, 0.76);
-            vec3 tintEmerald = vec3(0.76, 1.10, 0.82);
-            vec3 tintLoam    = vec3(1.16, 0.92, 0.74);
-            vec3 tintMoss    = vec3(0.84, 0.96, 0.90);
-
-            vec3 randomTint = mix(tintEmerald, tintOlive, smoothstep(0.25, 0.75, colNoiseA));
-            randomTint = mix(randomTint, tintLoam, smoothstep(0.45, 0.85, colNoiseB) * 0.65);
-            randomTint = mix(randomTint, tintMoss, smoothstep(0.75, 0.25, colNoiseB) * 0.45);
-            randomTint += vec3(microTint * 0.08, microTint * 0.05, -microTint * 0.06);
+            vec3 randomTint = mix(tintEmerald, tintOlive, smoothstep(0.22, 0.78, colNoiseA));
+            randomTint = mix(randomTint, tintLoam, smoothstep(0.42, 0.84, colNoiseB) * 0.70);
+            randomTint = mix(randomTint, tintMoss, smoothstep(0.78, 0.22, colNoiseB) * 0.50);
 
             sampledDiffuseColor.rgb *= randomTint;
 
-            // Random saturation & luminance micro-variation
+            // Contrast & saturation modulation so zoomed-out views retain distinct light/dark turf patches
             float luma = dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-            float satMod = 0.78 + 0.44 * terrainValueNoise(wp * 0.0038 + vec2(77.0, 19.0));
+            float satMod = 0.70 + 0.58 * terrainValueNoise(wp * 0.0032 + vec2(77.0, 19.0));
             sampledDiffuseColor.rgb = mix(vec3(luma), sampledDiffuseColor.rgb, satMod);
 
-            float lumMod = 0.84 + 0.32 * terrainFbm(wp * 0.0052 + vec2(91.3, 37.4));
+            float lumMod = 0.76 + 0.46 * terrainFbm(wp * 0.0041 + vec2(91.3, 37.4));
             sampledDiffuseColor.rgb *= lumMod;
 
             diffuseColor *= sampledDiffuseColor;
