@@ -534,22 +534,7 @@ export class Renderer3D {
     const cx = b.cx;
     const cy = -b.cy;
 
-    const lakes = [
-      {
-        cx: cx + span * 0.72,
-        cy: cy + span * 0.55,
-        rx: 380,
-        ry: 290,
-        waterZ: 8.5,
-      },
-      {
-        cx: cx - span * 0.68,
-        cy: cy - span * 0.60,
-        rx: 440,
-        ry: 320,
-        waterZ: 11.0,
-      },
-    ];
+    const lakes = [];
 
     const river = [];
     const numPts = 60;
@@ -685,42 +670,8 @@ export class Renderer3D {
       elevation += Math.max(0, mRidge) * mBlend;
     }
 
-    // Bulletproof Lake Basin Sculpting:
-    // Guarantees terrain is fully hollowed out below the water level inside the lake perimeter,
-    // with smooth, natural shoreline banking into surrounding hills.
-    const { lakes, river } = this.getWaterBodies();
-    for (const lake of lakes) {
-      const dx = (x - lake.cx) / lake.rx;
-      const dy = (y - lake.cy) / lake.ry;
-      const lakeDist = Math.hypot(dx, dy);
-
-      if (lakeDist < 1.40) {
-        // Deep lake bed: 4.5m to 8.5m below water level
-        const bedDepth = 4.5 + 4.0 * Math.pow(Math.max(0, 1.0 - Math.min(1.0, lakeDist)), 1.5);
-        const bedElevation = Math.max(-0.08, lake.waterZ - bedDepth);
-
-        if (lakeDist <= 0.95) {
-          // Deep interior: strictly clamped to underwater basin bed
-          elevation = Math.min(elevation, bedElevation);
-        } else {
-          // Shoreline slope transition (0.95 to 1.40):
-          // Smooth cubic Hermite interpolation from lake bed up to surrounding terrain
-          const t = (lakeDist - 0.95) / (1.40 - 0.95);
-          const sCurve = t * t * (3.0 - 2.0 * t);
-          const blended = bedElevation + (elevation - bedElevation) * sCurve;
-
-          // Critical physical constraint: any point inside or on the lake boundary (lakeDist <= 1.0)
-          // MUST be strictly below the water surface so terrain NEVER pokes into or above water!
-          const maxAllowed = (lakeDist <= 1.02)
-            ? (lake.waterZ - 0.35 - (1.02 - lakeDist) * 3.5)
-            : (lake.waterZ - 0.35 + (lakeDist - 1.02) * 45.0);
-
-          elevation = Math.min(blended, maxAllowed);
-        }
-      }
-    }
-
     // Carve riverbed trench below water level
+    const { river } = this.getWaterBodies();
     for (let i = 0; i < river.length; i += 2) {
       const rp = river[i];
       const rDist = Math.hypot(x - rp.x, y - rp.y);
@@ -1306,7 +1257,7 @@ export class Renderer3D {
     this.waterGroup = new THREE.Group();
 
     if (!this.track) return;
-    const { lakes, river } = this.getWaterBodies();
+    const { river } = this.getWaterBodies();
 
     const waterMat = new THREE.MeshStandardMaterial({
       color: 0x0a5870,
@@ -1319,36 +1270,7 @@ export class Renderer3D {
       side: THREE.DoubleSide,
     });
 
-    const shoreMat = new THREE.MeshStandardMaterial({
-      color: 0x988d72,
-      roughness: 0.94,
-      metalness: 0.05,
-      side: THREE.DoubleSide,
-    });
-
-    // 1. Pristine Alpine & Valley Lakes
-    for (const lake of lakes) {
-      const lakeGeo = new THREE.CircleGeometry(lake.rx, 64);
-      lakeGeo.scale(1.0, lake.ry / lake.rx, 1.0);
-      const lakeMesh = new THREE.Mesh(lakeGeo, waterMat);
-      lakeMesh.position.set(lake.cx, lake.cy, lake.waterZ);
-      lakeMesh.receiveShadow = false;
-      lakeMesh.matrixAutoUpdate = false;
-      lakeMesh.updateMatrix();
-      this.waterGroup.add(lakeMesh);
-
-      // Sandy gravel shoreline ring
-      const shoreGeo = new THREE.RingGeometry(lake.rx * 0.96, lake.rx * 1.14, 64);
-      shoreGeo.scale(1.0, lake.ry / lake.rx, 1.0);
-      const shoreMesh = new THREE.Mesh(shoreGeo, shoreMat);
-      shoreMesh.position.set(lake.cx, lake.cy, lake.waterZ - 0.12);
-      shoreMesh.receiveShadow = false;
-      shoreMesh.matrixAutoUpdate = false;
-      shoreMesh.updateMatrix();
-      this.waterGroup.add(shoreMesh);
-    }
-
-    // 2. Winding Valley River
+    // Winding Valley River
     if (river.length > 2) {
       const riverPts = river.map((p) => new THREE.Vector3(p.x, p.y, p.waterZ));
       const riverCurve = new THREE.CatmullRomCurve3(riverPts);
