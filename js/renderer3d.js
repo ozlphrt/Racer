@@ -261,19 +261,21 @@ export class Renderer3D {
         const srcData = srcCtx.getImageData(0, 0, size, size).data;
         const outImg = dCtx.createImageData(size, size);
         const outData = outImg.data;
-        const half = size >> 1;
+        const border = 48; // Feather only the outer 48px border so interior 82% retains 100% sharp photographic contrast
 
         for (let y = 0; y < size; y++) {
-          const wy = 0.5 - 0.5 * Math.cos((2.0 * Math.PI * y) / size);
-          const yShift = (y + half) % size;
+          const dy = Math.min(y, size - 1 - y);
+          const wy = dy < border ? 0.5 + 0.5 * Math.sin(((dy / border) - 0.5) * Math.PI) : 1.0;
+          const yMirror = size - 1 - y;
           for (let x = 0; x < size; x++) {
-            const wx = 0.5 - 0.5 * Math.cos((2.0 * Math.PI * x) / size);
-            const xShift = (x + half) % size;
+            const dx = Math.min(x, size - 1 - x);
+            const wx = dx < border ? 0.5 + 0.5 * Math.sin(((dx / border) - 0.5) * Math.PI) : 1.0;
+            const xMirror = size - 1 - x;
 
             const i00 = (y * size + x) * 4;
-            const i10 = (y * size + xShift) * 4;
-            const i01 = (yShift * size + x) * 4;
-            const i11 = (yShift * size + xShift) * 4;
+            const i10 = (y * size + xMirror) * 4;
+            const i01 = (yMirror * size + x) * 4;
+            const i11 = (yMirror * size + xMirror) * 4;
 
             const w00 = wx * wy;
             const w10 = (1.0 - wx) * wy;
@@ -989,10 +991,10 @@ export class Renderer3D {
         }
       }
 
-      // Desaturate vertex colors in general with irregular random patch variation
+      // Keep vertex colors lightly desaturated so the fragment shader controls random patch saturation cleanly
       const vLum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      let vSat = 0.52 + satNoise * 0.18 + greenVariance * 0.10;
-      vSat = Math.max(0.26, Math.min(0.75, vSat));
+      let vSat = 0.78 + satNoise * 0.14;
+      vSat = Math.max(0.55, Math.min(0.92, vSat));
       r = vLum + (r - vLum) * vSat;
       g = vLum + (g - vLum) * vSat;
       b = vLum + (b - vLum) * vSat;
@@ -1001,10 +1003,10 @@ export class Renderer3D {
       let lumFactor = 1.0;
       if (lumNoise < -0.12) {
         const t = Math.min(1.0, (-0.12 - lumNoise) / 0.68);
-        lumFactor = 1.0 - t * 0.20;
+        lumFactor = 1.0 - t * 0.18;
       } else if (lumNoise > 0.32) {
         const t = Math.min(1.0, (lumNoise - 0.32) / 0.68);
-        lumFactor = 1.0 + t * 0.16;
+        lumFactor = 1.0 + t * 0.14;
       }
 
       r *= lumFactor;
@@ -1036,12 +1038,16 @@ export class Renderer3D {
         .replace(
           '#include <common>',
           `#include <common>
-          varying vec2 vTerrainWorldXY;`
+          varying vec2 vTerrainWorldXY;
+          varying vec3 vTerrainViewTangentX;
+          varying vec3 vTerrainViewTangentY;`
         )
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-          vTerrainWorldXY = position.xy;`
+          vTerrainWorldXY = position.xy;
+          vTerrainViewTangentX = normalize(normalMatrix * vec3(1.0, 0.0, 0.0));
+          vTerrainViewTangentY = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));`
         );
 
       shader.fragmentShader = shader.fragmentShader
@@ -1049,6 +1055,8 @@ export class Renderer3D {
           '#include <common>',
           `#include <common>
           varying vec2 vTerrainWorldXY;
+          varying vec3 vTerrainViewTangentX;
+          varying vec3 vTerrainViewTangentY;
 
           float terrainHash21(vec2 p) {
             p = fract(p * vec2(123.34, 456.21));
@@ -1090,9 +1098,8 @@ export class Renderer3D {
           // random UV offset, and random per-patch coloration tint.
           vec4 terrainBombSample(sampler2D tex, vec2 worldXY, float cellFreq, float baseUvFreq, float seed) {
             vec2 p = worldXY * cellFreq;
-            // Skew to simplex triangle grid
-            const float K1 = 0.366025404; // (sqrt(3)-1)/2
-            const float K2 = 0.211324865; // (3-sqrt(3))/6
+            const float K1 = 0.366025404;
+            const float K2 = 0.211324865;
             vec2 i = floor(p + (p.x + p.y) * K1);
             vec2 a = p - i + (i.x + i.y) * K2;
             float m = step(a.y, a.x);
@@ -1100,10 +1107,10 @@ export class Renderer3D {
             vec2 b = a - o + K2;
             vec2 c = a - 1.0 + 2.0 * K2;
 
-            // Smooth radial falloff weights from the 3 simplex vertices
+            // Sharp contrast-preserving radial falloff weights so overlapping cells never blur the grass pattern
             vec3 d2 = vec3(dot(a, a), dot(b, b), dot(c, c));
-            vec3 w = max(0.58 - d2, 0.0);
-            w = w * w * w * w;
+            vec3 w = max(0.56 - d2, 0.0);
+            w = pow(w, vec3(5.0));
             w /= max(w.x + w.y + w.z, 1e-5);
 
             vec2 v0 = i;
@@ -1114,7 +1121,6 @@ export class Renderer3D {
             vec4 h1 = terrainHash42(v1 + seed);
             vec4 h2 = terrainHash42(v2 + seed);
 
-            // Random 360-degree rotation per vertex
             float ang0 = h0.x * 6.2831853;
             float ang1 = h1.x * 6.2831853;
             float ang2 = h2.x * 6.2831853;
@@ -1122,10 +1128,10 @@ export class Renderer3D {
             mat2 R1 = mat2(cos(ang1), -sin(ang1), sin(ang1), cos(ang1));
             mat2 R2 = mat2(cos(ang2), -sin(ang2), sin(ang2), cos(ang2));
 
-            // Random pattern scale UP and DOWN per vertex (ranges from 0.45x big zoomed-in patches to 2.15x fine blades)
-            float sc0 = exp2(mix(-1.15, 1.10, h0.y)) * baseUvFreq;
-            float sc1 = exp2(mix(-1.15, 1.10, h1.y)) * baseUvFreq;
-            float sc2 = exp2(mix(-1.15, 1.10, h2.y)) * baseUvFreq;
+            // Random pattern scale UP and DOWN per vertex (0.50x to 2.0x)
+            float sc0 = exp2(mix(-1.0, 1.0, h0.y)) * baseUvFreq;
+            float sc1 = exp2(mix(-1.0, 1.0, h1.y)) * baseUvFreq;
+            float sc2 = exp2(mix(-1.0, 1.0, h2.y)) * baseUvFreq;
 
             vec2 dx = dFdx(worldXY);
             vec2 dy = dFdy(worldXY);
@@ -1138,40 +1144,25 @@ export class Renderer3D {
             vec4 c1 = textureGrad(tex, uv1, (R1 * dx) * sc1, (R1 * dy) * sc1);
             vec4 c2 = textureGrad(tex, uv2, (R2 * dx) * sc2, (R2 * dy) * sc2);
 
-            // Per-cell random color/hue/brightness tint and per-cell random desaturation
-            vec3 t0 = mix(vec3(0.84, 1.05, 0.86), vec3(1.14, 1.01, 0.82), fract(h0.z * 3.17)) * mix(0.80, 1.18, fract(h0.w * 4.71));
-            vec3 t1 = mix(vec3(0.84, 1.05, 0.86), vec3(1.14, 1.01, 0.82), fract(h1.z * 3.17)) * mix(0.80, 1.18, fract(h1.w * 4.71));
-            vec3 t2 = mix(vec3(0.84, 1.05, 0.86), vec3(1.14, 1.01, 0.82), fract(h2.z * 3.17)) * mix(0.80, 1.18, fract(h2.w * 4.71));
+            // Per-cell random color/hue/brightness tint
+            vec3 t0 = mix(vec3(0.86, 1.06, 0.86), vec3(1.14, 1.01, 0.82), fract(h0.z * 3.17)) * mix(0.84, 1.16, fract(h0.w * 4.71));
+            vec3 t1 = mix(vec3(0.86, 1.06, 0.86), vec3(1.14, 1.01, 0.82), fract(h1.z * 3.17)) * mix(0.84, 1.16, fract(h1.w * 4.71));
+            vec3 t2 = mix(vec3(0.86, 1.06, 0.86), vec3(1.14, 1.01, 0.82), fract(h2.z * 3.17)) * mix(0.84, 1.16, fract(h2.w * 4.71));
 
             c0.rgb *= t0;
             c1.rgb *= t1;
             c2.rgb *= t2;
-
-            float l0 = dot(c0.rgb, vec3(0.2126, 0.7152, 0.0722));
-            float l1 = dot(c1.rgb, vec3(0.2126, 0.7152, 0.0722));
-            float l2 = dot(c2.rgb, vec3(0.2126, 0.7152, 0.0722));
-            c0.rgb = mix(vec3(l0), c0.rgb, mix(0.38, 0.86, fract(h0.x * 7.13)));
-            c1.rgb = mix(vec3(l1), c1.rgb, mix(0.38, 0.86, fract(h1.x * 7.13)));
-            c2.rgb = mix(vec3(l2), c2.rgb, mix(0.38, 0.86, fract(h2.x * 7.13)));
 
             return c0 * w.x + c1 * w.y + c2 * w.z;
           }
 
           // Multi-scale micro & random surface bump heightfield (sod tufts, soil clods, and random earth hummocks)
           float terrainBumpRelief(vec2 p) {
-            // Irregular clumping mask so some patches are rough & bumpy while others are gentler
-            float bumpMask = 0.30 + 0.95 * smoothstep(0.18, 0.82, terrainFbm(p * 0.0045 + vec2(19.4, 73.1)));
-
-            // Micro sod clumps & turf tufts (~1.2m - 4m)
-            float micro = (terrainValueNoise(p * 0.55 + vec2(4.1, 8.7)) - 0.5) * 0.38
-                        + (terrainValueNoise(p * 0.20 + vec2(17.3, 29.1)) - 0.5) * 0.65;
-
-            // Random small earth bumps & hollows (~8m - 26m)
-            float smallBump = (terrainFbm(p * 0.048 + vec2(31.7, 11.2)) - 0.48) * 1.85;
-
-            // Irregular medium hummocks (~30m - 75m)
-            float medMound = pow(max(0.0, terrainFbm(p * 0.015 + vec2(53.1, 89.4)) - 0.34), 1.5) * 3.6;
-
+            float bumpMask = 0.35 + 0.90 * smoothstep(0.18, 0.82, terrainFbm(p * 0.0045 + vec2(19.4, 73.1)));
+            float micro = (terrainValueNoise(p * 0.65 + vec2(4.1, 8.7)) - 0.5) * 0.42
+                        + (terrainValueNoise(p * 0.22 + vec2(17.3, 29.1)) - 0.5) * 0.75;
+            float smallBump = (terrainFbm(p * 0.052 + vec2(31.7, 11.2)) - 0.48) * 1.95;
+            float medMound = pow(max(0.0, terrainFbm(p * 0.016 + vec2(53.1, 89.4)) - 0.34), 1.5) * 3.8;
             return (micro + smallBump) * bumpMask + medMound;
           }`
         )
@@ -1180,26 +1171,28 @@ export class Renderer3D {
           `#ifdef USE_MAP
             vec2 wp = vTerrainWorldXY;
 
-            // Organic domain warp scaled 10x larger to match the 10x scaled-up tiles
+            // Organic domain warp
             vec2 warp = vec2(
-              terrainFbm(wp * 0.00018 + vec2(3.1, 7.4)) - 0.5,
-              terrainFbm(wp * 0.00018 + vec2(15.8, 2.9)) - 0.5
-            ) * 650.0;
+              terrainFbm(wp * 0.00075 + vec2(3.1, 7.4)) - 0.5,
+              terrainFbm(wp * 0.00075 + vec2(15.8, 2.9)) - 0.5
+            ) * 140.0;
             vec2 warpedXY = wp + warp;
 
-            // Layer 1: 10x scaled-up primary stochastic bombing (tile size ~740m, random scale 0.45x..2.15x)
-            vec4 detailSample = terrainBombSample(map, warpedXY, 0.0011, 0.00135, 0.0);
+            // Three stochastic layers so both close-up car views and wide broadcast shots show rich grass & dirt pattern:
+            // 1. Fine turf layer (~50m tiles) for crisp grass clumps near the cars
+            vec4 fineSample   = terrainBombSample(map, warpedXY, 0.016, 0.020, 13.7);
+            // 2. Medium patch layer (~160m tiles, random scale 0.5x..2.0x)
+            vec4 detailSample = terrainBombSample(map, warpedXY + vec2(812.0, -490.0), 0.0045, 0.0058, 0.0);
+            // 3. Macro landscape layer (~650m tiles)
+            vec4 macroSample  = terrainBombSample(map, warpedXY + vec2(3120.0, -2470.0), 0.0011, 0.0015, 47.3);
 
-            // Layer 2: 10x scaled-up macro stochastic bombing (tile size ~2600m)
-            vec4 macroSample  = terrainBombSample(map, warpedXY + vec2(5120.0, -3470.0), 0.00031, 0.00038, 47.3);
+            float fineMix  = smoothstep(0.22, 0.78, terrainFbm(wp * 0.0032 + vec2(6.2, 19.8)));
+            float macroMix = smoothstep(0.28, 0.76, terrainFbm(wp * 0.0008 + vec2(11.4, 5.1)));
+            vec4 sampledDiffuseColor = mix(detailSample, fineSample, fineMix * 0.52);
+            sampledDiffuseColor = mix(sampledDiffuseColor, macroSample, macroMix * 0.45);
 
-            // Smoothly shift between primary and macro scales across the world
-            float macroMix = smoothstep(0.28, 0.74, terrainFbm(wp * 0.00021 + vec2(11.4, 5.1)));
-            vec4 sampledDiffuseColor = mix(detailSample, macroSample, macroMix * 0.65);
-
-            // Subtle high-frequency grass blade micro-grain so close-up views stay crisp despite 10x tile scale
-            float bladeGrain = (terrainValueNoise(wp * 0.35) - 0.5) * 0.08 + (terrainValueNoise(wp * 1.15) - 0.5) * 0.05;
-            sampledDiffuseColor.rgb *= (1.0 + bladeGrain);
+            // Boost local pattern contrast so the dark grass tufts and lighter brown earth spots stand out crisply
+            sampledDiffuseColor.rgb = clamp((sampledDiffuseColor.rgb - vec3(0.18)) * 1.32 + vec3(0.18), 0.02, 1.0);
 
             // Broad regional coloration patches: muted olive fescue, grounded clover, warm dry loam, cool slate moss
             float colNoiseA = terrainFbm(wp * 0.00085 + vec2(23.1, 14.7));
@@ -1216,14 +1209,12 @@ export class Renderer3D {
 
             sampledDiffuseColor.rgb *= randomTint;
 
-            // General saturation reduction with random amounts across random-sized patches:
-            // Combine giant (~2200m), medium (~550m), and small (~130m) warped patch fields
+            // Single clean saturation reduction with random amounts across random-sized patches:
             float luma = dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
             float satMacro = terrainFbm(warpedXY * 0.00045 + vec2(77.0, 19.0));
             float satMeso  = terrainFbm(warpedXY * 0.00180 + vec2(13.4, 83.2));
             float satMicro = terrainValueNoise(warpedXY * 0.00750 + vec2(51.7, 29.4));
 
-            // Spatially varying selector so some regions have huge desaturated expanses while others have medium or small patches
             float sizeSelector = terrainFbm(wp * 0.00065 + vec2(31.2, 67.8));
             float patchSatNoise = mix(
               mix(satMicro, satMeso, smoothstep(0.18, 0.62, sizeSelector)),
@@ -1231,17 +1222,23 @@ export class Renderer3D {
               smoothstep(0.45, 0.88, sizeSelector)
             );
 
-            // Reduced overall saturation (ranges from 0.18 in dry/faded patches up to 0.64 in richer patches, averaging ~0.42)
-            float satMod = mix(0.20, 0.64, smoothstep(0.15, 0.85, patchSatNoise));
-
-            // Additional irregular dry/weathered low-saturation pockets of varying size
-            float dryPocket = smoothstep(0.54, 0.82, terrainFbm(warpedXY * 0.0031 + vec2(104.5, 17.9)));
-            satMod *= (1.0 - dryPocket * 0.45);
+            // Saturation varies from 0.30 in muted/dry patches up to 0.82 in richer patches
+            float satMod = mix(0.30, 0.82, smoothstep(0.15, 0.85, patchSatNoise));
+            float dryPocket = smoothstep(0.56, 0.84, terrainFbm(warpedXY * 0.0031 + vec2(104.5, 17.9)));
+            satMod *= (1.0 - dryPocket * 0.38);
 
             sampledDiffuseColor.rgb = mix(vec3(luma), sampledDiffuseColor.rgb, satMod);
 
-            float lumMod = 0.78 + 0.42 * terrainFbm(wp * 0.0024 + vec2(91.3, 37.4));
-            sampledDiffuseColor.rgb *= lumMod;
+            // Micro & random bump slope shading + regional luminance variation
+            float epsB = 0.85;
+            float hC_b = terrainBumpRelief(wp);
+            float hX_b = terrainBumpRelief(wp + vec2(epsB, 0.0));
+            float hY_b = terrainBumpRelief(wp + vec2(0.0, epsB));
+            vec2 dH_b = vec2(hX_b - hC_b, hY_b - hC_b) / epsB;
+            float bumpSunShade = clamp(1.0 + (-dH_b.x * 0.50 + dH_b.y * 0.65) * 0.28, 0.74, 1.26);
+
+            float lumMod = 0.82 + 0.36 * terrainFbm(wp * 0.0024 + vec2(91.3, 37.4));
+            sampledDiffuseColor.rgb *= (lumMod * bumpSunShade);
 
             diffuseColor *= sampledDiffuseColor;
           #endif`
@@ -1250,13 +1247,12 @@ export class Renderer3D {
           '#include <normal_fragment_maps>',
           `#include <normal_fragment_maps>
           {
-            // Perturb fragment normal with multi-scale micro & random bumps
             float eps = 0.85;
             float hC = terrainBumpRelief(vTerrainWorldXY);
             float hX = terrainBumpRelief(vTerrainWorldXY + vec2(eps, 0.0));
             float hY = terrainBumpRelief(vTerrainWorldXY + vec2(0.0, eps));
             vec2 dH = vec2(hX - hC, hY - hC) / eps;
-            vec3 viewGrad = normalMatrix * vec3(-dH.x * 1.35, -dH.y * 1.35, 0.0);
+            vec3 viewGrad = vTerrainViewTangentX * (-dH.x * 1.25) + vTerrainViewTangentY * (-dH.y * 1.25);
             normal = normalize(normal + viewGrad);
           }`
         );
