@@ -595,15 +595,15 @@ export class Renderer3D {
       return -0.14 * (1.0 - tNorm * tNorm * (3.0 - 2.0 * tNorm));
     }
 
-    // 3. Flat verge apron immediately outside track edge (~100m from centerline)
+    // 3. Manicured flat verge lawn immediately outside track edge (~125m from centerline)
     // Guarantees all triangles crossing or bordering the track are flush at 0.00m (under asphalt Z=0.12m)
-    const flatRadius = trackHalf + 58.0;
+    const flatRadius = trackHalf + 82.0;
     if (distToTrack <= flatRadius) {
       return 0.0;
     }
 
-    // Smooth cubic ease-in from verge into rolling mini hills, random hummocks, and micro bumps
-    const hillEaseDist = 55.0;
+    // Smooth cubic ease-in from mowed trackside verge into rolling mini hills, random hummocks, and micro bumps
+    const hillEaseDist = 90.0;
     const hillRatio = Math.min(1.0, (distToTrack - flatRadius) / hillEaseDist);
     const hillBlend = hillRatio * hillRatio * (3.0 - 2.0 * hillRatio);
 
@@ -991,22 +991,31 @@ export class Renderer3D {
         }
       }
 
-      // Keep vertex colors lightly desaturated so the fragment shader controls random patch saturation cleanly
+      // Smooth transition from manicured trackside lawn (wildV = 0) to wild countryside pasture (wildV = 1)
+      const vergeDistV = Math.max(0.0, dists[i] - 42.0);
+      const tWildV = Math.max(0.0, Math.min(1.0, (vergeDistV - 20.0) / 170.0));
+      const wildV = tWildV * tWildV * (3.0 - 2.0 * tWildV);
+
+      // Keep vertex colors calm and uniform near the track, with full regional variation further out
+      r = 0.90 + (r - 0.90) * (0.18 + 0.82 * wildV);
+      g = 0.92 + (g - 0.92) * (0.18 + 0.82 * wildV);
+      b = 0.88 + (b - 0.88) * (0.18 + 0.82 * wildV);
+
       const vLum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      let vSat = 0.78 + satNoise * 0.14;
+      let vSat = 0.78 + satNoise * 0.14 * wildV;
       vSat = Math.max(0.55, Math.min(0.92, vSat));
       r = vLum + (r - vLum) * vSat;
       g = vLum + (g - vLum) * vSat;
       b = vLum + (b - vLum) * vSat;
 
-      // Irregular luminance variation across ridges and swales
+      // Irregular luminance variation across ridges and swales (suppressed on mowed verge lawn)
       let lumFactor = 1.0;
       if (lumNoise < -0.12) {
         const t = Math.min(1.0, (-0.12 - lumNoise) / 0.68);
-        lumFactor = 1.0 - t * 0.18;
+        lumFactor = 1.0 - t * 0.18 * wildV;
       } else if (lumNoise > 0.32) {
         const t = Math.min(1.0, (lumNoise - 0.32) / 0.68);
-        lumFactor = 1.0 + t * 0.14;
+        lumFactor = 1.0 + t * 0.14 * wildV;
       }
 
       r *= lumFactor;
@@ -1019,6 +1028,7 @@ export class Renderer3D {
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('trackDist', new THREE.BufferAttribute(dists, 1));
 
     const { diffuseMap, normalMap } = this.createTerrainDetailMaps();
 
@@ -1038,6 +1048,8 @@ export class Renderer3D {
         .replace(
           '#include <common>',
           `#include <common>
+          attribute float trackDist;
+          varying float vTrackDist;
           varying vec2 vTerrainWorldXY;
           varying vec3 vTerrainViewTangentX;
           varying vec3 vTerrainViewTangentY;`
@@ -1045,6 +1057,7 @@ export class Renderer3D {
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
+          vTrackDist = trackDist;
           vTerrainWorldXY = position.xy;
           vTerrainViewTangentX = normalize(normalMatrix * vec3(1.0, 0.0, 0.0));
           vTerrainViewTangentY = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));`
@@ -1054,6 +1067,7 @@ export class Renderer3D {
         .replace(
           '#include <common>',
           `#include <common>
+          varying float vTrackDist;
           varying vec2 vTerrainWorldXY;
           varying vec3 vTerrainViewTangentX;
           varying vec3 vTerrainViewTangentY;
@@ -1171,16 +1185,21 @@ export class Renderer3D {
           `#ifdef USE_MAP
             vec2 wp = vTerrainWorldXY;
 
-            // Organic domain warp
+            // 0.0 right beside the track (neatly mowed, manicured F1 circuit verge lawn)
+            // smoothly transitioning to 1.0 further out (wild, multi-scale, bumpy countryside pasture)
+            float vergeDist = max(0.0, vTrackDist - 42.0);
+            float wildFactor = smoothstep(18.0, 185.0, vergeDist);
+
+            // Organic domain warp (calmer near track, stronger in wild pasture)
             vec2 warp = vec2(
               terrainFbm(wp * 0.00075 + vec2(3.1, 7.4)) - 0.5,
               terrainFbm(wp * 0.00075 + vec2(15.8, 2.9)) - 0.5
-            ) * 140.0;
+            ) * mix(35.0, 140.0, wildFactor);
             vec2 warpedXY = wp + warp;
 
-            // Three stochastic layers so both close-up car views and wide broadcast shots show rich grass & dirt pattern:
-            // 1. Fine turf layer (~50m tiles) for crisp grass clumps near the cars
-            vec4 fineSample   = terrainBombSample(map, warpedXY, 0.016, 0.020, 13.7);
+            // Three stochastic layers:
+            // 1. Fine short-cut turf layer (~35m tiles) for manicured lawn near the track
+            vec4 fineSample   = terrainBombSample(map, warpedXY, 0.022, 0.028, 13.7);
             // 2. Medium patch layer (~160m tiles, random scale 0.5x..2.0x)
             vec4 detailSample = terrainBombSample(map, warpedXY + vec2(812.0, -490.0), 0.0045, 0.0058, 0.0);
             // 3. Macro landscape layer (~650m tiles)
@@ -1188,13 +1207,23 @@ export class Renderer3D {
 
             float fineMix  = smoothstep(0.22, 0.78, terrainFbm(wp * 0.0032 + vec2(6.2, 19.8)));
             float macroMix = smoothstep(0.28, 0.76, terrainFbm(wp * 0.0008 + vec2(11.4, 5.1)));
-            vec4 sampledDiffuseColor = mix(detailSample, fineSample, fineMix * 0.52);
-            sampledDiffuseColor = mix(sampledDiffuseColor, macroSample, macroMix * 0.45);
+            vec4 wildDiffuse = mix(detailSample, fineSample, fineMix * 0.52);
+            wildDiffuse = mix(wildDiffuse, macroSample, macroMix * 0.45);
 
-            // Boost local pattern contrast so the dark grass tufts and lighter brown earth spots stand out crisply
-            sampledDiffuseColor.rgb = clamp((sampledDiffuseColor.rgb - vec3(0.18)) * 1.32 + vec3(0.18), 0.02, 1.0);
+            // Neatly mowed trackside lawn: tighter short-cut grass with suppressed brown dirt spots & low contrast noise
+            vec3 mowedAvg = vec3(0.075, 0.132, 0.042);
+            vec3 mowedTurf = mix(mowedAvg, fineSample.rgb, 0.36);
+            // Subtle groomed mower-pass sheen variation
+            float mowerPass = sin(vergeDist * 0.38) * 0.025;
+            mowedTurf *= (1.0 + mowerPass);
 
-            // Broad regional coloration patches: muted olive fescue, grounded clover, warm dry loam, cool slate moss
+            vec4 sampledDiffuseColor = vec4(mix(mowedTurf, wildDiffuse.rgb, wildFactor), 1.0);
+
+            // Boost local pattern contrast only in the wilder outer terrain (keep trackside lawn smooth & low-noise)
+            float contrastBoost = mix(0.88, 1.32, wildFactor);
+            sampledDiffuseColor.rgb = clamp((sampledDiffuseColor.rgb - vec3(0.14)) * contrastBoost + vec3(0.14), 0.02, 1.0);
+
+            // Broad regional coloration patches (calmed down close to the track)
             float colNoiseA = terrainFbm(wp * 0.00085 + vec2(23.1, 14.7));
             float colNoiseB = terrainFbm(wp * 0.00210 + vec2(41.9, 63.2));
 
@@ -1207,9 +1236,9 @@ export class Renderer3D {
             randomTint = mix(randomTint, tintLoam, smoothstep(0.42, 0.84, colNoiseB) * 0.65);
             randomTint = mix(randomTint, tintMoss, smoothstep(0.78, 0.22, colNoiseB) * 0.50);
 
-            sampledDiffuseColor.rgb *= randomTint;
+            sampledDiffuseColor.rgb *= mix(vec3(1.0), randomTint, 0.18 + 0.82 * wildFactor);
 
-            // Single clean saturation reduction with random amounts across random-sized patches:
+            // Saturation reduction: calm, uniform muted saturation on trackside lawn; random-sized patches further out
             float luma = dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
             float satMacro = terrainFbm(warpedXY * 0.00045 + vec2(77.0, 19.0));
             float satMeso  = terrainFbm(warpedXY * 0.00180 + vec2(13.4, 83.2));
@@ -1222,22 +1251,24 @@ export class Renderer3D {
               smoothstep(0.45, 0.88, sizeSelector)
             );
 
-            // Saturation varies from 0.30 in muted/dry patches up to 0.82 in richer patches
-            float satMod = mix(0.30, 0.82, smoothstep(0.15, 0.85, patchSatNoise));
+            float wildSatMod = mix(0.30, 0.82, smoothstep(0.15, 0.85, patchSatNoise));
             float dryPocket = smoothstep(0.56, 0.84, terrainFbm(warpedXY * 0.0031 + vec2(104.5, 17.9)));
-            satMod *= (1.0 - dryPocket * 0.38);
+            wildSatMod *= (1.0 - dryPocket * 0.38);
 
+            float satMod = mix(0.54, wildSatMod, wildFactor);
             sampledDiffuseColor.rgb = mix(vec3(luma), sampledDiffuseColor.rgb, satMod);
 
-            // Micro & random bump slope shading + regional luminance variation
+            // Micro & random bump slope shading + regional luminance variation (gentle & manicured near track)
+            float bumpScale = mix(0.12, 1.0, wildFactor);
             float epsB = 0.85;
             float hC_b = terrainBumpRelief(wp);
             float hX_b = terrainBumpRelief(wp + vec2(epsB, 0.0));
             float hY_b = terrainBumpRelief(wp + vec2(0.0, epsB));
-            vec2 dH_b = vec2(hX_b - hC_b, hY_b - hC_b) / epsB;
+            vec2 dH_b = (vec2(hX_b - hC_b, hY_b - hC_b) / epsB) * bumpScale;
             float bumpSunShade = clamp(1.0 + (-dH_b.x * 0.50 + dH_b.y * 0.65) * 0.28, 0.74, 1.26);
 
-            float lumMod = 0.82 + 0.36 * terrainFbm(wp * 0.0024 + vec2(91.3, 37.4));
+            float wildLumMod = 0.82 + 0.36 * terrainFbm(wp * 0.0024 + vec2(91.3, 37.4));
+            float lumMod = mix(1.0, wildLumMod, 0.15 + 0.85 * wildFactor);
             sampledDiffuseColor.rgb *= (lumMod * bumpSunShade);
 
             diffuseColor *= sampledDiffuseColor;
@@ -1247,12 +1278,14 @@ export class Renderer3D {
           '#include <normal_fragment_maps>',
           `#include <normal_fragment_maps>
           {
+            float vergeDistN = max(0.0, vTrackDist - 42.0);
+            float wildBumpScale = mix(0.10, 1.25, smoothstep(18.0, 185.0, vergeDistN));
             float eps = 0.85;
             float hC = terrainBumpRelief(vTerrainWorldXY);
             float hX = terrainBumpRelief(vTerrainWorldXY + vec2(eps, 0.0));
             float hY = terrainBumpRelief(vTerrainWorldXY + vec2(0.0, eps));
             vec2 dH = vec2(hX - hC, hY - hC) / eps;
-            vec3 viewGrad = vTerrainViewTangentX * (-dH.x * 1.25) + vTerrainViewTangentY * (-dH.y * 1.25);
+            vec3 viewGrad = vTerrainViewTangentX * (-dH.x * wildBumpScale) + vTerrainViewTangentY * (-dH.y * wildBumpScale);
             normal = normalize(normal + viewGrad);
           }`
         );
