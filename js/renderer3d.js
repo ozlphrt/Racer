@@ -236,7 +236,7 @@ export class Renderer3D {
     const diffuseMap = new THREE.CanvasTexture(dCanvas);
     diffuseMap.colorSpace = THREE.SRGBColorSpace;
     diffuseMap.wrapS = diffuseMap.wrapT = THREE.RepeatWrapping;
-    diffuseMap.repeat.set(180, 180);
+    diffuseMap.repeat.set(18, 18);
     diffuseMap.generateMipmaps = true;
     diffuseMap.anisotropy = Math.min(maxAniso, 8);
 
@@ -1143,22 +1143,26 @@ export class Renderer3D {
           `#ifdef USE_MAP
             vec2 wp = vTerrainWorldXY;
 
-            // Organic domain warp to bend cell boundaries into natural meadow contours
+            // Organic domain warp scaled 10x larger to match the 10x scaled-up tiles
             vec2 warp = vec2(
-              terrainFbm(wp * 0.0018 + vec2(3.1, 7.4)) - 0.5,
-              terrainFbm(wp * 0.0018 + vec2(15.8, 2.9)) - 0.5
-            ) * 65.0;
+              terrainFbm(wp * 0.00018 + vec2(3.1, 7.4)) - 0.5,
+              terrainFbm(wp * 0.00018 + vec2(15.8, 2.9)) - 0.5
+            ) * 650.0;
             vec2 warpedXY = wp + warp;
 
-            // Layer 1: Medium/Fine stochastic bombing (cell size ~90m, pattern scales 0.45x..2.15x)
-            vec4 detailSample = terrainBombSample(map, warpedXY, 0.011, 0.0135, 0.0);
+            // Layer 1: 10x scaled-up primary stochastic bombing (tile size ~740m, random scale 0.45x..2.15x)
+            vec4 detailSample = terrainBombSample(map, warpedXY, 0.0011, 0.00135, 0.0);
 
-            // Layer 2: Macro stochastic bombing (cell size ~320m, zoomed-in large pattern scales)
-            vec4 macroSample  = terrainBombSample(map, warpedXY + vec2(512.0, -347.0), 0.0031, 0.0038, 47.3);
+            // Layer 2: 10x scaled-up macro stochastic bombing (tile size ~2600m)
+            vec4 macroSample  = terrainBombSample(map, warpedXY + vec2(5120.0, -3470.0), 0.00031, 0.00038, 47.3);
 
-            // Smoothly shift between fine/medium and macro scales across the world
-            float macroMix = smoothstep(0.28, 0.74, terrainFbm(wp * 0.0021 + vec2(11.4, 5.1)));
+            // Smoothly shift between primary and macro scales across the world
+            float macroMix = smoothstep(0.28, 0.74, terrainFbm(wp * 0.00021 + vec2(11.4, 5.1)));
             vec4 sampledDiffuseColor = mix(detailSample, macroSample, macroMix * 0.65);
+
+            // Subtle high-frequency grass blade micro-grain so close-up views stay crisp despite 10x tile scale
+            float bladeGrain = (terrainValueNoise(wp * 0.35) - 0.5) * 0.08 + (terrainValueNoise(wp * 1.15) - 0.5) * 0.05;
+            sampledDiffuseColor.rgb *= (1.0 + bladeGrain);
 
             // Broad regional coloration patches: sun-bleached golden fescue, lush emerald clover, warm dry loam, deep moss
             float colNoiseA = terrainFbm(wp * 0.0019 + vec2(23.1, 14.7));
