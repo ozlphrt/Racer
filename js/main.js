@@ -22,6 +22,7 @@ import { createChampionValidationPanel } from './championValidationUi.js';
 import { triggerExplorationBurst, getBurstGensRemaining, resetStagnation } from './genetics.js';
 import { resolveStartupState } from './startupState.js';
 import { registerCustomTracks, savedCircuitMatches, initialCircuitKey, deleteCustomTrack } from './customTracks.js';
+import { escapeHtml, getTrackPreviewMeta, generateTrackSvgSilhouette } from './trackPreview.js';
 
 const $ = (id) => document.getElementById(id);
 const LAYERS = CONFIG.nn.layers;
@@ -150,10 +151,11 @@ sim.onCarDeath = (car) => {
   audio.playImpact(car.x, car.y, camPos, car.speed);
 };
 
+const NN_INPUT_LABELS = ['L90', 'L60', 'L30', 'FWD', 'R30', 'R60', 'R90', 'SPD', 'LAT', 'K1', 'K2', 'K3'];
 const nnViz = new NetworkViz(
   $('nn-canvas'),
   LAYERS,
-  ['L90', 'L60', 'L30', 'FWD', 'R30', 'R60', 'R90', 'SPD'],
+  NN_INPUT_LABELS,
   ['STEER', 'THROTTLE'],
 );
 const chart = new FitnessChart($('chart-canvas'));
@@ -161,7 +163,7 @@ const chart = new FitnessChart($('chart-canvas'));
 const hubNnViz = $('nn-canvas-hub') ? new NetworkViz(
   $('nn-canvas-hub'),
   LAYERS,
-  ['L90', 'L60', 'L30', 'FWD', 'R30', 'R60', 'R90', 'SPD'],
+  NN_INPUT_LABELS,
   ['STEER', 'THROTTLE'],
 ) : null;
 const hubChart = $('chart-canvas-hub') ? new FitnessChart($('chart-canvas-hub')) : null;
@@ -268,13 +270,14 @@ function updateStatus() {
   if (dot) dot.className = 'pill-dot' + (state.paused ? ' paused' : state.turbo ? ' turbo' : isRace ? ' collision-on' : '');
   const statusText = $('status-text');
   if (statusText) {
+    const trainPop = sim.config?.ga?.population ?? CONFIG.ga.population;
     statusText.textContent = state.paused
       ? 'Paused'
       : state.turbo
         ? 'Turbo training'
         : isRace
           ? 'Grand Prix (20)'
-          : 'Training (80)';
+          : `Training (${trainPop})`;
   }
 }
 
@@ -304,7 +307,8 @@ function setSimulationMode(mode) {
     }
     toast('🏆 20-Car Grand Prix Race: Elite field on starting grid · Collisions ON 100%!', 'success');
   } else {
-    toast('🏋️ Training Mode: 80 cars exploring & learning via genetic evolution', 'info');
+    const trainPop = sim.config?.ga?.population ?? CONFIG.ga.population;
+    toast(`🏋️ Training Mode: ${trainPop} cars exploring & learning via genetic evolution`, 'info');
   }
 }
 
@@ -314,11 +318,13 @@ let lastSaveMs = 0;
 let lastSaveAt = -Infinity;
 
 const saveQueue = new DeferredTask(writeTrainingState);
-function persistState() {
+function persistState(force = false) {
+  if (!force && !state.autosave) return;
   saveQueue.request();
 }
 
 function writeTrainingState() {
+  if (!state.autosave) return;
   if (activePresetGen !== null || isMultiGenBattle) return;
   const saveStart = performance.now();
   storage.saveTrainingState(sim, LAYERS, $('track-select').value);
@@ -832,7 +838,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) saveQueue.flush();
 });
 setInterval(() => {
-  if ((!state.paused || hyperRunning) && sim.cars && sim.cars.length > 0) {
+  if (state.autosave && (!state.paused || hyperRunning) && sim.cars && sim.cars.length > 0) {
     persistState();
   }
 }, 3000);
@@ -1430,56 +1436,6 @@ const btnTrackModalClose = $('btn-track-modal-close');
 const trackCardsGrid = $('track-cards-grid');
 const trackModalCount = $('track-modal-count');
 
-function generateTrackSvgSilhouette(presetKey, points, isActive = false) {
-  const safePoints = (Array.isArray(points) && points.length >= 3) ? points : TRACK_PRESETS['grand-prix'].points;
-  const t = new Track(safePoints, CONFIG.track.width, 120);
-  const b = t.bounds;
-  const w = 240, h = 130, pad = 16;
-  const s = Math.min((w - pad * 2) / (b.w || 1), (h - pad * 2) / (b.h || 1));
-  const ox = (w - b.w * s) / 2 - b.minX * s;
-  const oy = (h - b.h * s) / 2 - b.minY * s;
-
-  let d = '';
-  for (let i = 0; i < t.N; i++) {
-    const px = (t.cx[i] * s + ox).toFixed(1);
-    const py = (t.cy[i] * s + oy).toFixed(1);
-    d += (i === 0 ? 'M ' : ' L ') + px + ' ' + py;
-  }
-  d += ' Z';
-
-  const sx = t.cx[0] * s + ox;
-  const sy = t.cy[0] * s + oy;
-  const nx = -t.ty[0];
-  const ny = t.tx[0];
-  const x1 = (sx - nx * 8).toFixed(1);
-  const y1 = (sy - ny * 8).toFixed(1);
-  const x2 = (sx + nx * 8).toFixed(1);
-  const y2 = (sy + ny * 8).toFixed(1);
-
-  const primaryGlow = isActive ? 'rgba(34, 197, 94, 0.35)' : 'rgba(56, 189, 248, 0.25)';
-  const primaryLine = isActive ? '#22c55e' : '#38bdf8';
-  const markerColor = isActive ? '#22c55e' : '#f59e0b';
-
-  return `
-    <svg class="track-silhouette-svg" viewBox="0 0 ${w} ${h}" aria-hidden="true">
-      <g stroke="rgba(255, 255, 255, 0.04)" stroke-width="1">
-        <line x1="0" y1="32" x2="${w}" y2="32"/>
-        <line x1="0" y1="65" x2="${w}" y2="65"/>
-        <line x1="0" y1="98" x2="${w}" y2="98"/>
-        <line x1="60" y1="0" x2="60" y2="${h}"/>
-        <line x1="120" y1="0" x2="120" y2="${h}"/>
-        <line x1="180" y1="0" x2="180" y2="${h}"/>
-      </g>
-      <path d="${d}" fill="none" stroke="${primaryGlow}" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="${d}" fill="none" stroke="#0b1329" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="${d}" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="${d}" fill="none" stroke="${primaryLine}" stroke-width="1.8" stroke-dasharray="${isActive ? 'none' : '4 3'}" stroke-linecap="round" stroke-linejoin="round"/>
-      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${markerColor}" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="2.8" fill="${markerColor}" stroke="#0b1329" stroke-width="1"/>
-    </svg>
-  `;
-}
-
 export function renderTrackModalCards() {
   if (!trackCardsGrid) return;
   const currentKey = $('track-select')?.value || initialPreset;
@@ -1503,9 +1459,9 @@ export function renderTrackModalCards() {
   for (const [key, preset] of entries) {
     const isActive = key === currentKey;
     const isCustom = Boolean(preset.custom);
-    const t = new Track(preset.points, CONFIG.track.width, 100);
-    const lengthText = t.length >= 1000 ? `${(t.length / 1000).toFixed(2)} km` : `${Math.round(t.length)} m`;
+    const { lengthText } = getTrackPreviewMeta(key, preset.points, CONFIG.track.width);
     const cleanName = (preset.name || key).replace(/\s*\(Default\)/i, '');
+    const safeName = escapeHtml(cleanName);
     const turnCount = preset.points.length;
 
     const card = document.createElement('div');
@@ -1522,7 +1478,7 @@ export function renderTrackModalCards() {
       </div>
       <div class="track-card-info">
         <div class="track-card-header">
-          <span class="track-card-name" title="${cleanName}">${cleanName}</span>
+          <span class="track-card-name" title="${safeName}">${safeName}</span>
           <span class="track-card-length">${lengthText}</span>
         </div>
         <div class="track-card-meta">
@@ -1534,14 +1490,14 @@ export function renderTrackModalCards() {
             ${isActive ? '✓ Currently Racing' : 'Select Circuit ➔'}
           </button>
           <div class="track-card-tools-row">
-            <button class="track-card-tool-btn btn-track-edit" type="button" title="Edit ${cleanName} in Circuit Designer" data-action="edit">
+            <button class="track-card-tool-btn btn-track-edit" type="button" title="Edit ${safeName} in Circuit Designer" data-action="edit">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
               </svg>
               <span>Edit</span>
             </button>
-            <button class="track-card-tool-btn btn-track-delete${!isCustom ? ' is-disabled' : ''}" type="button" title="${isCustom ? `Delete ${cleanName} from library` : 'Championship presets cannot be deleted'}" data-action="delete" ${!isCustom ? 'disabled' : ''}>
+            <button class="track-card-tool-btn btn-track-delete${!isCustom ? ' is-disabled' : ''}" type="button" title="${isCustom ? `Delete ${safeName} from library` : 'Championship presets cannot be deleted'}" data-action="delete" ${!isCustom ? 'disabled' : ''}>
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -2740,7 +2696,9 @@ function runHyperBatch() {
     if (statFit) statFit.textContent = compact(sim.allTimeBest?.fitness);
     const statCurvature = $('hyper-stat-curvature');
     if (statCurvature) {
-      if (sim.bestLapEver && sim.bestLapEver < 999) {
+      if (Number.isFinite(lastRecord?.straightnessScore) && lastRecord.straightnessScore > 0) {
+        statCurvature.textContent = `${lastRecord.straightnessScore.toFixed(1)}%`;
+      } else if (sim.bestLapEver && sim.bestLapEver < 999) {
         const normLap = Math.max(0, Math.min(1.0, (sim.bestLapEver - 10.0) / (24.0 - 10.0)));
         const sScore = Math.max(10.0, 94.0 - Math.pow(normLap, 0.85) * 58.0).toFixed(1);
         statCurvature.textContent = `${sScore}%`;
@@ -3675,7 +3633,7 @@ if (counterRepair?.error) {
 } else if (counterRepair?.applied) {
   toast('Counter restarted at Gen 5000. Brain weights kept; original saves backed up.', 'success');
 } else if (startup.source === 'bundled') {
-  toast('Started from bundled Generation 5K 🏁', 'success');
+  toast(`Started from bundled Generation ${sim.generation} 🏁`, 'success');
 } else if (savedState && (sim.generation > 1 || sim.allTimeBest || sim.history.length > 0)) {
   toast(`Resumed training from Generation ${sim.generation} 🏁`, 'success');
 }

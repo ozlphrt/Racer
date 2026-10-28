@@ -2,7 +2,7 @@ import { Car } from './car.js';
 import { countRaceOutcomes } from './raceOutcomes.js';
 import { getCarContact, resolveCarContact } from './carContact.js';
 import { NeuralNetwork } from './neuralNetwork.js';
-import { evolve, seedPopulation, resetStagnation } from './genetics.js';
+import { evolve, seedPopulation, resetStagnation, createStagnationState } from './genetics.js';
 import { TireBarrierSystem } from './tireBarriers.js';
 import { audio } from './audio.js';
 import { getCarNumber } from './renderer3d.js';
@@ -15,6 +15,7 @@ export class Simulation {
     this.config = config;
     this.layers = config.nn.layers;
     this.mutationRate = config.ga.mutationRate;
+    this.stagnationState = createStagnationState();
 
     this.onGeneration = null;
     this.onNewBest = null;
@@ -40,7 +41,7 @@ export class Simulation {
   }
 
   reset() {
-    resetStagnation();
+    resetStagnation(this.stagnationState);
     this.capturedPresets = [];
     this.captureEnabled = true;
     this.generation = 1;
@@ -178,7 +179,7 @@ export class Simulation {
       this.isRealCarTelemetry = false;
       this.capturedPresets = [];
       this.captureEnabled = false;
-      resetStagnation();
+      resetStagnation(this.stagnationState);
       if (this.cars && this.cars.length > 0) {
         this.startGeneration(this.cars.map((c) => c.brain.genome));
       } else {
@@ -285,7 +286,7 @@ export class Simulation {
 
     this.cars = genomes.map((g, idx) => {
       const slot = gridSlots[idx];
-      const c = new Car(this.track, new NeuralNetwork(this.layers, g), slot);
+      const c = new Car(this.track, new NeuralNetwork(this.layers, g), slot, this.config);
       c.carIndex = idx;
       c.carNumber = getCarNumber(idx, false);
       c.teamIdx = Math.floor(idx / 2) % 10;
@@ -317,11 +318,16 @@ export class Simulation {
     this.raceLapBests = new Map();
     this.raceLastCompleted = new Map();
     this.deathEvents = [];
+    this._cachedLeader = null;
+    this._cachedLeaderKey = null;
+    this._cachedBestLapCar = null;
+    this._cachedBestLapKey = null;
     this.tireBarriers?.reset();
   }
 
   setManual(on) {
-    this.player = on ? new Car(this.track, null, 0) : null;
+    this.player = on ? new Car(this.track, null, 0, this.config) : null;
+    this._cachedBestLapKey = null;
     if (this.player) {
       this.player.carIndex = 99;
       this.player.carNumber = 7;
@@ -674,6 +680,7 @@ export class Simulation {
     let genBestLap = Infinity;
     let lapSum = 0;
     let lapCount = 0;
+    let maxTopSpeed = 0;
 
     for (const s of scored) {
       sum += s.fitness;
@@ -686,6 +693,43 @@ export class Simulation {
       if (s.bestLap && Number.isFinite(s.bestLap) && s.bestLap < 100) {
         lapSum += s.bestLap;
         lapCount++;
+      }
+      if (s.car && s.car.topSpeed > maxTopSpeed) {
+        maxTopSpeed = s.car.topSpeed;
+      }
+    }
+
+    // Compute real recorded speed & line efficiency metrics from the best car
+    const speedToKmh = (5.63 / 26) * 3.6;
+    const topSpeedKmh = maxTopSpeed > 0 ? Math.round(maxTopSpeed * speedToKmh) : null;
+    let apexMinKmh = null;
+    const bestSamples = best?.car?.bestLapSamples?.length > 5
+      ? best.car.bestLapSamples
+      : (best?.car?.lastLapSamples?.length > 5 ? best.car.lastLapSamples : best?.car?.currentLapSamples);
+    if (Array.isArray(bestSamples) && bestSamples.length > 5) {
+      let minCornerSpd = Infinity;
+      for (let i = 0; i < bestSamples.length; i++) {
+        const smp = bestSamples[i];
+        if (smp && smp.t > 2.0 && smp.speed > 20 && smp.speed < minCornerSpd) {
+          minCornerSpd = smp.speed;
+        }
+      }
+      if (Number.isFinite(minCornerSpd)) {
+        apexMinKmh = Math.round(minCornerSpd * speedToKmh);
+      }
+    }
+
+    let straightnessScore = null;
+    if (best?.car) {
+      const activeTime = Math.max(1, (best.car.finishTime ?? best.car.time) - (this.config.generation?.startDelay || 2));
+      const jerkPerSec = (best.car.steerJerk || 0) / activeTime;
+      const scrubPerSec = (best.car.excessScrub || 0) / activeTime;
+      const lineRate = (best.car.lookaheadLineQuality || 0) / activeTime;
+      if (Number.isFinite(genBestLap) && genBestLap > 0 && genBestLap < 60) {
+        const apexRatio = Math.max(0, Math.min(1.0, (22.0 - genBestLap) / (22.0 - 9.30)));
+        const baseScore = 32.0 + Math.pow(apexRatio, 1.40) * 66.0;
+        const smoothnessAdj = Math.max(-6.0, Math.min(4.0, (1.2 - jerkPerSec) * 2.0 - scrubPerSec * 8.0 + lineRate * 12.0));
+        straightnessScore = Math.max(12.0, Math.min(99.4, Math.round((baseScore + smoothnessAdj) * 10) / 10));
       }
     }
 
@@ -712,6 +756,9 @@ export class Simulation {
       max: Number.isFinite(maxFitness) ? maxFitness : best.fitness,
       bestLap: genBestLap,
       avgLap,
+      topSpeedKmh,
+      apexMinKmh,
+      straightnessScore,
       finishers,
       eliminated,
       population: scored.length,
@@ -794,6 +841,7 @@ export class Simulation {
       genBestLap,
       allTimeBest: this.allTimeBest,
       fastestLapChampion: this.fastestLapChampion,
+      stagnationState: this.stagnationState,
     });
     this.generation++;
     this.startGeneration(next);
@@ -802,6 +850,13 @@ export class Simulation {
 
   /** The physical race leader currently in P1 (furthest along track, finished first, not crashed). */
   get leader() {
+    if (!this.cars || this.cars.length === 0) return null;
+    const cacheKey = `${this.generation}:${this.time}:${this.cars.length}`;
+    if (this._cachedLeaderKey === cacheKey && this._cachedLeader && this.cars.includes(this._cachedLeader) &&
+        (this._cachedLeader.alive || this._cachedLeader.finished) && !this._cachedLeader.crashed) {
+      return this._cachedLeader;
+    }
+
     let p1 = null;
     for (let i = 0; i < this.cars.length; i++) {
       const c = this.cars[i];
@@ -823,7 +878,11 @@ export class Simulation {
         p1 = c;
       }
     }
-    if (p1) return p1;
+    if (p1) {
+      this._cachedLeader = p1;
+      this._cachedLeaderKey = cacheKey;
+      return p1;
+    }
 
     // Fallback if all remaining living cars are currently in death slide
     for (let i = 0; i < this.cars.length; i++) {
@@ -839,7 +898,9 @@ export class Simulation {
         p1 = c;
       }
     }
-    return p1 || this.cars[0] || null;
+    this._cachedLeader = p1 || this.cars[0] || null;
+    this._cachedLeaderKey = cacheKey;
+    return this._cachedLeader;
   }
 
   get genBestFitness() {
@@ -850,21 +911,28 @@ export class Simulation {
 
   /** Returns the car holding the best recorded lap time across the active grid (or the top seeded champion). */
   get bestLapCar() {
+    if (!this.cars || this.cars.length === 0) return this.player || null;
+    const cacheKey = `${this.generation}:${this.time}:${this.cars.length}:${this.player?.bestLap ?? 0}`;
+    if (this._cachedBestLapKey === cacheKey && this._cachedBestLapCar) {
+      return this._cachedBestLapCar;
+    }
     let best = null;
     let minLap = Infinity;
-    if (this.cars && this.cars.length > 0) {
-      for (let i = 0; i < this.cars.length; i++) {
-        const c = this.cars[i];
-        if (c && c.bestLap && Number.isFinite(c.bestLap) && c.bestLap > 0 && c.bestLap < minLap) {
-          minLap = c.bestLap;
-          best = c;
-        }
+    for (let i = 0; i < this.cars.length; i++) {
+      const c = this.cars[i];
+      if (c && c.bestLap && Number.isFinite(c.bestLap) && c.bestLap > 0 && c.bestLap < minLap) {
+        minLap = c.bestLap;
+        best = c;
       }
     }
     if (this.player && this.player.bestLap && Number.isFinite(this.player.bestLap) && this.player.bestLap > 0 && this.player.bestLap < minLap) {
+      this._cachedBestLapCar = this.player;
+      this._cachedBestLapKey = cacheKey;
       return this.player;
     }
-    return best || (this.cars && this.cars[0]) || null;
+    this._cachedBestLapCar = best || this.cars[0] || null;
+    this._cachedBestLapKey = cacheKey;
+    return this._cachedBestLapCar;
   }
 
   /** Fastest lap time completed by any car in the current race/generation. */

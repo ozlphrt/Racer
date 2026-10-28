@@ -61,34 +61,52 @@ export function mutate(genome, rate, sigma) {
   return genome;
 }
 
-// Track historical plateau progress across generations
-let peakFitnessHistory = 0;
-let recentBestLapHistory = Infinity;
-let stagnantGenerationsCount = 0;
-let paceStagnantGenerationsCount = 0;
-let burstGensRemaining = 0;
-
-export function triggerExplorationBurst(gens = 30) {
-  burstGensRemaining = gens;
-  stagnantGenerationsCount = 0;
-  paceStagnantGenerationsCount = 0;
-  return burstGensRemaining;
+// Track historical plateau progress across generations (instance-scoped or default)
+export function createStagnationState() {
+  return {
+    peakFitnessHistory: 0,
+    recentBestLapHistory: Infinity,
+    stagnantGenerationsCount: 0,
+    paceStagnantGenerationsCount: 0,
+    burstGensRemaining: 0,
+  };
 }
 
-export function getBurstGensRemaining() {
-  return burstGensRemaining;
+const defaultStagnationState = createStagnationState();
+
+export function triggerExplorationBurst(gens = 30, state = defaultStagnationState) {
+  state.burstGensRemaining = gens;
+  state.stagnantGenerationsCount = 0;
+  state.paceStagnantGenerationsCount = 0;
+  if (state !== defaultStagnationState) {
+    defaultStagnationState.burstGensRemaining = gens;
+    defaultStagnationState.stagnantGenerationsCount = 0;
+    defaultStagnationState.paceStagnantGenerationsCount = 0;
+  }
+  return state.burstGensRemaining;
 }
 
-export function getStagnantGenerationsCount() {
-  return Math.max(stagnantGenerationsCount, paceStagnantGenerationsCount);
+export function getBurstGensRemaining(state = defaultStagnationState) {
+  return state.burstGensRemaining;
 }
 
-export function resetStagnation() {
-  stagnantGenerationsCount = 0;
-  paceStagnantGenerationsCount = 0;
-  burstGensRemaining = 0;
-  peakFitnessHistory = 0;
-  recentBestLapHistory = Infinity;
+export function getStagnantGenerationsCount(state = defaultStagnationState) {
+  return Math.max(state.stagnantGenerationsCount, state.paceStagnantGenerationsCount);
+}
+
+export function resetStagnation(state = defaultStagnationState) {
+  state.stagnantGenerationsCount = 0;
+  state.paceStagnantGenerationsCount = 0;
+  state.burstGensRemaining = 0;
+  state.peakFitnessHistory = 0;
+  state.recentBestLapHistory = Infinity;
+  if (state !== defaultStagnationState) {
+    defaultStagnationState.stagnantGenerationsCount = 0;
+    defaultStagnationState.paceStagnantGenerationsCount = 0;
+    defaultStagnationState.burstGensRemaining = 0;
+    defaultStagnationState.peakFitnessHistory = 0;
+    defaultStagnationState.recentBestLapHistory = Infinity;
+  }
 }
 
 /**
@@ -193,7 +211,8 @@ export function lookaheadWeightIndices(layers, from) {
  * and high-variance wildcard explorers break through plateaus.
  * @param {{genome: Float32Array, fitness: number, bestLap?: number, finished?: boolean}[]} scored
  */
-export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap, layers, lockedFrom, allTimeBest, fastestLapChampion }) {
+export function evolve(scored, { population, elites, tournamentK, mutationRate, mutationSigma, bestLapEver, genBestLap, layers, lockedFrom, allTimeBest, fastestLapChampion, stagnationState = defaultStagnationState }) {
+  const sState = stagnationState || defaultStagnationState;
   const isLapComplete = candidate => Boolean(candidate.finished || (candidate.laps >= 1) || (Number.isFinite(candidate.bestLap) && candidate.bestLap < Infinity));
   const sorted = [...scored].sort((a, b) => {
     const aLap = isLapComplete(a);
@@ -219,11 +238,11 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
 
   // 1. Track Fitness & Pace Progression
   const topFit = sorted[0]?.fitness || 0;
-  if (topFit > peakFitnessHistory * 1.008 + 150) {
-    peakFitnessHistory = topFit;
-    stagnantGenerationsCount = 0;
+  if (topFit > sState.peakFitnessHistory * 1.008 + 150) {
+    sState.peakFitnessHistory = topFit;
+    sState.stagnantGenerationsCount = 0;
   } else {
-    stagnantGenerationsCount++;
+    sState.stagnantGenerationsCount++;
   }
 
   // 2. Pace Gap Stagnation Detector (tracks deficit to historic record)
@@ -231,18 +250,18 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   const currentGenLap = typeof genBestLap === 'number' && Number.isFinite(genBestLap) && genBestLap > 5 ? genBestLap : null;
 
   if (currentGenLap) {
-    if (currentGenLap < recentBestLapHistory - 0.015) {
-      recentBestLapHistory = currentGenLap;
-      stagnantGenerationsCount = 0;
+    if (currentGenLap < sState.recentBestLapHistory - 0.015) {
+      sState.recentBestLapHistory = currentGenLap;
+      sState.stagnantGenerationsCount = 0;
     }
 
     if (hasRecord) {
       const gapToRecord = currentGenLap - bestLapEver;
       // If gap to record remains stagnant > 0.40s for an extended run
       if (gapToRecord > 0.40) {
-        paceStagnantGenerationsCount++;
+        sState.paceStagnantGenerationsCount++;
       } else {
-        paceStagnantGenerationsCount = Math.max(0, paceStagnantGenerationsCount - 3);
+        sState.paceStagnantGenerationsCount = Math.max(0, sState.paceStagnantGenerationsCount - 3);
       }
     }
   }
@@ -252,19 +271,24 @@ export function evolve(scored, { population, elites, tournamentK, mutationRate, 
   // - 40 consecutive generations stuck with > 0.40s deficit to track record
   // - Zero-finisher deadlock for 35+ generations
   // Condition: reliable completion must be established (> 70%) unless trapped in zero-finisher deadlock
-  const isZeroFinishStuck = finishers.length === 0 && stagnantGenerationsCount >= 35;
-  const isPlateauCondition = (!needsReliability || isZeroFinishStuck) && (stagnantGenerationsCount >= 40 || paceStagnantGenerationsCount >= 40 || isZeroFinishStuck);
+  const isZeroFinishStuck = finishers.length === 0 && sState.stagnantGenerationsCount >= 35;
+  const isPlateauCondition = (!needsReliability || isZeroFinishStuck) && (sState.stagnantGenerationsCount >= 40 || sState.paceStagnantGenerationsCount >= 40 || isZeroFinishStuck);
 
-  if (isPlateauCondition && burstGensRemaining === 0) {
-    triggerExplorationBurst(6); // 6 generations of targeted exploration catalyst
+  if (isPlateauCondition && sState.burstGensRemaining === 0 && defaultStagnationState.burstGensRemaining === 0) {
+    triggerExplorationBurst(6, sState); // 6 generations of targeted exploration catalyst
+  } else if (defaultStagnationState.burstGensRemaining > 0 && sState !== defaultStagnationState && sState.burstGensRemaining === 0) {
+    sState.burstGensRemaining = defaultStagnationState.burstGensRemaining;
   }
 
-  const isBurstActive = burstGensRemaining > 0;
-  if (burstGensRemaining > 0) {
-    burstGensRemaining--;
+  const isBurstActive = sState.burstGensRemaining > 0;
+  if (sState.burstGensRemaining > 0) {
+    sState.burstGensRemaining--;
+    if (sState !== defaultStagnationState && defaultStagnationState.burstGensRemaining > 0) {
+      defaultStagnationState.burstGensRemaining = sState.burstGensRemaining;
+    }
     // Keep stagnation counters reset during the burst to give full exploitation window after burst ends
-    stagnantGenerationsCount = 0;
-    paceStagnantGenerationsCount = 0;
+    sState.stagnantGenerationsCount = 0;
+    sState.paceStagnantGenerationsCount = 0;
   }
 
   const isPlateauing = isPlateauCondition || isBurstActive;

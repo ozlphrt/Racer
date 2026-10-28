@@ -611,7 +611,12 @@ export class FitnessChart {
       const r = this.history[i];
       let spd = 95;
       let apex = 45;
-      if (r.bestLap && Number.isFinite(r.bestLap) && r.bestLap > 0 && r.bestLap < 60) {
+      if (Number.isFinite(r.topSpeedKmh) && r.topSpeedKmh > 0) {
+        spd = r.topSpeedKmh;
+        apex = Number.isFinite(r.apexMinKmh) && r.apexMinKmh > 0
+          ? r.apexMinKmh
+          : Math.round(spd * 0.42);
+      } else if (r.bestLap && Number.isFinite(r.bestLap) && r.bestLap > 0 && r.bestLap < 60) {
         const norm = Math.max(0, Math.min(1.0, (r.bestLap - 10.0) / 14.0));
         spd = Math.round(305 - norm * 130);
         apex = Math.round(142 - norm * 90);

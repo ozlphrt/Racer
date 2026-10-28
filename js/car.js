@@ -23,8 +23,9 @@ export const TOTAL_INPUTS = BASE_INPUTS + 1 + LOOKAHEAD_DISTANCES.length;
  * rendered rays always match the rendered position.
  */
 export class Car {
-  constructor(track, brain = null, gridSlot = 0) {
+  constructor(track, brain = null, gridSlot = 0, config = CONFIG) {
     this.track = track;
+    this.config = config || CONFIG;
     this.brain = brain;
     this.manual = !brain;
     this.gridSlot = gridSlot;
@@ -33,17 +34,18 @@ export class Car {
     this.teamIdx = 0;
     this.rayDist = new Float32Array(RAY_ANGLES.length);
     this.inputs = new Float32Array(TOTAL_INPUTS);
-    this.rayWindow = Math.ceil(CONFIG.sensors.length / track.spacing) + 3;
+    this.rayWindow = Math.ceil((this.config.sensors?.length ?? CONFIG.sensors.length) / track.spacing) + 3;
     this.collisionAlwaysOn = false;
     this.reset(gridSlot);
   }
 
   reset(gridSlot = this.gridSlot || 0) {
     const t = this.track;
+    const cfg = this.config || CONFIG;
     this.gridSlot = gridSlot;
 
     // Position car based on Grid Box setting: staggered 2x2 F1 grid formation vs single centerline
-    const useGrid = Boolean(CONFIG.gridBox ?? true);
+    const useGrid = Boolean(cfg.gridBox ?? CONFIG.gridBox ?? true);
     let distBack = 16;
     let latOffset = 0;
 
@@ -128,8 +130,9 @@ export class Car {
 
   sense(otherCars = null) {
     const t = this.track;
-    const L = CONFIG.sensors.length;
-    const colConfig = CONFIG.collision || {};
+    const cfg = this.config || CONFIG;
+    const L = cfg.sensors?.length ?? CONFIG.sensors.length;
+    const colConfig = cfg.collision || CONFIG.collision || {};
     const warmup = colConfig.warmupTime ?? 30;
     const leadTime = colConfig.separationLeadTime ?? 4;
     const colEnabled = Boolean(colConfig.enabled) && (this.time >= (warmup - leadTime));
@@ -197,7 +200,8 @@ export class Car {
     this.headingDiff = diff;
 
     const forwardFactor = Math.cos(diff);
-    this.inputs[RAY_ANGLES.length] = (this.speed / CONFIG.car.maxSpeed) * Math.max(-1, Math.min(1, forwardFactor));
+    const maxSpeed = (this.config || CONFIG).car.maxSpeed;
+    this.inputs[RAY_ANGLES.length] = (this.speed / maxSpeed) * Math.max(-1, Math.min(1, forwardFactor));
 
     // Lateral position: -1..+1 across the road, same sign convention as the curvature below
     // (positive = toward the inside of a positive-curvature corner).
@@ -236,7 +240,8 @@ export class Car {
         this.crashApproach.record(this, true);
         const approach = this.crashApproach.snapshot(this.time);
         this.crashDiagnostic.approach = approach;
-        this.crashDiagnostic.approachSummary = analyzeApproach(approach, this.time, CONFIG.generation.startDelay || 2, this.laps + 1);
+        const startDelay = (this.config || CONFIG).generation?.startDelay || 2;
+        this.crashDiagnostic.approachSummary = analyzeApproach(approach, this.time, startDelay, this.laps + 1);
       }
     }
     this.crashed = true;
@@ -247,8 +252,9 @@ export class Car {
 
   update(dt, controls = null) {
     if (!this.alive && !this.finished) return;
-    const c = CONFIG.car;
-    const g = CONFIG.generation;
+    const cfg = this.config || CONFIG;
+    const c = cfg.car;
+    const g = cfg.generation;
     const t = this.track;
     this.time += dt;
 
@@ -326,7 +332,7 @@ export class Car {
     }
 
     // Start grid countdown delay: hold cars stationary until green light launch
-    const startDelay = CONFIG.generation?.startDelay || 2.0;
+    const startDelay = g?.startDelay || 2.0;
     if (this.time < startDelay) {
       this.speed = 0;
       this.vx = 0;
@@ -626,8 +632,9 @@ export class Car {
   }
 
   isOffTrack(cos, sin, extraBuffer = 0) {
-    const hl = CONFIG.car.length / 2;
-    const hw = CONFIG.car.width / 2;
+    const cfg = this.config || CONFIG;
+    const hl = cfg.car.length / 2;
+    const hw = cfg.car.width / 2;
     // Small buffer on launch frame to prevent rear grid row corner false clipping
     const safetyBuffer = this.time < 1.2 ? 5.0 : 0.0;
     const curbBuffer = 12.0; // Curb / rumble strip tolerance (permits full curb utilization)
@@ -650,7 +657,7 @@ export class Car {
   }
 
   get fitness() {
-    const f = CONFIG.fitness || {};
+    const f = (this.config || CONFIG).fitness || {};
     const raceTime = this.finished && Number.isFinite(this.finishTime) ? this.finishTime : Math.max(1, this.time);
 
     // 1. Distance progress along track

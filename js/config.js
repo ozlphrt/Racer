@@ -20,12 +20,12 @@ export const CONFIG = {
     turnRate: 3.9, // Agile apex steering
     minTurnSpeed: 45, // Steering response onset
     highSpeedTurnLoss: 0.28,
-    tireGrip: 8.8, // Balanced F1 slick grip: authentic slip angle, visible skidmarks, and progressive rotation (not glued on rails)
-    understeerFactor: 0.0028, // Front tire scrub under heavy cornering
-    oversteerFactor: 0.18, // Dynamic throttle-steer rotation on corner exit
+    tireGrip: 4.5, // Balanced F1 slick grip: authentic slip angle, visible skidmarks, and progressive rotation (not glued on rails)
+    understeerFactor: 0.0042, // Front tire scrub under heavy cornering
+    oversteerFactor: 0.42, // Dynamic throttle-steer rotation on corner exit
     yawResponseSec: 0.035, // Crisp chassis response (eliminates 120ms phase lag wagging)
-    latGripBase: 165, // Balanced mechanical cornering grip
-    latGripPerSpeed: 1.10, // Progressive aero downforce that builds with speed
+    latGripBase: 105, // Balanced mechanical cornering grip
+    latGripPerSpeed: 0.58, // Progressive aero downforce that builds with speed
   },
 
   collision: {

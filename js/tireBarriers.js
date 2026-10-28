@@ -262,6 +262,7 @@ export class TireBarrierSystem {
       const gx = Math.floor(tire.x / this.cellSize);
       const gy = Math.floor(tire.y / this.cellSize);
       const key = `${gx},${gy}`;
+      tire._cellKey = key;
       let cell = this.grid.get(key);
       if (!cell) {
         cell = [];
@@ -269,6 +270,28 @@ export class TireBarrierSystem {
       }
       cell.push(tire);
     }
+  }
+
+  updateTireGridCell(tire) {
+    if (!this.grid) return;
+    const gx = Math.floor(tire.x / this.cellSize);
+    const gy = Math.floor(tire.y / this.cellSize);
+    const nextKey = `${gx},${gy}`;
+    if (tire._cellKey === nextKey) return;
+    if (tire._cellKey) {
+      const oldCell = this.grid.get(tire._cellKey);
+      if (oldCell) {
+        const idx = oldCell.indexOf(tire);
+        if (idx !== -1) oldCell.splice(idx, 1);
+      }
+    }
+    tire._cellKey = nextKey;
+    let nextCell = this.grid.get(nextKey);
+    if (!nextCell) {
+      nextCell = [];
+      this.grid.set(nextKey, nextCell);
+    }
+    nextCell.push(tire);
   }
 
   reset() {
@@ -280,11 +303,14 @@ export class TireBarrierSystem {
       tire.vy = 0;
       tire.vz = 0;
       tire.yaw = tire.baseYaw;
-      tire.pitch = 0;
-      tire.roll = 0;
+      tire.pitch = tire.basePitch ?? 0;
+      tire.roll = tire.baseRoll ?? 0;
       tire.vyaw = 0;
       tire.vpitch = 0;
       tire.vroll = 0;
+      tire.scale = 1.0;
+      tire.displaced = false;
+      tire.despawnTimer = 0;
       tire.sleeping = true;
       tire.needsRenderUpdate = true;
     }
@@ -402,15 +428,17 @@ export class TireBarrierSystem {
             tire.vy = 0;
             tire.vz = 0;
             tire.yaw = tire.baseYaw;
-            tire.pitch = 0;
-            tire.roll = 0;
+            tire.pitch = tire.basePitch ?? 0;
+            tire.roll = tire.baseRoll ?? 0;
             tire.vyaw = 0;
             tire.vpitch = 0;
             tire.vroll = 0;
             tire.scale = 1.0;
+            tire.despawnTimer = 0;
             tire.sleeping = true;
             tire.displaced = false;
             tire.needsRenderUpdate = true;
+            this.updateTireGridCell(tire);
             continue;
           }
         }
@@ -427,6 +455,7 @@ export class TireBarrierSystem {
       tire.x += tire.vx * clampedDt;
       tire.y += tire.vy * clampedDt;
       tire.z += tire.vz * clampedDt;
+      this.updateTireGridCell(tire);
 
       // Integrate rotation
       tire.vyaw *= rotDamping;
@@ -525,6 +554,8 @@ export class TireBarrierSystem {
               t1.y -= normY * push;
               t2.x += normX * push;
               t2.y += normY * push;
+              this.updateTireGridCell(t1);
+              this.updateTireGridCell(t2);
 
               // Transfer momentum
               const relVx = t1.vx - t2.vx;

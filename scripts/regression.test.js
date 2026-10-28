@@ -71,8 +71,7 @@ test('finished engine voices settle to quiet idle despite stale speed, throttle 
   assert.equal(voice.gainNode.gain.value, racingGain);
 });
 
-const LEGACY_8_INPUT = 'bundled brains use the legacy 8-input format; retrain for the 12-input network';
-test('startup uses the real bundled default checkpoint without fabricating records or personal captures', { skip: LEGACY_8_INPUT }, () => {
+test('startup uses the real bundled default checkpoint without fabricating records or personal captures', () => {
   const selection = resolveStartupState(null, CONFIG, PRESET_BRAINS);
   const checkpoint = PRESET_BRAINS['grand-prix:250'];
   const sim = new Simulation(track(), CONFIG);
@@ -87,7 +86,7 @@ test('startup uses the real bundled default checkpoint without fabricating recor
   assert.notEqual(selection.state.currentGenomes[0], selection.state.currentGenomes[1]);
 });
 
-test('startup raises lower generations to the default checkpoint and preserves local saves at or above it exactly', { skip: LEGACY_8_INPUT }, () => {
+test('startup raises lower generations to the default checkpoint and preserves local saves at or above it exactly', () => {
   const lower = { generation: 123, history: [{ generation: 122, bestLap: 9 }], bestLapEver: 9,
     capturedPresets: [], mutationRate: 0.12, trackPreset: 'simple-loop' };
   const before = structuredClone(lower);
@@ -97,7 +96,7 @@ test('startup raises lower generations to the default checkpoint and preserves l
   assert.equal(selected.state.mutationRate, 0.12);
   assert.deepEqual(lower, before);
   for (const generation of [250, 251, 130322]) {
-    const local = { ...lower, generation, currentGenomes: [new Float32Array(230).fill(0.5)] };
+    const local = { ...lower, generation, currentGenomes: [new Float32Array(NeuralNetwork.genomeSize(CONFIG.nn.layers)).fill(0.5)] };
     const result = resolveStartupState(local, CONFIG, PRESET_BRAINS);
     assert.equal(result.source, 'local');
     assert.equal(result.state, local);
@@ -579,7 +578,7 @@ test('runoff recovery is visible in the existing pre-crash recovery trace', () =
   assert.equal(car.crashApproach.snapshot(car.time).at(-1)[6], 1);
 });
 
-test('the proven bundled policy keeps identical five-lap trajectories from every grid slot', { skip: LEGACY_8_INPUT }, () => {
+test('the proven bundled policy keeps identical five-lap trajectories from every grid slot', () => {
   const circuit = track(), genome = PRESET_BRAINS['grand-prix:250'].genome;
   for (let slot = 0; slot < 20; slot++) {
     const enabled = new Car(circuit, new NeuralNetwork(CONFIG.nn.layers, genome), slot);
@@ -595,7 +594,7 @@ test('the proven bundled policy keeps identical five-lap trajectories from every
   }
 });
 
-test('champion validation measures twenty independent starts without breeding or save access', { skip: LEGACY_8_INPUT }, async () => {
+test('champion validation measures twenty independent starts without breeding or save access', async () => {
   const config = structuredClone(CONFIG), circuit = track();
   const before = JSON.stringify(CONFIG), progress = [];
   const request = { config, trackKey: 'grand-prix', signature: physicsSignature(circuit, config),
@@ -1608,7 +1607,7 @@ test('a partially failed counter repair restores original save keys and retains 
   assert.equal(JSON.parse(memory.get('ai-racer:generation-repair:5000:v1')).applied, false);
 });
 
-test('an orphan 130K anchor cannot manufacture a generation or block current saves', { skip: LEGACY_8_INPUT }, t => {
+test('an orphan 130K anchor cannot manufacture a generation or block current saves', t => {
   const memory = storageFixture(t);
   memory.set('ai-racer:generation-anchor', '130000');
   assert.equal(loadTrainingState(layers), null);
@@ -1772,7 +1771,7 @@ test('only completed organic milestones capture their own tested champion and me
   assert.equal(compatibleCaptures(sim.capturedPresets, sim.track, changedConfig).length, 0);
 });
 
-test('general JSON export includes milestone genomes and remains importable as a brain', { skip: LEGACY_8_INPUT }, async () => {
+test('general JSON export includes milestone genomes and remains importable as a brain', async () => {
   const captures = Object.values(PRESET_BRAINS);
   const best = { genome: genome(), generation: 5421, fitness: 123, bestLap: Infinity };
   const exported = buildBrainExport(best, layers, { track: 'grand-prix', capturedPresets: captures });
@@ -1786,7 +1785,7 @@ test('general JSON export includes milestone genomes and remains importable as a
   assert.equal(compatibleCaptures(imported.capturedPresets, track(), CONFIG).length, captures.length);
 });
 
-test('bundled tested brains are available to first-time players without changing live training', { skip: LEGACY_8_INPUT }, () => {
+test('bundled tested brains are available to first-time players without changing live training', () => {
   const sim = new Simulation(track(), CONFIG);
   const bundled = Object.values(PRESET_BRAINS);
   const available = availableCaptures(bundled, sim.capturedPresets, sim.track, CONFIG);
@@ -2084,4 +2083,31 @@ test('steering smoothness, scrub penalty and lookahead curvature reward influenc
 
   assert.ok(smoothCar.fitness > jerkyCar.fitness, 'smooth driving with outside lookahead positioning achieves higher fitness');
 });
+
+test('tire barrier reset restores displaced state and track preview escapes HTML and memoizes geometry', async () => {
+  const { TireBarrierSystem } = await import('../js/tireBarriers.js');
+  const { escapeHtml, getTrackPreviewMeta } = await import('../js/trackPreview.js');
+  const circuit = track();
+  const barriers = new TireBarrierSystem(circuit);
+  const tire = barriers.tires[0];
+  tire.x += 120;
+  tire.y += 120;
+  tire.displaced = true;
+  tire.scale = 0.25;
+  tire.despawnTimer = 0.2;
+  tire.pitch = 1.1;
+  tire.roll = -0.9;
+  barriers.updateTireGridCell(tire);
+  barriers.reset();
+  assert.equal(tire.displaced, false);
+  assert.equal(tire.scale, 1.0);
+  assert.equal(tire.despawnTimer, 0);
+  assert.equal(tire.pitch, tire.basePitch);
+  assert.equal(tire.roll, tire.baseRoll);
+  assert.equal(escapeHtml('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+  const metaA = getTrackPreviewMeta('grand-prix', TRACK_PRESETS['grand-prix'].points);
+  const metaB = getTrackPreviewMeta('grand-prix', TRACK_PRESETS['grand-prix'].points);
+  assert.equal(metaA, metaB, 'track preview metadata is memoized');
+});
+
 

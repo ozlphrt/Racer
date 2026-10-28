@@ -26,11 +26,11 @@ The import command validates the exported checkpoints and embeds them in `js/pre
 
 ## How it works
 
-- **Inputs (8):** 7 raycast wall distances (-90°…+90°) and speed
-- **Brain:** MLP 8 → 12 → 8 → 2 (tanh) → steer, throttle/brake
-- **Fitness:** distance progressed + lap bonus + faster-lap bonus − crash penalty
-- **Evolution:** 80 cars, 2 elites, tournament selection, uniform crossover, Gaussian mutation
-- A car is eliminated on a wall hit, no progress for 3 s, or driving the wrong way. A generation ends when all cars are out or 40 s pass.
+- **Inputs (12):** 7 raycast wall distances (-90°…+90°), forward speed, normalized lateral road position, and 3 signed lookahead curvatures (120, 260, 480 units ahead)
+- **Brain:** MLP 12 → 12 → 8 → 2 (tanh) → steer, throttle/brake
+- **Fitness:** distance progressed + average speed pace reward + lookahead racing-line bonus − steering jerk / tire scrub / off-track / crash penalties
+- **Evolution:** 20 cars, 2 elites, tournament selection, uniform crossover, Gaussian mutation with plateau catalyst bursts
+- A car is eliminated on a wall/barrier hit, prolonged off-track runoff, stalling, or driving the wrong way. A generation ends when all cars finish/retire or the race time limit expires.
 
 All tunables live in [`js/config.js`](js/config.js).
 

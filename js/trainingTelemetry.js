@@ -1713,7 +1713,9 @@ export function analyzeTrainingProgress(history, sim, currentGenRate = 0) {
     ? latest.bestLap
     : (bestLapEver < 60 ? bestLapEver + 0.35 : null);
 
-  if (curLeadLap && curLeadLap < 60) {
+  if (Number.isFinite(latest?.straightnessScore) && latest.straightnessScore > 0) {
+    straightnessScore = latest.straightnessScore;
+  } else if (curLeadLap && curLeadLap < 60) {
     // 9.30s circuit apex perfection (~98.5%), 22.0s novice baseline (~35%)
     const apexRatio = Math.max(0, Math.min(1.0, (22.0 - curLeadLap) / (22.0 - 9.30)));
     let rawStraightness = 32.0 + Math.pow(apexRatio, 1.40) * 66.0;

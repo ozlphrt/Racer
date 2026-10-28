@@ -148,11 +148,6 @@ export class LeaderboardTower {
     }
   }
 
-  reset() {
-    this.carMetaMap.clear();
-    if (this.listEl) this.listEl.innerHTML = '';
-  }
-
   toggleCollapse(forcedState = null) {
     this.isCollapsed = forcedState !== null ? forcedState : !this.isCollapsed;
     this.container.classList.toggle('is-collapsed', this.isCollapsed);
@@ -246,7 +241,8 @@ export class LeaderboardTower {
     const displaySet = new Set(displayCars);
 
     const leader = active[0] || leaderCar;
-    const leaderProgress = leader ? (leader.laps * 400 + leader.totalIdx) : 0;
+    const leaderProgress = leader ? leader.totalIdx : 0;
+    const trackSpacing = sim.track?.spacing || 8.5;
 
     // 4. Animate each visible driver into their vertical slot
     for (let slotIdx = 0; slotIdx < displayCars.length; slotIdx++) {
@@ -304,10 +300,10 @@ export class LeaderboardTower {
           }
           meta.gapEl.className = 'row-gap-badge leader';
         } else {
-          // Interval gap estimation
-          const carProg = car.laps * 400 + car.totalIdx;
-          const distBehind = Math.max(0, leaderProgress - carProg);
-          const gapSec = (distBehind / Math.max(80, car.speed || 200)).toFixed(1);
+          // Interval gap estimation in world units / speed
+          const distBehind = Math.max(0, leaderProgress - car.totalIdx) * trackSpacing;
+          const refSpeed = Math.max(80, leader?.speed || car.speed || 200);
+          const gapSec = (distBehind / refSpeed).toFixed(1);
           meta.gapEl.textContent = `+${gapSec}s`;
           meta.gapEl.className = 'row-gap-badge gap';
         }
@@ -329,5 +325,6 @@ export class LeaderboardTower {
       meta.element?.remove();
     });
     this.carMetaMap.clear();
+    if (this.listEl) this.listEl.innerHTML = '';
   }
 }
